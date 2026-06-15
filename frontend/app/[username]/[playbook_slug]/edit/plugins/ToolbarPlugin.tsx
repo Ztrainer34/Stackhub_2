@@ -7,7 +7,7 @@
  */
 
 import { Button } from "@/components/ui/button";
-import { $setBlocksType } from "lexical";
+import { $setBlocksType } from "@lexical/selection";
 import { $toggleLink } from "@lexical/link";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $createHeadingNode } from "@lexical/rich-text";
