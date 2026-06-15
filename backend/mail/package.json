@@ -1,0 +1,27 @@
+{
+  "name": "mail",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "email dev",
+    "build": "tsx build.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.16.1",
+  "devDependencies": {
+    "@react-email/preview-server": "4.2.11",
+    "@types/node": "^24.5.0",
+    "@types/react": "^19.1.13",
+    "react-email": "4.2.11",
+    "tsx": "^4.20.5"
+  },
+  "dependencies": {
+    "@react-email/components": "0.5.3",
+    "@react-email/render": "1.2.3",
+    "react": "19.1.1",
+    "react-dom": "19.1.1"
+  }
+}

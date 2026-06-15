@@ -1,0 +1,3 @@
+- [ ] homepage/frontpage
+- [ ] settings page
+- [x] images ds playbook / embed youtube 
