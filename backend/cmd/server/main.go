@@ -2537,14 +2537,30 @@ func main() {
 	r.Use(middleware.AllowContentType("application/json", "multipart/form-data"))
 	r.Use(cors.Handler(cors.Options{
 		AllowOriginFunc: func(r *http.Request, origin string) bool {
+			// if origin == "https://stackhub.me" {
+			// 	return true
+			// }
+			// // FIXME: Precompile to avoid bottleneck
+			// matched, _ := regexp.MatchString(`^http://(localhost|127\.0\.0\.1):\d+$`, origin)
+			// return matched
+
 			if origin == "https://stackhub.me" {
+				return true
+			}
+
+			// Allow Vercel production and preview deployments
+			if origin == "https://stackhub-2-kzmw-one.vercel.app" {
+				return true
+			}
+			matched, _ := regexp.MatchString(`^https://stackhub-2-kzmw.*\.vercel\.app$`, origin)
+			if matched {
 				return true
 			}
 
 			// Allow localhost or 127.0.0.1 with any port
 
 			// FIXME: Precompile to avoid bottleneck
-			matched, _ := regexp.MatchString(`^http://(localhost|127\.0\.0\.1):\d+$`, origin)
+			matched, _ = regexp.MatchString(`^http://(localhost|127\.0\.0\.1):\d+$`, origin)
 
 			return matched
 		},
