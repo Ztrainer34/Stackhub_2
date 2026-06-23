@@ -2548,6 +2548,10 @@ func main() {
 				return true
 			}
 
+			if origin == "https://www.stackhub.me" {
+				return true
+			}
+
 			// Allow Vercel production and preview deployments
 			if origin == "https://stackhub-2-kzmw-one.vercel.app" {
 				return true
