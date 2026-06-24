@@ -1,6 +1,6 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { Vendor } from "./vendor";
-import { fetchApiAuthenticated } from "./api";
+import { fetchApi, fetchApiAuthenticated } from "./api";
 
 export type Category = {
   id: number;
@@ -126,4 +126,28 @@ export async function removeFromWatchlist(
   );
 
   if (!response.ok) throw new Error("Failed to remove from watchlist");
+}
+
+export type UserToolsResponse = {
+  tools: Tool[];
+};
+
+export async function getUserStack(username: string): Promise<UserToolsResponse> {
+  const response = await fetchApi(
+    `/user/${encodeURIComponent(username)}/stack`
+  );
+
+  if (!response.ok) throw new Error("Failed to fetch stack");
+  return response.json();
+}
+
+export async function getUserWatchlist(
+  username: string
+): Promise<UserToolsResponse> {
+  const response = await fetchApi(
+    `/user/${encodeURIComponent(username)}/watchlist`
+  );
+
+  if (!response.ok) throw new Error("Failed to fetch watchlist");
+  return response.json();
 }

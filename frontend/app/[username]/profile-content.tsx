@@ -13,6 +13,7 @@ import { Search } from "lucide-react";
 import { Post, PostType } from "@/lib/post";
 import { useAuth } from "@/lib/queries/use-auth";
 import { cn } from "@/lib/utils";
+import StackContent from "./stack-content";
 
 interface ProfileContentProps {
   username: string;
@@ -130,7 +131,7 @@ export default function ProfileContent({
 
   // Fetch posts based on current tab
   const postsQuery = useUserPosts(
-    activeTab !== "starred",
+    activeTab !== "starred" && activeTab !== "stack",
     username,
     page,
     limit,
@@ -143,6 +144,11 @@ export default function ProfileContent({
     page,
     limit
   );
+
+  // The Stack tab has its own layout (active stack + watchlist sections)
+  if (activeTab === "stack") {
+    return <StackContent username={username} />;
+  }
 
   // Get current data based on active tab
   const currentQuery = activeTab === "starred" ? starredQuery : postsQuery;

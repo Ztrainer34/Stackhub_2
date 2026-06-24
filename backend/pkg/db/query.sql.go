@@ -973,6 +973,106 @@ func (q *Queries) GetToolsByCategory(ctx context.Context, arg GetToolsByCategory
 	return items, nil
 }
 
+const listUserStack = `-- name: ListUserStack :many
+SELECT
+  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor
+FROM tools_with_details twd
+JOIN stack_items si ON si.tool_id = twd.id
+JOIN profiles p ON p.id = si.profile_id
+WHERE p.username = $1
+ORDER BY twd.name
+`
+
+type ListUserStackRow struct {
+	ID          uuid.UUID          `json:"id"`
+	Name        string             `json:"name"`
+	Description pgtype.Text        `json:"description"`
+	LogoUrl     pgtype.Text        `json:"logo_url"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	Categories  interface{}        `json:"categories"`
+	Vendor      json.RawMessage    `json:"vendor"`
+}
+
+func (q *Queries) ListUserStack(ctx context.Context, username string) ([]ListUserStackRow, error) {
+	rows, err := q.db.Query(ctx, listUserStack, username)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserStackRow
+	for rows.Next() {
+		var i ListUserStackRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.LogoUrl,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Categories,
+			&i.Vendor,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserWatchlist = `-- name: ListUserWatchlist :many
+SELECT
+  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor
+FROM tools_with_details twd
+JOIN watchlist_items wi ON wi.tool_id = twd.id
+JOIN profiles p ON p.id = wi.profile_id
+WHERE p.username = $1
+ORDER BY twd.name
+`
+
+type ListUserWatchlistRow struct {
+	ID          uuid.UUID          `json:"id"`
+	Name        string             `json:"name"`
+	Description pgtype.Text        `json:"description"`
+	LogoUrl     pgtype.Text        `json:"logo_url"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	Categories  interface{}        `json:"categories"`
+	Vendor      json.RawMessage    `json:"vendor"`
+}
+
+func (q *Queries) ListUserWatchlist(ctx context.Context, username string) ([]ListUserWatchlistRow, error) {
+	rows, err := q.db.Query(ctx, listUserWatchlist, username)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserWatchlistRow
+	for rows.Next() {
+		var i ListUserWatchlistRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.LogoUrl,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Categories,
+			&i.Vendor,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getTopCategories = `-- name: GetTopCategories :many
 SELECT 
   c.id,

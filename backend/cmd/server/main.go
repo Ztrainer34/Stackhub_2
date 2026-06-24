@@ -2138,6 +2138,64 @@ func (app *App) removeFromWatchlist(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func (app *App) listUserStack(w http.ResponseWriter, r *http.Request) {
+	username := chi.URLParam(r, "slug")
+
+	if username == "" {
+		http.Error(w, "Username cannot be empty", http.StatusBadRequest)
+		return
+	}
+
+	tools, err := app.queries.ListUserStack(r.Context(), username)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to fetch stack", http.StatusInternalServerError)
+		return
+	}
+
+	if tools == nil {
+		tools = []db.ListUserStackRow{}
+	}
+
+	response := struct {
+		Tools []db.ListUserStackRow `json:"tools"`
+	}{
+		Tools: tools,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func (app *App) listUserWatchlist(w http.ResponseWriter, r *http.Request) {
+	username := chi.URLParam(r, "slug")
+
+	if username == "" {
+		http.Error(w, "Username cannot be empty", http.StatusBadRequest)
+		return
+	}
+
+	tools, err := app.queries.ListUserWatchlist(r.Context(), username)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to fetch watchlist", http.StatusInternalServerError)
+		return
+	}
+
+	if tools == nil {
+		tools = []db.ListUserWatchlistRow{}
+	}
+
+	response := struct {
+		Tools []db.ListUserWatchlistRow `json:"tools"`
+	}{
+		Tools: tools,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 func (app *App) followUser(w http.ResponseWriter, r *http.Request) {
 	userID := extractUserIDFromRequest(r)
 
@@ -2662,6 +2720,8 @@ func main() {
 
 		// User routes
 		r.Get("/user/{slug}", app.getUser)
+		r.Get("/user/{slug}/stack", app.listUserStack)
+		r.Get("/user/{slug}/watchlist", app.listUserWatchlist)
 
 		// Homepage routes
 		r.Get("/homepage/top-categories", app.getTopCategories)
