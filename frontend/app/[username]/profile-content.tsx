@@ -14,6 +14,7 @@ import { Post, PostType } from "@/lib/post";
 import { useAuth } from "@/lib/queries/use-auth";
 import { cn } from "@/lib/utils";
 import StackContent from "./stack-content";
+import KeyToolsSection from "./key-tools-section";
 
 interface ProfileContentProps {
   username: string;
@@ -234,6 +235,9 @@ export default function ProfileContent({
   if (currentQuery.isLoading) {
     return (
       <>
+        {activeTab === "overview" && (
+          <KeyToolsSection username={username} isOwnProfile={isOwnProfile} />
+        )}
         <SearchBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} activeTab={activeTab}/>
         {showSecondaryFilters && (
           <SecondaryFilters
@@ -250,6 +254,9 @@ export default function ProfileContent({
   if (currentQuery.error) {
     return (
       <>
+        {activeTab === "overview" && (
+          <KeyToolsSection username={username} isOwnProfile={isOwnProfile} />
+        )}
         <SearchBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} activeTab={activeTab}/>
         {showSecondaryFilters && (
           <SecondaryFilters
@@ -274,6 +281,9 @@ export default function ProfileContent({
         : `No ${activeTab === "overview" ? "posts" : activeTab} found`;
     return (
       <>
+        {activeTab === "overview" && (
+          <KeyToolsSection username={username} isOwnProfile={isOwnProfile} />
+        )}
         <SearchBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} activeTab={activeTab}/>
         {showSecondaryFilters && (
           <SecondaryFilters
@@ -289,6 +299,9 @@ export default function ProfileContent({
 
   return (
     <>
+      {activeTab === "overview" && (
+        <KeyToolsSection username={username} isOwnProfile={isOwnProfile} />
+      )}
       <SearchBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} activeTab={activeTab}/>
       {showSecondaryFilters && (
         <SecondaryFilters

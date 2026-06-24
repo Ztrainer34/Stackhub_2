@@ -2196,6 +2196,106 @@ func (app *App) listUserWatchlist(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+func (app *App) listUserKeyTools(w http.ResponseWriter, r *http.Request) {
+	username := chi.URLParam(r, "slug")
+
+	if username == "" {
+		http.Error(w, "Username cannot be empty", http.StatusBadRequest)
+		return
+	}
+
+	tools, err := app.queries.ListUserKeyTools(r.Context(), username)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to fetch key tools", http.StatusInternalServerError)
+		return
+	}
+
+	if tools == nil {
+		tools = []db.ListUserKeyToolsRow{}
+	}
+
+	response := struct {
+		Tools []db.ListUserKeyToolsRow `json:"tools"`
+	}{
+		Tools: tools,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func (app *App) setKeyTools(w http.ResponseWriter, r *http.Request) {
+	userID := extractUserIDFromRequest(r)
+
+	var form struct {
+		ToolIDs []string `json:"tool_ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&form); err != nil {
+		http.Error(w, "Malformed request body", http.StatusBadRequest)
+		return
+	}
+
+	if len(form.ToolIDs) > 3 {
+		http.Error(w, "You can pin at most 3 key tools", http.StatusBadRequest)
+		return
+	}
+
+	// Parse and de-duplicate tool ids while preserving order.
+	seen := make(map[uuid.UUID]bool)
+	toolIDs := make([]uuid.UUID, 0, len(form.ToolIDs))
+	for _, idStr := range form.ToolIDs {
+		toolID, err := uuid.Parse(idStr)
+		if err != nil {
+			http.Error(w, "Malformed tool id", http.StatusBadRequest)
+			return
+		}
+		if seen[toolID] {
+			continue
+		}
+		seen[toolID] = true
+		toolIDs = append(toolIDs, toolID)
+	}
+
+	tx, err := app.db.Begin(r.Context())
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to start transaction", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback(r.Context())
+
+	qtx := app.queries.WithTx(tx)
+
+	// Replace the user's key tools with the new set.
+	if err := qtx.RemoveAllKeyTools(r.Context(), userID); err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to update key tools", http.StatusInternalServerError)
+		return
+	}
+
+	for i, toolID := range toolIDs {
+		err := qtx.AddKeyTool(r.Context(), db.AddKeyToolParams{
+			ProfileID: userID,
+			ToolID:    toolID,
+			Position:  int32(i),
+		})
+		if err != nil {
+			log.Println(err)
+			http.Error(w, "Failed to update key tools", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	if err := tx.Commit(r.Context()); err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to commit", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
 func (app *App) followUser(w http.ResponseWriter, r *http.Request) {
 	userID := extractUserIDFromRequest(r)
 
@@ -2670,6 +2770,8 @@ func main() {
 		r.Put("/user/watchlist/{tool_id}", app.addToWatchlist)
 		r.Delete("/user/watchlist/{tool_id}", app.removeFromWatchlist)
 
+		r.Put("/user/key-tools", app.setKeyTools)
+
 		r.Put("/user/follow/{user_id}", app.followUser)
 		r.Delete("/user/follow/{user_id}", app.unfollowUser)
 
@@ -2722,6 +2824,7 @@ func main() {
 		r.Get("/user/{slug}", app.getUser)
 		r.Get("/user/{slug}/stack", app.listUserStack)
 		r.Get("/user/{slug}/watchlist", app.listUserWatchlist)
+		r.Get("/user/{slug}/key-tools", app.listUserKeyTools)
 
 		// Homepage routes
 		r.Get("/homepage/top-categories", app.getTopCategories)

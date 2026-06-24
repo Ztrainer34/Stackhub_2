@@ -572,6 +572,24 @@ JOIN profiles p ON p.id = wi.profile_id
 WHERE p.username = $1
 ORDER BY twd.name;
 
+-- name: ListUserKeyTools :many
+SELECT
+  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor
+FROM tools_with_details twd
+JOIN key_tools kt ON kt.tool_id = twd.id
+JOIN profiles p ON p.id = kt.profile_id
+WHERE p.username = $1
+ORDER BY kt.position;
+
+-- name: RemoveAllKeyTools :exec
+DELETE FROM key_tools
+WHERE profile_id = $1;
+
+-- name: AddKeyTool :exec
+INSERT INTO key_tools (profile_id, tool_id, position)
+VALUES ($1, $2, $3)
+ON CONFLICT (profile_id, tool_id) DO UPDATE SET position = EXCLUDED.position;
+
 -- name: AutocompleteCategory :many
 SELECT
   id,

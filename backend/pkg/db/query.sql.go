@@ -1073,6 +1073,83 @@ func (q *Queries) ListUserWatchlist(ctx context.Context, username string) ([]Lis
 	return items, nil
 }
 
+const listUserKeyTools = `-- name: ListUserKeyTools :many
+SELECT
+  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor
+FROM tools_with_details twd
+JOIN key_tools kt ON kt.tool_id = twd.id
+JOIN profiles p ON p.id = kt.profile_id
+WHERE p.username = $1
+ORDER BY kt.position
+`
+
+type ListUserKeyToolsRow struct {
+	ID          uuid.UUID          `json:"id"`
+	Name        string             `json:"name"`
+	Description pgtype.Text        `json:"description"`
+	LogoUrl     pgtype.Text        `json:"logo_url"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	Categories  interface{}        `json:"categories"`
+	Vendor      json.RawMessage    `json:"vendor"`
+}
+
+func (q *Queries) ListUserKeyTools(ctx context.Context, username string) ([]ListUserKeyToolsRow, error) {
+	rows, err := q.db.Query(ctx, listUserKeyTools, username)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserKeyToolsRow
+	for rows.Next() {
+		var i ListUserKeyToolsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.LogoUrl,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Categories,
+			&i.Vendor,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const removeAllKeyTools = `-- name: RemoveAllKeyTools :exec
+DELETE FROM key_tools
+WHERE profile_id = $1
+`
+
+func (q *Queries) RemoveAllKeyTools(ctx context.Context, profileID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, removeAllKeyTools, profileID)
+	return err
+}
+
+const addKeyTool = `-- name: AddKeyTool :exec
+INSERT INTO key_tools (profile_id, tool_id, position)
+VALUES ($1, $2, $3)
+ON CONFLICT (profile_id, tool_id) DO UPDATE SET position = EXCLUDED.position
+`
+
+type AddKeyToolParams struct {
+	ProfileID uuid.UUID `json:"profile_id"`
+	ToolID    uuid.UUID `json:"tool_id"`
+	Position  int32     `json:"position"`
+}
+
+func (q *Queries) AddKeyTool(ctx context.Context, arg AddKeyToolParams) error {
+	_, err := q.db.Exec(ctx, addKeyTool, arg.ProfileID, arg.ToolID, arg.Position)
+	return err
+}
+
 const getTopCategories = `-- name: GetTopCategories :many
 SELECT 
   c.id,

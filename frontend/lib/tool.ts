@@ -151,3 +151,31 @@ export async function getUserWatchlist(
   if (!response.ok) throw new Error("Failed to fetch watchlist");
   return response.json();
 }
+
+export async function getUserKeyTools(
+  username: string
+): Promise<UserToolsResponse> {
+  const response = await fetchApi(
+    `/user/${encodeURIComponent(username)}/key-tools`
+  );
+
+  if (!response.ok) throw new Error("Failed to fetch key tools");
+  return response.json();
+}
+
+export async function setKeyTools(
+  supabaseClient: SupabaseClient,
+  toolIds: string[]
+): Promise<void> {
+  const response = await fetchApiAuthenticated(
+    supabaseClient,
+    `/user/key-tools`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tool_ids: toolIds }),
+    }
+  );
+
+  if (!response.ok) throw new Error("Failed to update key tools");
+}
