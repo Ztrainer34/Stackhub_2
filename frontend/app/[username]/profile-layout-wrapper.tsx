@@ -4,7 +4,9 @@ import { UserAvatar } from "@/components/user-avatar";
 import { notFound } from "next/navigation";
 import ProfileTabsInjector from "./profile-tabs-injector";
 import { FollowButton } from "@/components/follow-button";
-import { Globe, Building2, MapPin, Linkedin, Twitter } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { Globe, Building2, MapPin, Linkedin, Twitter, Pencil } from "lucide-react";
 
 interface ProfileLayoutWrapperProps {
   username: string;
@@ -79,6 +81,18 @@ export default async function ProfileLayoutWrapper({ username, children }: Profi
                       userId={user.id}
                       size="sm"
                     />
+                  </div>
+                )}
+
+                {/* Edit profile button - only on own profile */}
+                {isOwnProfile && (
+                  <div className="mb-4 w-full">
+                    <Link href="/settings">
+                      <Button variant="outline" size="sm" className="w-full">
+                        <Pencil className="w-4 h-4 mr-2" />
+                        Edit profile
+                      </Button>
+                    </Link>
                   </div>
                 )}
 

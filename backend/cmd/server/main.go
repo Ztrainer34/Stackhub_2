@@ -2055,14 +2055,41 @@ func (app *App) addToStack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	addToStackParams := db.AddToStackParams{
+	// A tool can be in the stack or the watchlist, but not both. Adding to the
+	// stack removes it from the watchlist.
+	tx, err := app.db.Begin(r.Context())
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to start transaction", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback(r.Context())
+
+	qtx := app.queries.WithTx(tx)
+
+	err = qtx.AddToStack(r.Context(), db.AddToStackParams{
 		ProfileID: userID,
 		ToolID:    toolID,
+	})
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to add to stack", http.StatusInternalServerError)
+		return
 	}
 
-	err = app.queries.AddToStack(r.Context(), addToStackParams)
+	err = qtx.RemoveFromWatchlist(r.Context(), db.RemoveFromWatchlistParams{
+		ProfileID: userID,
+		ToolID:    toolID,
+	})
 	if err != nil {
+		log.Println(err)
 		http.Error(w, "Failed to add to stack", http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Commit(r.Context()); err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to commit", http.StatusInternalServerError)
 		return
 	}
 
@@ -2106,14 +2133,41 @@ func (app *App) addToWatchlist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	addToWatchlistParams := db.AddToWatchlistParams{
+	// A tool can be in the watchlist or the stack, but not both. Adding to the
+	// watchlist removes it from the stack.
+	tx, err := app.db.Begin(r.Context())
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to start transaction", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback(r.Context())
+
+	qtx := app.queries.WithTx(tx)
+
+	err = qtx.AddToWatchlist(r.Context(), db.AddToWatchlistParams{
 		ProfileID: userID,
 		ToolID:    toolID,
+	})
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to add to watchlist", http.StatusInternalServerError)
+		return
 	}
 
-	err = app.queries.AddToWatchlist(r.Context(), addToWatchlistParams)
+	err = qtx.RemoveFromStack(r.Context(), db.RemoveFromStackParams{
+		ProfileID: userID,
+		ToolID:    toolID,
+	})
 	if err != nil {
+		log.Println(err)
 		http.Error(w, "Failed to add to watchlist", http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Commit(r.Context()); err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to commit", http.StatusInternalServerError)
 		return
 	}
 

@@ -35,13 +35,15 @@ export function useAddToStack() {
       const previousTool = queryClient.getQueryData(["tool", toolId]);
       
       // Optimistically update to the new value
+      // A tool can't be in both lists: adding to the stack clears the
+      // watchlist flag.
       queryClient.setQueryData(["tool", toolId], (old: unknown) => {
         if (old && typeof old === 'object') {
-          return { ...old, is_in_stack: true };
+          return { ...old, is_in_stack: true, is_in_watchlist: false };
         }
         return old;
       });
-      
+
       // Return context with the snapshotted value
       return { previousTool };
     },
@@ -98,13 +100,15 @@ export function useAddToWatchlist() {
       await queryClient.cancelQueries({ queryKey: ["tool", toolId] });
       const previousTool = queryClient.getQueryData(["tool", toolId]);
       
+      // A tool can't be in both lists: adding to the watchlist clears the
+      // stack flag.
       queryClient.setQueryData(["tool", toolId], (old: unknown) => {
         if (old && typeof old === 'object') {
-          return { ...old, is_in_watchlist: true };
+          return { ...old, is_in_watchlist: true, is_in_stack: false };
         }
         return old;
       });
-      
+
       return { previousTool };
     },
     onError: (_err, toolId, context) => {
