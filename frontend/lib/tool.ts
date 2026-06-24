@@ -19,6 +19,7 @@ export type Tool = {
   is_published: boolean;
   is_in_stack: boolean;
   is_in_watchlist: boolean;
+  added_at?: string;
 };
 
 export type PaginatedToolsResponse = {

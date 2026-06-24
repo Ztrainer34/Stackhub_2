@@ -556,7 +556,7 @@ WHERE profile_id = $1 AND tool_id = $2;
 
 -- name: ListUserStack :many
 SELECT
-  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor
+  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor, si.added_at
 FROM tools_with_details twd
 JOIN stack_items si ON si.tool_id = twd.id
 JOIN profiles p ON p.id = si.profile_id
@@ -565,7 +565,7 @@ ORDER BY twd.name;
 
 -- name: ListUserWatchlist :many
 SELECT
-  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor
+  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor, wi.added_at
 FROM tools_with_details twd
 JOIN watchlist_items wi ON wi.tool_id = twd.id
 JOIN profiles p ON p.id = wi.profile_id

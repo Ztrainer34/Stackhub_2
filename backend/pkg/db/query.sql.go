@@ -975,7 +975,7 @@ func (q *Queries) GetToolsByCategory(ctx context.Context, arg GetToolsByCategory
 
 const listUserStack = `-- name: ListUserStack :many
 SELECT
-  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor
+  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor, si.added_at
 FROM tools_with_details twd
 JOIN stack_items si ON si.tool_id = twd.id
 JOIN profiles p ON p.id = si.profile_id
@@ -992,6 +992,7 @@ type ListUserStackRow struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 	Categories  interface{}        `json:"categories"`
 	Vendor      json.RawMessage    `json:"vendor"`
+	AddedAt     pgtype.Timestamptz `json:"added_at"`
 }
 
 func (q *Queries) ListUserStack(ctx context.Context, username string) ([]ListUserStackRow, error) {
@@ -1012,6 +1013,7 @@ func (q *Queries) ListUserStack(ctx context.Context, username string) ([]ListUse
 			&i.UpdatedAt,
 			&i.Categories,
 			&i.Vendor,
+			&i.AddedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1025,7 +1027,7 @@ func (q *Queries) ListUserStack(ctx context.Context, username string) ([]ListUse
 
 const listUserWatchlist = `-- name: ListUserWatchlist :many
 SELECT
-  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor
+  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor, wi.added_at
 FROM tools_with_details twd
 JOIN watchlist_items wi ON wi.tool_id = twd.id
 JOIN profiles p ON p.id = wi.profile_id
@@ -1042,6 +1044,7 @@ type ListUserWatchlistRow struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 	Categories  interface{}        `json:"categories"`
 	Vendor      json.RawMessage    `json:"vendor"`
+	AddedAt     pgtype.Timestamptz `json:"added_at"`
 }
 
 func (q *Queries) ListUserWatchlist(ctx context.Context, username string) ([]ListUserWatchlistRow, error) {
@@ -1062,6 +1065,7 @@ func (q *Queries) ListUserWatchlist(ctx context.Context, username string) ([]Lis
 			&i.UpdatedAt,
 			&i.Categories,
 			&i.Vendor,
+			&i.AddedAt,
 		); err != nil {
 			return nil, err
 		}
