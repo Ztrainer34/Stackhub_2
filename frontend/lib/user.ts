@@ -8,6 +8,10 @@ export type User = {
   display_name?: string;
   bio?: string;
   website?: string;
+  company?: string;
+  location?: string;
+  linkedin?: string;
+  twitter?: string;
   created_at?: string;
   updated_at?: string;
 };

@@ -5,6 +5,10 @@ SELECT
   display_name,
   bio,
   website,
+  company,
+  location,
+  linkedin,
+  twitter,
   email_hash,
   created_at,
   updated_at
@@ -21,6 +25,10 @@ SELECT
   display_name,
   bio,
   website,
+  company,
+  location,
+  linkedin,
+  twitter,
   email_hash,
   created_at,
   updated_at
@@ -49,6 +57,10 @@ SET
   username = COALESCE(sqlc.narg(username), username),
   bio = COALESCE(sqlc.narg(bio), bio),
   website = COALESCE(sqlc.narg(website), website),
+  company = COALESCE(sqlc.narg(company), company),
+  location = COALESCE(sqlc.narg(location), location),
+  linkedin = COALESCE(sqlc.narg(linkedin), linkedin),
+  twitter = COALESCE(sqlc.narg(twitter), twitter),
   updated_at = now()
 WHERE id = $1;
 

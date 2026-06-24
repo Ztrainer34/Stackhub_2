@@ -288,9 +288,6 @@ export default function ProfileContent({
   if (currentQuery.isLoading) {
     return (
       <>
-        {activeTab === "overview" && (
-          <KeyToolsSection username={username} isOwnProfile={isOwnProfile} />
-        )}
         <SearchBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} activeTab={activeTab}/>
         {showSecondaryFilters && (
           <SecondaryFilters
@@ -300,6 +297,11 @@ export default function ProfileContent({
           />
         )}
         <LoadingSkeleton />
+        {activeTab === "overview" && (
+          <div className="mt-8">
+            <KeyToolsSection username={username} isOwnProfile={isOwnProfile} />
+          </div>
+        )}
       </>
     );
   }
@@ -307,9 +309,6 @@ export default function ProfileContent({
   if (currentQuery.error) {
     return (
       <>
-        {activeTab === "overview" && (
-          <KeyToolsSection username={username} isOwnProfile={isOwnProfile} />
-        )}
         <SearchBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} activeTab={activeTab}/>
         {showSecondaryFilters && (
           <SecondaryFilters
@@ -323,6 +322,11 @@ export default function ProfileContent({
             activeTab === "starred" ? "starred posts" : activeTab
           }`}
         />
+        {activeTab === "overview" && (
+          <div className="mt-8">
+            <KeyToolsSection username={username} isOwnProfile={isOwnProfile} />
+          </div>
+        )}
       </>
     );
   }
@@ -334,9 +338,6 @@ export default function ProfileContent({
         : `No ${activeTab === "overview" ? "posts" : activeTab} found`;
     return (
       <>
-        {activeTab === "overview" && (
-          <KeyToolsSection username={username} isOwnProfile={isOwnProfile} />
-        )}
         <SearchBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} activeTab={activeTab}/>
         {showSecondaryFilters && (
           <SecondaryFilters
@@ -346,15 +347,17 @@ export default function ProfileContent({
           />
         )}
         <EmptyState message={emptyMessage} />
+        {activeTab === "overview" && (
+          <div className="mt-8">
+            <KeyToolsSection username={username} isOwnProfile={isOwnProfile} />
+          </div>
+        )}
       </>
     );
   }
 
   return (
     <>
-      {activeTab === "overview" && (
-        <KeyToolsSection username={username} isOwnProfile={isOwnProfile} />
-      )}
       <SearchBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} activeTab={activeTab}/>
       {showSecondaryFilters && (
         <SecondaryFilters
@@ -368,6 +371,11 @@ export default function ProfileContent({
         <EmptyState message="No posts match the selected filters" />
       ) : (
         <PostGrid posts={filteredPosts} />
+      )}
+      {activeTab === "overview" && (
+        <div className="mt-8">
+          <KeyToolsSection username={username} isOwnProfile={isOwnProfile} />
+        </div>
       )}
     </>
   );

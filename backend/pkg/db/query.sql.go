@@ -617,6 +617,10 @@ SELECT
   display_name,
   bio,
   website,
+  company,
+  location,
+  linkedin,
+  twitter,
   email_hash,
   created_at,
   updated_at
@@ -632,6 +636,10 @@ type GetProfileRow struct {
 	DisplayName string             `json:"display_name"`
 	Bio         pgtype.Text        `json:"bio"`
 	Website     pgtype.Text        `json:"website"`
+	Company     pgtype.Text        `json:"company"`
+	Location    pgtype.Text        `json:"location"`
+	Linkedin    pgtype.Text        `json:"linkedin"`
+	Twitter     pgtype.Text        `json:"twitter"`
 	EmailHash   pgtype.Text        `json:"email_hash"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
@@ -646,6 +654,10 @@ func (q *Queries) GetProfile(ctx context.Context, id uuid.UUID) (GetProfileRow, 
 		&i.DisplayName,
 		&i.Bio,
 		&i.Website,
+		&i.Company,
+		&i.Location,
+		&i.Linkedin,
+		&i.Twitter,
 		&i.EmailHash,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -660,6 +672,10 @@ SELECT
   display_name,
   bio,
   website,
+  company,
+  location,
+  linkedin,
+  twitter,
   email_hash,
   created_at,
   updated_at
@@ -675,6 +691,10 @@ type GetProfileWithUsernameRow struct {
 	DisplayName string             `json:"display_name"`
 	Bio         pgtype.Text        `json:"bio"`
 	Website     pgtype.Text        `json:"website"`
+	Company     pgtype.Text        `json:"company"`
+	Location    pgtype.Text        `json:"location"`
+	Linkedin    pgtype.Text        `json:"linkedin"`
+	Twitter     pgtype.Text        `json:"twitter"`
 	EmailHash   pgtype.Text        `json:"email_hash"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
@@ -689,6 +709,10 @@ func (q *Queries) GetProfileWithUsername(ctx context.Context, username string) (
 		&i.DisplayName,
 		&i.Bio,
 		&i.Website,
+		&i.Company,
+		&i.Location,
+		&i.Linkedin,
+		&i.Twitter,
 		&i.EmailHash,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -2682,6 +2706,10 @@ SET
   username = COALESCE($2, username),
   bio = COALESCE($3, bio),
   website = COALESCE($4, website),
+  company = COALESCE($5, company),
+  location = COALESCE($6, location),
+  linkedin = COALESCE($7, linkedin),
+  twitter = COALESCE($8, twitter),
   updated_at = now()
 WHERE id = $1
 `
@@ -2691,6 +2719,10 @@ type UpdateProfileParams struct {
 	Username pgtype.Text `json:"username"`
 	Bio      pgtype.Text `json:"bio"`
 	Website  pgtype.Text `json:"website"`
+	Company  pgtype.Text `json:"company"`
+	Location pgtype.Text `json:"location"`
+	Linkedin pgtype.Text `json:"linkedin"`
+	Twitter  pgtype.Text `json:"twitter"`
 }
 
 func (q *Queries) UpdateProfile(ctx context.Context, arg UpdateProfileParams) error {
@@ -2699,6 +2731,10 @@ func (q *Queries) UpdateProfile(ctx context.Context, arg UpdateProfileParams) er
 		arg.Username,
 		arg.Bio,
 		arg.Website,
+		arg.Company,
+		arg.Location,
+		arg.Linkedin,
+		arg.Twitter,
 	)
 	return err
 }

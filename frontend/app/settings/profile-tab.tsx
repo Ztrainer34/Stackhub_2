@@ -1,7 +1,16 @@
 "use client";
 
 import { useState, useEffect, FormEvent } from "react";
-import { User, AtSign, Mail, Link as LinkIcon } from "lucide-react";
+import {
+  User,
+  AtSign,
+  Mail,
+  Link as LinkIcon,
+  Building2,
+  MapPin,
+  Linkedin,
+  Twitter,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -42,9 +51,20 @@ export function ProfileTab() {
     const username = formData.get("username") as string;
     const bio = formData.get("bio") as string;
     const website = formData.get("website") as string;
+    const company = formData.get("company") as string;
+    const location = formData.get("location") as string;
+    const linkedin = formData.get("linkedin") as string;
+    const twitter = formData.get("twitter") as string;
 
-    // Only send changed fields
-    const updates: { username?: string; bio?: string; website?: string } = {};
+    const updates: {
+      username?: string;
+      bio?: string;
+      website?: string;
+      company?: string;
+      location?: string;
+      linkedin?: string;
+      twitter?: string;
+    } = {};
 
     if (username && username !== user.username) {
       updates.username = username;
@@ -57,6 +77,12 @@ export function ProfileTab() {
     if (website !== undefined && website.trim() !== "") {
       updates.website = website;
     }
+
+    // Contact fields are always sent so they can be edited or cleared.
+    updates.company = company ?? "";
+    updates.location = location ?? "";
+    updates.linkedin = linkedin ?? "";
+    updates.twitter = twitter ?? "";
 
     if (Object.keys(updates).length > 0) {
       updateProfile.mutate(updates);
@@ -172,6 +198,60 @@ export function ProfileTab() {
                 defaultValue={user.website || ""}
                 placeholder="https://your-website.com"
               />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="company" className="flex items-center gap-2">
+                  <Building2 className="w-4 h-4" />
+                  Company
+                </Label>
+                <Input
+                  id="company"
+                  name="company"
+                  defaultValue={user.company || ""}
+                  placeholder="Where you work"
+                />
+              </div>
+              <div>
+                <Label htmlFor="location" className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4" />
+                  Location
+                </Label>
+                <Input
+                  id="location"
+                  name="location"
+                  defaultValue={user.location || ""}
+                  placeholder="City, Country"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="linkedin" className="flex items-center gap-2">
+                  <Linkedin className="w-4 h-4" />
+                  LinkedIn
+                </Label>
+                <Input
+                  id="linkedin"
+                  name="linkedin"
+                  defaultValue={user.linkedin || ""}
+                  placeholder="username or profile URL"
+                />
+              </div>
+              <div>
+                <Label htmlFor="twitter" className="flex items-center gap-2">
+                  <Twitter className="w-4 h-4" />
+                  X (Twitter)
+                </Label>
+                <Input
+                  id="twitter"
+                  name="twitter"
+                  defaultValue={user.twitter || ""}
+                  placeholder="username"
+                />
+              </div>
             </div>
 
             <div className="flex justify-end pt-4">

@@ -8,6 +8,10 @@ interface UpdateProfileData {
   username?: string;
   bio?: string;
   website?: string;
+  company?: string;
+  location?: string;
+  linkedin?: string;
+  twitter?: string;
 }
 
 interface Profile {
@@ -16,6 +20,10 @@ interface Profile {
   display_name: string;
   bio?: string;
   website?: string;
+  company?: string;
+  location?: string;
+  linkedin?: string;
+  twitter?: string;
   created_at: string;
   updated_at: string;
 }

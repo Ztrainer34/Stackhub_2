@@ -4,7 +4,7 @@ import { UserAvatar } from "@/components/user-avatar";
 import { notFound } from "next/navigation";
 import ProfileTabsInjector from "./profile-tabs-injector";
 import { FollowButton } from "@/components/follow-button";
-import { Globe } from "lucide-react";
+import { Globe, Building2, MapPin, Linkedin, Twitter } from "lucide-react";
 
 interface ProfileLayoutWrapperProps {
   username: string;
@@ -22,6 +22,37 @@ export default async function ProfileLayoutWrapper({ username, children }: Profi
   const authState = await getServerAuthState();
   const currentUser = authState.status === 'authenticated' ? authState.user : null;
   const isOwnProfile = currentUser?.id === user.id;
+
+  // Normalize LinkedIn / X values into a link href + display label. Users can
+  // enter either a full URL or just a handle.
+  const linkedinHref = user.linkedin
+    ? user.linkedin.startsWith("http")
+      ? user.linkedin
+      : `https://www.linkedin.com/in/${user.linkedin.replace(/^@/, "")}`
+    : null;
+  const linkedinLabel = user.linkedin
+    ? user.linkedin.startsWith("http")
+      ? user.linkedin.replace(/^https?:\/\//, "")
+      : `@${user.linkedin.replace(/^@/, "")}`
+    : "";
+
+  const twitterHref = user.twitter
+    ? user.twitter.startsWith("http")
+      ? user.twitter
+      : `https://x.com/${user.twitter.replace(/^@/, "")}`
+    : null;
+  const twitterLabel = user.twitter
+    ? user.twitter.startsWith("http")
+      ? user.twitter.replace(/^https?:\/\//, "")
+      : `@${user.twitter.replace(/^@/, "")}`
+    : "";
+
+  const hasContactInfo =
+    user.company ||
+    user.location ||
+    user.website ||
+    linkedinHref ||
+    twitterHref;
 
   return (
     <>
@@ -58,19 +89,6 @@ export default async function ProfileLayoutWrapper({ username, children }: Profi
                   </p>
                 )}
 
-                {/* Website */}
-                {user.website && (
-                  <a
-                    href={user.website}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-sm text-primary hover:underline mb-4"
-                  >
-                    <Globe className="w-4 h-4" />
-                    {user.website.replace(/^https?:\/\//, '')}
-                  </a>
-                )}
-
                 {/* Stats section */}
                 <div className="w-full space-y-2">
                   <div className="flex justify-between text-sm">
@@ -86,6 +104,59 @@ export default async function ProfileLayoutWrapper({ username, children }: Profi
                     <span className="font-medium">89</span>
                   </div>
                 </div>
+
+                {/* Contact / about info */}
+                {hasContactInfo && (
+                  <div className="w-full space-y-3 mt-6 pt-6 border-t text-left">
+                    {user.company && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Building2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                        <span className="truncate">{user.company}</span>
+                      </div>
+                    )}
+                    {user.location && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                        <span className="truncate">{user.location}</span>
+                      </div>
+                    )}
+                    {user.website && (
+                      <a
+                        href={user.website}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 text-sm text-primary hover:underline"
+                      >
+                        <Globe className="w-4 h-4 flex-shrink-0" />
+                        <span className="truncate">
+                          {user.website.replace(/^https?:\/\//, "")}
+                        </span>
+                      </a>
+                    )}
+                    {linkedinHref && (
+                      <a
+                        href={linkedinHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 text-sm text-primary hover:underline"
+                      >
+                        <Linkedin className="w-4 h-4 flex-shrink-0" />
+                        <span className="truncate">{linkedinLabel}</span>
+                      </a>
+                    )}
+                    {twitterHref && (
+                      <a
+                        href={twitterHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 text-sm text-primary hover:underline"
+                      >
+                        <Twitter className="w-4 h-4 flex-shrink-0" />
+                        <span className="truncate">{twitterLabel}</span>
+                      </a>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>

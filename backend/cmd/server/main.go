@@ -1246,6 +1246,10 @@ type UpdateProfileForm struct {
 	Username *string `json:"username"`
 	Bio      *string `json:"bio"`
 	Website  *string `json:"website"`
+	Company  *string `json:"company"`
+	Location *string `json:"location"`
+	Linkedin *string `json:"linkedin"`
+	Twitter  *string `json:"twitter"`
 }
 
 func (app *App) updateProfile(w http.ResponseWriter, r *http.Request) {
@@ -1316,6 +1320,10 @@ func (app *App) updateProfile(w http.ResponseWriter, r *http.Request) {
 		Username: ToPgText(form.Username),
 		Bio:      ToPgText(form.Bio),
 		Website:  ToPgText(form.Website),
+		Company:  ToPgText(form.Company),
+		Location: ToPgText(form.Location),
+		Linkedin: ToPgText(form.Linkedin),
+		Twitter:  ToPgText(form.Twitter),
 	}
 
 	err := app.queries.UpdateProfile(r.Context(), params)
