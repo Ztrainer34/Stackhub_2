@@ -155,20 +155,12 @@ export default function ProfileContent({
     limit
   );
 
-  // The Stack tab has its own layout (active stack + watchlist sections)
-  if (activeTab === "stack") {
-    return <StackContent username={username} />;
-  }
-
   // Get current data based on active tab
   const currentQuery = activeTab === "starred" ? starredQuery : postsQuery;
-  const currentPosts = currentQuery.data?.posts || [];
-
-  // Calculate counts for secondary filters (only for own profile)
-  const filterCounts = {
-    drafts: currentPosts.filter((p) => !p.is_published).length,
-    published: currentPosts.filter((p) => p.is_published).length,
-  };
+  const currentPosts = useMemo(
+    () => currentQuery.data?.posts || [],
+    [currentQuery.data]
+  );
 
   // Category options for the starred tab, built from the tool categories of
   // the starred posts.
@@ -184,6 +176,17 @@ export default function ProfileContent({
       .map(([id, name]) => ({ id, name }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [activeTab, currentPosts]);
+
+  // The Stack tab has its own layout (active stack + watchlist sections)
+  if (activeTab === "stack") {
+    return <StackContent username={username} />;
+  }
+
+  // Calculate counts for secondary filters (only for own profile)
+  const filterCounts = {
+    drafts: currentPosts.filter((p) => !p.is_published).length,
+    published: currentPosts.filter((p) => p.is_published).length,
+  };
 
   // Filter posts based on status filter (client-side for now) and, on the
   // starred tab, the selected tool category.
