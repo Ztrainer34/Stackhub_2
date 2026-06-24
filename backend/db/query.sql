@@ -609,6 +609,25 @@ INSERT INTO key_tools (profile_id, tool_id, position)
 VALUES ($1, $2, $3)
 ON CONFLICT (profile_id, tool_id) DO UPDATE SET position = EXCLUDED.position;
 
+-- name: ListUserKeyPlaybooks :many
+SELECT
+  pwt.id, pwt.type, pwt.name, pwt.slug, pwt.description, pwt.updated_at, pwt.created_at, pwt.last_draft_update, pwt.last_publish, pwt.author_id, pwt.is_published, pwt.author_username, pwt.tools
+FROM posts_with_tools pwt
+JOIN key_playbooks kp ON kp.post_id = pwt.id
+JOIN profiles p ON p.id = kp.profile_id
+WHERE p.username = $1 AND pwt.is_published
+ORDER BY kp.position;
+
+-- name: RemoveAllKeyPlaybooks :exec
+DELETE FROM key_playbooks
+WHERE profile_id = $1;
+
+-- name: AddKeyPlaybook :exec
+INSERT INTO key_playbooks (profile_id, post_id, position)
+SELECT $1, $2, $3
+WHERE EXISTS (SELECT 1 FROM posts WHERE id = $2 AND author_id = $1)
+ON CONFLICT (profile_id, post_id) DO UPDATE SET position = EXCLUDED.position;
+
 -- name: AutocompleteCategory :many
 SELECT
   id,

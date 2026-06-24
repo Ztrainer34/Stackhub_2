@@ -1,6 +1,13 @@
-import { useQuery } from "@tanstack/react-query";
-import { listUserPosts, listUserStarredPosts, PostType } from "../post";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  listUserPosts,
+  listUserStarredPosts,
+  getUserKeyPlaybooks,
+  setKeyPlaybooks,
+  PostType,
+} from "../post";
 import { createClient } from "@/utils/supabase/client";
+import { toast } from "sonner";
 
 export function useUserPosts(
   enabled: boolean,
@@ -32,5 +39,34 @@ export function useUserStarredPosts(
       return listUserStarredPosts(username, page, limit, supabase);
     },
     enabled,
+  });
+}
+
+export function useUserKeyPlaybooks(username: string, enabled: boolean = true) {
+  return useQuery({
+    queryKey: ["user-key-playbooks", username],
+    queryFn: () => getUserKeyPlaybooks(username),
+    enabled: enabled && !!username,
+  });
+}
+
+export function useSetKeyPlaybooks(username: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (postIds: string[]): Promise<void> => {
+      const supabase = createClient();
+      await setKeyPlaybooks(supabase, postIds);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["user-key-playbooks", username],
+      });
+      toast.success("Featured playbooks updated");
+    },
+    onError: (error: Error) => {
+      toast.error("Failed to update playbooks");
+      console.error(error);
+    },
   });
 }

@@ -22,6 +22,7 @@ import { useAuth } from "@/lib/queries/use-auth";
 import { cn } from "@/lib/utils";
 import StackContent from "./stack-content";
 import KeyToolsSection from "./key-tools-section";
+import FeaturedPlaybooksSection from "./featured-playbooks-section";
 
 interface ProfileContentProps {
   username: string;
@@ -139,9 +140,11 @@ export default function ProfileContent({
     setPage(1);
   }, [activeTab]);
 
-  // Fetch posts based on current tab
+  // Fetch posts based on current tab. The overview tab shows a curated
+  // "Featured Playbooks" section instead of the full post list, so it doesn't
+  // need this query.
   const postsQuery = useUserPosts(
-    activeTab !== "starred" && activeTab !== "stack",
+    activeTab !== "starred" && activeTab !== "stack" && activeTab !== "overview",
     username,
     page,
     limit,
@@ -180,6 +183,21 @@ export default function ProfileContent({
   // The Stack tab has its own layout (active stack + watchlist sections)
   if (activeTab === "stack") {
     return <StackContent username={username} />;
+  }
+
+  // The Overview tab shows curated featured playbooks + key tools.
+  if (activeTab === "overview") {
+    return (
+      <>
+        <FeaturedPlaybooksSection
+          username={username}
+          isOwnProfile={isOwnProfile}
+        />
+        <div className="mt-10">
+          <KeyToolsSection username={username} isOwnProfile={isOwnProfile} />
+        </div>
+      </>
+    );
   }
 
   // Calculate counts for secondary filters (only for own profile)
@@ -297,11 +315,6 @@ export default function ProfileContent({
           />
         )}
         <LoadingSkeleton />
-        {activeTab === "overview" && (
-          <div className="mt-8">
-            <KeyToolsSection username={username} isOwnProfile={isOwnProfile} />
-          </div>
-        )}
       </>
     );
   }
@@ -322,11 +335,6 @@ export default function ProfileContent({
             activeTab === "starred" ? "starred posts" : activeTab
           }`}
         />
-        {activeTab === "overview" && (
-          <div className="mt-8">
-            <KeyToolsSection username={username} isOwnProfile={isOwnProfile} />
-          </div>
-        )}
       </>
     );
   }
@@ -347,11 +355,6 @@ export default function ProfileContent({
           />
         )}
         <EmptyState message={emptyMessage} />
-        {activeTab === "overview" && (
-          <div className="mt-8">
-            <KeyToolsSection username={username} isOwnProfile={isOwnProfile} />
-          </div>
-        )}
       </>
     );
   }
@@ -371,11 +374,6 @@ export default function ProfileContent({
         <EmptyState message="No posts match the selected filters" />
       ) : (
         <PostGrid posts={filteredPosts} />
-      )}
-      {activeTab === "overview" && (
-        <div className="mt-8">
-          <KeyToolsSection username={username} isOwnProfile={isOwnProfile} />
-        </div>
       )}
     </>
   );

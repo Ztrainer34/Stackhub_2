@@ -114,6 +114,31 @@ export async function listUserStarredPosts(username: string, page: number = 1, l
   return (await resp.json()) as PaginatedPostsResponse;
 }
 
+export async function getUserKeyPlaybooks(
+  username: string
+): Promise<{ posts: Post[] }> {
+  const resp = await fetchApi(
+    `/user/${encodeURIComponent(username)}/key-playbooks`
+  );
+
+  if (!resp.ok) throw new Error("Failed to fetch key playbooks");
+
+  return (await resp.json()) as { posts: Post[] };
+}
+
+export async function setKeyPlaybooks(
+  supabaseClient: SupabaseClient,
+  postIds: string[]
+): Promise<void> {
+  const resp = await fetchApiAuthenticated(supabaseClient, `/user/key-playbooks`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ post_ids: postIds }),
+  });
+
+  if (!resp.ok) throw new Error("Failed to update key playbooks");
+}
+
 export async function listPosts(): Promise<Post[] | null> {
   const resp = await fetchApi("/post");
 

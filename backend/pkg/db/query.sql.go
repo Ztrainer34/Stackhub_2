@@ -1178,6 +1178,94 @@ func (q *Queries) AddKeyTool(ctx context.Context, arg AddKeyToolParams) error {
 	return err
 }
 
+const listUserKeyPlaybooks = `-- name: ListUserKeyPlaybooks :many
+SELECT
+  pwt.id, pwt.type, pwt.name, pwt.slug, pwt.description, pwt.updated_at, pwt.created_at, pwt.last_draft_update, pwt.last_publish, pwt.author_id, pwt.is_published, pwt.author_username, pwt.tools
+FROM posts_with_tools pwt
+JOIN key_playbooks kp ON kp.post_id = pwt.id
+JOIN profiles p ON p.id = kp.profile_id
+WHERE p.username = $1 AND pwt.is_published
+ORDER BY kp.position
+`
+
+type ListUserKeyPlaybooksRow struct {
+	ID              uuid.UUID          `json:"id"`
+	Type            string             `json:"type"`
+	Name            string             `json:"name"`
+	Slug            string             `json:"slug"`
+	Description     string             `json:"description"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	LastDraftUpdate pgtype.Timestamptz `json:"last_draft_update"`
+	LastPublish     pgtype.Timestamptz `json:"last_publish"`
+	AuthorID        uuid.UUID          `json:"author_id"`
+	IsPublished     pgtype.Bool        `json:"is_published"`
+	AuthorUsername  string             `json:"author_username"`
+	Tools           json.RawMessage    `json:"tools"`
+}
+
+func (q *Queries) ListUserKeyPlaybooks(ctx context.Context, username string) ([]ListUserKeyPlaybooksRow, error) {
+	rows, err := q.db.Query(ctx, listUserKeyPlaybooks, username)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserKeyPlaybooksRow
+	for rows.Next() {
+		var i ListUserKeyPlaybooksRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Type,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.UpdatedAt,
+			&i.CreatedAt,
+			&i.LastDraftUpdate,
+			&i.LastPublish,
+			&i.AuthorID,
+			&i.IsPublished,
+			&i.AuthorUsername,
+			&i.Tools,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const removeAllKeyPlaybooks = `-- name: RemoveAllKeyPlaybooks :exec
+DELETE FROM key_playbooks
+WHERE profile_id = $1
+`
+
+func (q *Queries) RemoveAllKeyPlaybooks(ctx context.Context, profileID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, removeAllKeyPlaybooks, profileID)
+	return err
+}
+
+const addKeyPlaybook = `-- name: AddKeyPlaybook :exec
+INSERT INTO key_playbooks (profile_id, post_id, position)
+SELECT $1, $2, $3
+WHERE EXISTS (SELECT 1 FROM posts WHERE id = $2 AND author_id = $1)
+ON CONFLICT (profile_id, post_id) DO UPDATE SET position = EXCLUDED.position
+`
+
+type AddKeyPlaybookParams struct {
+	ProfileID uuid.UUID `json:"profile_id"`
+	PostID    uuid.UUID `json:"post_id"`
+	Position  int32     `json:"position"`
+}
+
+func (q *Queries) AddKeyPlaybook(ctx context.Context, arg AddKeyPlaybookParams) error {
+	_, err := q.db.Exec(ctx, addKeyPlaybook, arg.ProfileID, arg.PostID, arg.Position)
+	return err
+}
+
 const getTopCategories = `-- name: GetTopCategories :many
 SELECT 
   c.id,

@@ -2358,6 +2358,106 @@ func (app *App) setKeyTools(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func (app *App) listUserKeyPlaybooks(w http.ResponseWriter, r *http.Request) {
+	username := chi.URLParam(r, "slug")
+
+	if username == "" {
+		http.Error(w, "Username cannot be empty", http.StatusBadRequest)
+		return
+	}
+
+	playbooks, err := app.queries.ListUserKeyPlaybooks(r.Context(), username)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to fetch key playbooks", http.StatusInternalServerError)
+		return
+	}
+
+	if playbooks == nil {
+		playbooks = []db.ListUserKeyPlaybooksRow{}
+	}
+
+	response := struct {
+		Posts []db.ListUserKeyPlaybooksRow `json:"posts"`
+	}{
+		Posts: playbooks,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func (app *App) setKeyPlaybooks(w http.ResponseWriter, r *http.Request) {
+	userID := extractUserIDFromRequest(r)
+
+	var form struct {
+		PostIDs []string `json:"post_ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&form); err != nil {
+		http.Error(w, "Malformed request body", http.StatusBadRequest)
+		return
+	}
+
+	if len(form.PostIDs) > 6 {
+		http.Error(w, "You can pin at most 6 playbooks", http.StatusBadRequest)
+		return
+	}
+
+	// Parse and de-duplicate post ids while preserving order.
+	seen := make(map[uuid.UUID]bool)
+	postIDs := make([]uuid.UUID, 0, len(form.PostIDs))
+	for _, idStr := range form.PostIDs {
+		postID, err := uuid.Parse(idStr)
+		if err != nil {
+			http.Error(w, "Malformed post id", http.StatusBadRequest)
+			return
+		}
+		if seen[postID] {
+			continue
+		}
+		seen[postID] = true
+		postIDs = append(postIDs, postID)
+	}
+
+	tx, err := app.db.Begin(r.Context())
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to start transaction", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback(r.Context())
+
+	qtx := app.queries.WithTx(tx)
+
+	// Replace the user's pinned playbooks with the new set.
+	if err := qtx.RemoveAllKeyPlaybooks(r.Context(), userID); err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to update key playbooks", http.StatusInternalServerError)
+		return
+	}
+
+	for i, postID := range postIDs {
+		err := qtx.AddKeyPlaybook(r.Context(), db.AddKeyPlaybookParams{
+			ProfileID: userID,
+			PostID:    postID,
+			Position:  int32(i),
+		})
+		if err != nil {
+			log.Println(err)
+			http.Error(w, "Failed to update key playbooks", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	if err := tx.Commit(r.Context()); err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to commit", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
 func (app *App) followUser(w http.ResponseWriter, r *http.Request) {
 	userID := extractUserIDFromRequest(r)
 
@@ -2833,6 +2933,7 @@ func main() {
 		r.Delete("/user/watchlist/{tool_id}", app.removeFromWatchlist)
 
 		r.Put("/user/key-tools", app.setKeyTools)
+		r.Put("/user/key-playbooks", app.setKeyPlaybooks)
 
 		r.Put("/user/follow/{user_id}", app.followUser)
 		r.Delete("/user/follow/{user_id}", app.unfollowUser)
@@ -2887,6 +2988,7 @@ func main() {
 		r.Get("/user/{slug}/stack", app.listUserStack)
 		r.Get("/user/{slug}/watchlist", app.listUserWatchlist)
 		r.Get("/user/{slug}/key-tools", app.listUserKeyTools)
+		r.Get("/user/{slug}/key-playbooks", app.listUserKeyPlaybooks)
 
 		// Homepage routes
 		r.Get("/homepage/top-categories", app.getTopCategories)
