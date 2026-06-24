@@ -196,8 +196,15 @@ WHERE post_id = $1
 AND liker_id = $2;
 
 -- name: ListUserStarredPosts :many
-SELECT 
+SELECT
   pwt.*,
+  COALESCE((
+    SELECT jsonb_agg(DISTINCT jsonb_build_object('id', c.id, 'name', c.name))
+    FROM post_tools pt
+    JOIN tool_categories tc ON tc.tool_id = pt.tool_id
+    JOIN categories c ON c.id = tc.category_id
+    WHERE pt.post_id = pwt.id
+  ), '[]'::jsonb) AS categories,
   COUNT(*) OVER() AS total_count
 FROM posts_with_tools pwt
 JOIN post_stars ps ON pwt.id = ps.post_id

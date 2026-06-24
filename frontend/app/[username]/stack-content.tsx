@@ -82,62 +82,6 @@ function ToolGridSkeleton() {
   );
 }
 
-interface ToolSectionProps {
-  title: string;
-  icon: React.ReactNode;
-  tools: Tool[];
-  isLoading: boolean;
-  isError: boolean;
-  emptyMessage: string;
-  noResultsMessage: string;
-  hasFilters: boolean;
-}
-
-function ToolSection({
-  title,
-  icon,
-  tools,
-  isLoading,
-  isError,
-  emptyMessage,
-  noResultsMessage,
-  hasFilters,
-}: ToolSectionProps) {
-  return (
-    <section className="mb-10">
-      <div className="flex items-center gap-2 mb-4">
-        {icon}
-        <h2 className="text-xl font-semibold">{title}</h2>
-        {!isLoading && !isError && (
-          <span className="text-sm text-muted-foreground">({tools.length})</span>
-        )}
-      </div>
-
-      {isLoading ? (
-        <ToolGridSkeleton />
-      ) : isError ? (
-        <div className="text-center py-8">
-          <p className="text-muted-foreground">
-            Failed to load {title.toLowerCase()}.
-          </p>
-        </div>
-      ) : tools.length === 0 ? (
-        <div className="text-center py-8 border border-dashed rounded-lg">
-          <p className="text-muted-foreground">
-            {hasFilters ? noResultsMessage : emptyMessage}
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {tools.map((tool) => (
-            <ToolCard key={tool.id} tool={tool} />
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
 function applyFilters(
   tools: Tool[],
   search: string,
@@ -166,28 +110,37 @@ function applyFilters(
       const bTime = b.added_at ? new Date(b.added_at).getTime() : 0;
       return bTime - aTime;
     }
-    // Alphabetical by name.
     return a.name.localeCompare(b.name);
   });
 
   return sorted;
 }
 
-export default function StackContent({ username }: StackContentProps) {
-  const stackQuery = useUserStack(username);
-  const watchlistQuery = useUserWatchlist(username);
+interface ToolSectionProps {
+  title: string;
+  icon: React.ReactNode;
+  tools: Tool[];
+  isLoading: boolean;
+  isError: boolean;
+  emptyMessage: string;
+}
 
+function ToolSection({
+  title,
+  icon,
+  tools,
+  isLoading,
+  isError,
+  emptyMessage,
+}: ToolSectionProps) {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [sort, setSort] = useState<SortOption>("name");
 
-  const stackTools = stackQuery.data?.tools || [];
-  const watchlistTools = watchlistQuery.data?.tools || [];
-
-  // Build the category dropdown from every category present across both lists.
+  // Category options come from the tools in this section only.
   const categories = useMemo(() => {
     const map = new Map<string, string>();
-    for (const tool of [...stackTools, ...watchlistTools]) {
+    for (const tool of tools) {
       for (const c of tool.categories || []) {
         map.set(String(c.id), c.name);
       }
@@ -195,78 +148,119 @@ export default function StackContent({ username }: StackContentProps) {
     return Array.from(map.entries())
       .map(([id, name]) => ({ id, name }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [stackTools, watchlistTools]);
+  }, [tools]);
 
-  const filteredStack = useMemo(
-    () => applyFilters(stackTools, search, category, sort),
-    [stackTools, search, category, sort]
-  );
-  const filteredWatchlist = useMemo(
-    () => applyFilters(watchlistTools, search, category, sort),
-    [watchlistTools, search, category, sort]
+  const visibleTools = useMemo(
+    () => applyFilters(tools, search, category, sort),
+    [tools, search, category, sort]
   );
 
   const hasFilters = search.trim() !== "" || category !== "all";
 
   return (
-    <div>
-      {/* Controls: search, category filter, sort */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-8">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
-          <Input
-            placeholder="Search tools..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-
-        <Select value={category} onValueChange={setCategory}>
-          <SelectTrigger className="sm:w-48">
-            <SelectValue placeholder="All categories" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All categories</SelectItem>
-            {categories.map((c) => (
-              <SelectItem key={c.id} value={c.id}>
-                {c.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={sort} onValueChange={(v) => setSort(v as SortOption)}>
-          <SelectTrigger className="sm:w-44">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="name">Sort by name</SelectItem>
-            <SelectItem value="added">Sort by date added</SelectItem>
-          </SelectContent>
-        </Select>
+    <section className="mb-10">
+      <div className="flex items-center gap-2 mb-4">
+        {icon}
+        <h2 className="text-xl font-semibold">{title}</h2>
+        {!isLoading && !isError && (
+          <span className="text-sm text-muted-foreground">
+            ({visibleTools.length})
+          </span>
+        )}
       </div>
 
+      {/* Per-section controls: search, category filter, sort */}
+      {!isLoading && !isError && tools.length > 0 && (
+        <div className="flex flex-col sm:flex-row gap-3 mb-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
+            <Input
+              placeholder={`Search ${title.toLowerCase()}...`}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+
+          <Select value={category} onValueChange={setCategory}>
+            <SelectTrigger className="sm:w-44">
+              <SelectValue placeholder="All categories" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All categories</SelectItem>
+              {categories.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={sort} onValueChange={(v) => setSort(v as SortOption)}>
+            <SelectTrigger className="sm:w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="name">Sort by name</SelectItem>
+              <SelectItem value="added">Sort by date added</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {isLoading ? (
+        <ToolGridSkeleton />
+      ) : isError ? (
+        <div className="text-center py-8">
+          <p className="text-muted-foreground">
+            Failed to load {title.toLowerCase()}.
+          </p>
+        </div>
+      ) : tools.length === 0 ? (
+        <div className="text-center py-8 border border-dashed rounded-lg">
+          <p className="text-muted-foreground">{emptyMessage}</p>
+        </div>
+      ) : visibleTools.length === 0 ? (
+        <div className="text-center py-8 border border-dashed rounded-lg">
+          <p className="text-muted-foreground">
+            {hasFilters
+              ? "No tools match your filters."
+              : emptyMessage}
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {visibleTools.map((tool) => (
+            <ToolCard key={tool.id} tool={tool} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+export default function StackContent({ username }: StackContentProps) {
+  const stackQuery = useUserStack(username);
+  const watchlistQuery = useUserWatchlist(username);
+
+  return (
+    <div>
       <ToolSection
         title="Active Stack"
         icon={<Layers className="w-5 h-5 text-foreground" />}
-        tools={filteredStack}
+        tools={stackQuery.data?.tools || []}
         isLoading={stackQuery.isLoading}
         isError={!!stackQuery.error}
         emptyMessage="No tools in the stack yet."
-        noResultsMessage="No tools match your filters."
-        hasFilters={hasFilters}
       />
 
       <ToolSection
         title="Watchlist"
         icon={<Eye className="w-5 h-5 text-foreground" />}
-        tools={filteredWatchlist}
+        tools={watchlistQuery.data?.tools || []}
         isLoading={watchlistQuery.isLoading}
         isError={!!watchlistQuery.error}
         emptyMessage="No tools in the watchlist yet."
-        noResultsMessage="No tools match your filters."
-        hasFilters={hasFilters}
       />
     </div>
   );

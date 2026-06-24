@@ -4,11 +4,18 @@ import {
   useUserPosts,
   useUserStarredPosts,
 } from "@/lib/queries/use-user-playbooks";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import PostCard from "@/components/post-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Search } from "lucide-react";
 import { Post, PostType } from "@/lib/post";
 import { useAuth } from "@/lib/queries/use-auth";
@@ -119,6 +126,7 @@ export default function ProfileContent({
   const [page, setPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [starredCategory, setStarredCategory] = useState("all");
   const limit = 12;
 
   // Show secondary filters only on own profile and not on starred tab
@@ -127,6 +135,7 @@ export default function ProfileContent({
   // Reset filters when tab changes
   useEffect(() => {
     setStatusFilter("all");
+    setStarredCategory("all");
     setPage(1);
   }, [activeTab]);
 
@@ -161,13 +170,54 @@ export default function ProfileContent({
     published: currentPosts.filter((p) => p.is_published).length,
   };
 
-  // Filter posts based on status filter (client-side for now)
+  // Category options for the starred tab, built from the tool categories of
+  // the starred posts.
+  const starredCategories = useMemo(() => {
+    if (activeTab !== "starred") return [];
+    const map = new Map<string, string>();
+    for (const post of currentPosts) {
+      for (const c of post.categories || []) {
+        map.set(String(c.id), c.name);
+      }
+    }
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [activeTab, currentPosts]);
+
+  // Filter posts based on status filter (client-side for now) and, on the
+  // starred tab, the selected tool category.
   const filteredPosts = currentPosts.filter((post) => {
-    if (statusFilter === "all") return true;
-    if (statusFilter === "drafts") return !post.is_published;
-    if (statusFilter === "published") return post.is_published;
+    if (statusFilter === "drafts" && post.is_published) return false;
+    if (statusFilter === "published" && !post.is_published) return false;
+    if (
+      activeTab === "starred" &&
+      starredCategory !== "all" &&
+      !(post.categories?.some((c) => String(c.id) === starredCategory) ?? false)
+    ) {
+      return false;
+    }
     return true;
   });
+
+  const starredCategoryFilter =
+    activeTab === "starred" && currentPosts.length > 0 ? (
+      <div className="mb-6 max-w-xs">
+        <Select value={starredCategory} onValueChange={setStarredCategory}>
+          <SelectTrigger>
+            <SelectValue placeholder="All categories" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All categories</SelectItem>
+            {starredCategories.map((c) => (
+              <SelectItem key={c.id} value={c.id}>
+                {c.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    ) : null;
 
   // Pagination handlers
   const handlePreviousPage = () => setPage((prev) => Math.max(1, prev - 1));
@@ -310,7 +360,12 @@ export default function ProfileContent({
           counts={filterCounts}
         />
       )}
-      <PostGrid posts={filteredPosts} />
+      {starredCategoryFilter}
+      {filteredPosts.length === 0 ? (
+        <EmptyState message="No posts match the selected filters" />
+      ) : (
+        <PostGrid posts={filteredPosts} />
+      )}
     </>
   );
 }

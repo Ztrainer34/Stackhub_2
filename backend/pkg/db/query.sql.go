@@ -2038,8 +2038,15 @@ func (q *Queries) ListUserPosts(ctx context.Context, arg ListUserPostsParams) ([
 }
 
 const listUserStarredPosts = `-- name: ListUserStarredPosts :many
-SELECT 
+SELECT
   pwt.id, pwt.type, pwt.name, pwt.slug, pwt.description, pwt.updated_at, pwt.created_at, pwt.last_draft_update, pwt.last_publish, pwt.author_id, pwt.is_published, pwt.author_username, pwt.tools,
+  COALESCE((
+    SELECT jsonb_agg(DISTINCT jsonb_build_object('id', c.id, 'name', c.name))
+    FROM post_tools pt
+    JOIN tool_categories tc ON tc.tool_id = pt.tool_id
+    JOIN categories c ON c.id = tc.category_id
+    WHERE pt.post_id = pwt.id
+  ), '[]'::jsonb) AS categories,
   COUNT(*) OVER() AS total_count
 FROM posts_with_tools pwt
 JOIN post_stars ps ON pwt.id = ps.post_id
@@ -2068,6 +2075,7 @@ type ListUserStarredPostsRow struct {
 	IsPublished     pgtype.Bool        `json:"is_published"`
 	AuthorUsername  string             `json:"author_username"`
 	Tools           json.RawMessage    `json:"tools"`
+	Categories      json.RawMessage    `json:"categories"`
 	TotalCount      int64              `json:"total_count"`
 }
 
@@ -2094,6 +2102,7 @@ func (q *Queries) ListUserStarredPosts(ctx context.Context, arg ListUserStarredP
 			&i.IsPublished,
 			&i.AuthorUsername,
 			&i.Tools,
+			&i.Categories,
 			&i.TotalCount,
 		); err != nil {
 			return nil, err

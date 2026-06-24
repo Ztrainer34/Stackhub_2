@@ -19,6 +19,7 @@ export interface Post {
   author_username: string;
   description: string;
   tools: PostTool[];
+  categories?: { id: number; name: string }[];
   created_at: string;
   updated_at: string;
   last_publish: string;
