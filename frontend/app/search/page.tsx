@@ -16,6 +16,10 @@ import { Post } from "@/lib/post";
 import { SearchableCategory, searchableCategoryValues } from "@/lib/search";
 import Link from "next/link";
 import { ToolActions } from "@/components/tool-actions";
+import { User as UserType } from "@/lib/user";
+import { UserAvatar } from "@/components/user-avatar";
+import { FollowButton } from "@/components/follow-button";
+import { useAuth } from "@/lib/queries/use-auth";
 
 type SearchCategory = {
   id: SearchableCategory;
@@ -114,6 +118,41 @@ function ToolCard({ tool }: ToolCardProps) {
             Visit Website
           </Button>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function UserCard({ user }: { user: UserType }) {
+  const auth = useAuth();
+  const currentUser =
+    auth.data?.status === "authenticated" ? auth.data.user : null;
+  const isOwnProfile = currentUser?.id === user.id;
+
+  return (
+    <Card className="w-full max-w-2xl hover:shadow-md transition-shadow duration-200">
+      <CardContent className="p-4">
+        <div className="flex items-center gap-4">
+          <Link href={`/${user.username}`} className="flex-shrink-0">
+            <UserAvatar user={user} size="lg" />
+          </Link>
+          <Link href={`/${user.username}`} className="flex-1 min-w-0">
+            <h3 className="text-lg font-semibold text-gray-900 truncate">
+              {user.display_name || user.username}
+            </h3>
+            <p className="text-sm text-muted-foreground truncate">
+              @{user.username}
+            </p>
+          </Link>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {currentUser && !isOwnProfile && (
+              <FollowButton userId={user.id} size="sm" />
+            )}
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/${user.username}`}>View profile</Link>
+            </Button>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
@@ -297,15 +336,9 @@ export default function SearchPage() {
           </div>
         ))}
 
-      {category !== "post" &&
-        category !== "tool" &&
-        results.map((item) => (
-          <div
-            key={item.id}
-            className="p-4 border rounded text-sm text-muted-foreground"
-          >
-            {JSON.stringify(item)}
-          </div>
+      {category === "profile" &&
+        (results as UserType[]).map((user) => (
+          <UserCard key={user.id} user={user} />
         ))}
 
       {results.length === 0 && <NoResultFoundText />}
