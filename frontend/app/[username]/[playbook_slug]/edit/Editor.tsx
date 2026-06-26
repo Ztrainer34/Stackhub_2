@@ -356,6 +356,10 @@ export default function Editor({
           <Button onClick={publishPost}>{post.is_published ? "Publish changes" : "Publish"}</Button>
         </Toolbar>
 
+        <div className="simple-editor-title">
+          <h1>{post.name}</h1>
+        </div>
+
         <EditorContent
           editor={editor}
           role="presentation"
