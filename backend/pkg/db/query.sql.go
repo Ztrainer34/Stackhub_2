@@ -1266,6 +1266,158 @@ func (q *Queries) AddKeyPlaybook(ctx context.Context, arg AddKeyPlaybookParams) 
 	return err
 }
 
+const getUserStats = `-- name: GetUserStats :one
+SELECT
+  (SELECT COUNT(*) FROM posts WHERE author_id = $1 AND is_published = true)::int AS post_count,
+  (SELECT COUNT(*) FROM user_follows WHERE followee_id = $1)::int AS follower_count,
+  (SELECT COUNT(*) FROM user_follows WHERE follower_id = $1)::int AS following_count
+`
+
+type GetUserStatsRow struct {
+	PostCount      int32 `json:"post_count"`
+	FollowerCount  int32 `json:"follower_count"`
+	FollowingCount int32 `json:"following_count"`
+}
+
+func (q *Queries) GetUserStats(ctx context.Context, authorID uuid.UUID) (GetUserStatsRow, error) {
+	row := q.db.QueryRow(ctx, getUserStats, authorID)
+	var i GetUserStatsRow
+	err := row.Scan(&i.PostCount, &i.FollowerCount, &i.FollowingCount)
+	return i, err
+}
+
+const listFollowers = `-- name: ListFollowers :many
+SELECT
+  p.id,
+  p.username,
+  p.display_name,
+  p.bio,
+  p.email_hash,
+  ($1::bool AND EXISTS(
+    SELECT 1 FROM user_follows uf2
+    WHERE uf2.follower_id = $2 AND uf2.followee_id = p.id
+  )) AS is_following,
+  COUNT(*) OVER() AS total_count
+FROM user_follows uf
+JOIN profiles p ON p.id = uf.follower_id
+WHERE uf.followee_id = $3
+ORDER BY p.username
+LIMIT $4 OFFSET $5
+`
+
+type ListFollowersParams struct {
+	IsAuthenticated bool      `json:"is_authenticated"`
+	ViewerID        uuid.UUID `json:"viewer_id"`
+	TargetID        uuid.UUID `json:"target_id"`
+	Lim             int32     `json:"lim"`
+	Off             int32     `json:"off"`
+}
+
+type FollowUserRow struct {
+	ID          uuid.UUID   `json:"id"`
+	Username    string      `json:"username"`
+	DisplayName pgtype.Text `json:"display_name"`
+	Bio         pgtype.Text `json:"bio"`
+	EmailHash   pgtype.Text `json:"email_hash"`
+	IsFollowing bool        `json:"is_following"`
+	TotalCount  int64       `json:"total_count"`
+}
+
+func (q *Queries) ListFollowers(ctx context.Context, arg ListFollowersParams) ([]FollowUserRow, error) {
+	rows, err := q.db.Query(ctx, listFollowers,
+		arg.IsAuthenticated,
+		arg.ViewerID,
+		arg.TargetID,
+		arg.Lim,
+		arg.Off,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FollowUserRow
+	for rows.Next() {
+		var i FollowUserRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.DisplayName,
+			&i.Bio,
+			&i.EmailHash,
+			&i.IsFollowing,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFollowing = `-- name: ListFollowing :many
+SELECT
+  p.id,
+  p.username,
+  p.display_name,
+  p.bio,
+  p.email_hash,
+  ($1::bool AND EXISTS(
+    SELECT 1 FROM user_follows uf2
+    WHERE uf2.follower_id = $2 AND uf2.followee_id = p.id
+  )) AS is_following,
+  COUNT(*) OVER() AS total_count
+FROM user_follows uf
+JOIN profiles p ON p.id = uf.followee_id
+WHERE uf.follower_id = $3
+ORDER BY p.username
+LIMIT $4 OFFSET $5
+`
+
+type ListFollowingParams struct {
+	IsAuthenticated bool      `json:"is_authenticated"`
+	ViewerID        uuid.UUID `json:"viewer_id"`
+	TargetID        uuid.UUID `json:"target_id"`
+	Lim             int32     `json:"lim"`
+	Off             int32     `json:"off"`
+}
+
+func (q *Queries) ListFollowing(ctx context.Context, arg ListFollowingParams) ([]FollowUserRow, error) {
+	rows, err := q.db.Query(ctx, listFollowing,
+		arg.IsAuthenticated,
+		arg.ViewerID,
+		arg.TargetID,
+		arg.Lim,
+		arg.Off,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FollowUserRow
+	for rows.Next() {
+		var i FollowUserRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.DisplayName,
+			&i.Bio,
+			&i.EmailHash,
+			&i.IsFollowing,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getTopCategories = `-- name: GetTopCategories :many
 SELECT 
   c.id,

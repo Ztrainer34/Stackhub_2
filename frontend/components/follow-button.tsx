@@ -10,15 +10,17 @@ interface FollowButtonProps {
   className?: string;
   size?: "sm" | "default" | "lg";
   variant?: "default" | "outline" | "secondary" | "ghost" | "link" | "destructive";
+  initialFollowing?: boolean;
 }
 
-export function FollowButton({ 
-  userId, 
+export function FollowButton({
+  userId,
   className,
   size = "sm",
-  variant = "default"
+  variant = "default",
+  initialFollowing = false
 }: FollowButtonProps) {
-  const [isFollowed, setIsFollowed] = useState(false);
+  const [isFollowed, setIsFollowed] = useState(initialFollowing);
   const followUserMutation = useFollowUser();
   const unfollowUserMutation = useUnfollowUser();
 

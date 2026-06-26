@@ -735,9 +735,51 @@ WHERE follower_id = $1 AND followee_id = $2;
 
 -- name: IsFollowing :one
 SELECT EXISTS(
-  SELECT 1 FROM user_follows 
+  SELECT 1 FROM user_follows
   WHERE follower_id = $1 AND followee_id = $2
 ) AS is_following;
+
+-- name: GetUserStats :one
+SELECT
+  (SELECT COUNT(*) FROM posts WHERE author_id = $1 AND is_published = true)::int AS post_count,
+  (SELECT COUNT(*) FROM user_follows WHERE followee_id = $1)::int AS follower_count,
+  (SELECT COUNT(*) FROM user_follows WHERE follower_id = $1)::int AS following_count;
+
+-- name: ListFollowers :many
+SELECT
+  p.id,
+  p.username,
+  p.display_name,
+  p.bio,
+  p.email_hash,
+  (sqlc.arg(is_authenticated)::bool AND EXISTS(
+    SELECT 1 FROM user_follows uf2
+    WHERE uf2.follower_id = sqlc.arg(viewer_id) AND uf2.followee_id = p.id
+  )) AS is_following,
+  COUNT(*) OVER() AS total_count
+FROM user_follows uf
+JOIN profiles p ON p.id = uf.follower_id
+WHERE uf.followee_id = sqlc.arg(target_id)
+ORDER BY p.username
+LIMIT sqlc.arg(lim) OFFSET sqlc.arg(off);
+
+-- name: ListFollowing :many
+SELECT
+  p.id,
+  p.username,
+  p.display_name,
+  p.bio,
+  p.email_hash,
+  (sqlc.arg(is_authenticated)::bool AND EXISTS(
+    SELECT 1 FROM user_follows uf2
+    WHERE uf2.follower_id = sqlc.arg(viewer_id) AND uf2.followee_id = p.id
+  )) AS is_following,
+  COUNT(*) OVER() AS total_count
+FROM user_follows uf
+JOIN profiles p ON p.id = uf.followee_id
+WHERE uf.follower_id = sqlc.arg(target_id)
+ORDER BY p.username
+LIMIT sqlc.arg(lim) OFFSET sqlc.arg(off);
 
 -- name: CreateNotification :exec
 INSERT INTO notifications (recipient_id, actor_id, type, entity_id, entity_type, title, message)

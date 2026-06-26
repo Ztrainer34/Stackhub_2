@@ -39,6 +39,59 @@ export async function getUserFromUsername(username: string): Promise<User> {
   return (await resp.json()) as User;
 }
 
+export type UserStats = {
+  post_count: number;
+  follower_count: number;
+  following_count: number;
+};
+
+export async function getUserStats(username: string): Promise<UserStats> {
+  const resp = await fetch(
+    `${process.env.NEXT_PUBLIC_API_URL!}/user/${encodeURIComponent(
+      username
+    )}/stats`
+  );
+
+  if (!resp.ok) throw new Error("Could not get user stats");
+
+  return (await resp.json()) as UserStats;
+}
+
+export type FollowListUser = {
+  id: string;
+  username: string;
+  display_name?: string;
+  bio?: string;
+  email_hash?: string;
+  is_following: boolean;
+};
+
+export type FollowListResponse = {
+  users: FollowListUser[];
+  total_count: number;
+  total_pages: number;
+};
+
+export async function getFollowList(
+  username: string,
+  kind: "followers" | "following",
+  page: number = 1,
+  limit: number = 20,
+  supabaseClient?: SupabaseClient
+): Promise<FollowListResponse> {
+  const path = `/user/${encodeURIComponent(
+    username
+  )}/${kind}?page=${page}&limit=${limit}`;
+
+  const resp = supabaseClient
+    ? await fetchApiAuthenticated(supabaseClient, path)
+    : await fetch(`${process.env.NEXT_PUBLIC_API_URL!}${path}`);
+
+  if (!resp.ok) throw new Error(`Could not get ${kind}`);
+
+  return (await resp.json()) as FollowListResponse;
+}
+
 
 export async function getTopRecommendedUsers(
   username: string,

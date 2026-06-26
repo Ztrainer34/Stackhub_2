@@ -1,4 +1,4 @@
-import { getUserFromUsername } from "@/lib/user";
+import { getUserFromUsername, getUserStats } from "@/lib/user";
 import { getServerAuthState } from "@/lib/auth-server";
 import { UserAvatar } from "@/components/user-avatar";
 import { notFound } from "next/navigation";
@@ -19,6 +19,14 @@ export default async function ProfileLayoutWrapper({ username, children }: Profi
   if (!user) {
     notFound();
   }
+
+  // Fetch profile stats (posts / followers / following). Fall back to zeros if
+  // the request fails so the sidebar still renders.
+  const stats = await getUserStats(username).catch(() => ({
+    post_count: 0,
+    follower_count: 0,
+    following_count: 0,
+  }));
 
   // Check if user is authenticated and if this is their own profile
   const authState = await getServerAuthState();
@@ -104,19 +112,28 @@ export default async function ProfileLayoutWrapper({ username, children }: Profi
                 )}
 
                 {/* Stats section */}
-                <div className="w-full space-y-2">
-                  <div className="flex justify-between text-sm">
+                <div className="w-full space-y-1">
+                  <Link
+                    href={`/${user.username}?tab=playbooks`}
+                    className="flex justify-between text-sm rounded-md px-2 py-1.5 -mx-2 hover:bg-muted transition-colors"
+                  >
                     <span className="text-muted-foreground">Posts</span>
-                    <span className="font-medium">12</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
+                    <span className="font-medium">{stats.post_count}</span>
+                  </Link>
+                  <Link
+                    href={`/${user.username}/followers`}
+                    className="flex justify-between text-sm rounded-md px-2 py-1.5 -mx-2 hover:bg-muted transition-colors"
+                  >
                     <span className="text-muted-foreground">Followers</span>
-                    <span className="font-medium">156</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
+                    <span className="font-medium">{stats.follower_count}</span>
+                  </Link>
+                  <Link
+                    href={`/${user.username}/following`}
+                    className="flex justify-between text-sm rounded-md px-2 py-1.5 -mx-2 hover:bg-muted transition-colors"
+                  >
                     <span className="text-muted-foreground">Following</span>
-                    <span className="font-medium">89</span>
-                  </div>
+                    <span className="font-medium">{stats.following_count}</span>
+                  </Link>
                 </div>
 
                 {/* Contact / about info */}

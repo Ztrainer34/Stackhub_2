@@ -2387,6 +2387,137 @@ func (app *App) listUserKeyPlaybooks(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+func (app *App) getUserStats(w http.ResponseWriter, r *http.Request) {
+	username := chi.URLParam(r, "slug")
+	if username == "" {
+		http.Error(w, "Username cannot be empty", http.StatusBadRequest)
+		return
+	}
+
+	user, err := app.queries.GetProfileWithUsername(r.Context(), username)
+	if err != nil {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	stats, err := app.queries.GetUserStats(r.Context(), user.ID)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to fetch user stats", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(stats)
+}
+
+// parseFollowPagination parses page/limit query params and returns limit and offset.
+func parseFollowPagination(r *http.Request) (limit int, offset int) {
+	page := 1
+	limit = 20
+	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p >= 1 {
+			page = p
+		}
+	}
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
+			limit = l
+		}
+	}
+	offset = (page - 1) * limit
+	return limit, offset
+}
+
+func writeFollowList(w http.ResponseWriter, users []db.FollowUserRow, limit int) {
+	if users == nil {
+		users = []db.FollowUserRow{}
+	}
+
+	totalCount := int64(0)
+	if len(users) > 0 {
+		totalCount = users[0].TotalCount
+	}
+	totalPages := (totalCount + int64(limit) - 1) / int64(limit)
+
+	response := struct {
+		Users      []db.FollowUserRow `json:"users"`
+		TotalCount int64              `json:"total_count"`
+		TotalPages int64              `json:"total_pages"`
+	}{
+		Users:      users,
+		TotalCount: totalCount,
+		TotalPages: totalPages,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func (app *App) listFollowers(w http.ResponseWriter, r *http.Request) {
+	username := chi.URLParam(r, "slug")
+	if username == "" {
+		http.Error(w, "Username cannot be empty", http.StatusBadRequest)
+		return
+	}
+
+	user, err := app.queries.GetProfileWithUsername(r.Context(), username)
+	if err != nil {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	viewerID := extractUserIDFromRequestIfPresent(r)
+	limit, offset := parseFollowPagination(r)
+
+	users, err := app.queries.ListFollowers(r.Context(), db.ListFollowersParams{
+		IsAuthenticated: viewerID != uuid.Nil,
+		ViewerID:        viewerID,
+		TargetID:        user.ID,
+		Lim:             int32(limit),
+		Off:             int32(offset),
+	})
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to fetch followers", http.StatusInternalServerError)
+		return
+	}
+
+	writeFollowList(w, users, limit)
+}
+
+func (app *App) listFollowing(w http.ResponseWriter, r *http.Request) {
+	username := chi.URLParam(r, "slug")
+	if username == "" {
+		http.Error(w, "Username cannot be empty", http.StatusBadRequest)
+		return
+	}
+
+	user, err := app.queries.GetProfileWithUsername(r.Context(), username)
+	if err != nil {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	viewerID := extractUserIDFromRequestIfPresent(r)
+	limit, offset := parseFollowPagination(r)
+
+	users, err := app.queries.ListFollowing(r.Context(), db.ListFollowingParams{
+		IsAuthenticated: viewerID != uuid.Nil,
+		ViewerID:        viewerID,
+		TargetID:        user.ID,
+		Lim:             int32(limit),
+		Off:             int32(offset),
+	})
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to fetch following", http.StatusInternalServerError)
+		return
+	}
+
+	writeFollowList(w, users, limit)
+}
+
 func (app *App) setKeyPlaybooks(w http.ResponseWriter, r *http.Request) {
 	userID := extractUserIDFromRequest(r)
 
@@ -2970,6 +3101,8 @@ func main() {
 		r.Get("/homepage/top-posts", app.getTopPosts)
 
 		r.Get("/user/{slug}/posts", app.listUserPosts)
+		r.Get("/user/{slug}/followers", app.listFollowers)
+		r.Get("/user/{slug}/following", app.listFollowing)
 
 		r.Get("/search", app.search)
 	})
@@ -2989,6 +3122,7 @@ func main() {
 		r.Get("/user/{slug}/watchlist", app.listUserWatchlist)
 		r.Get("/user/{slug}/key-tools", app.listUserKeyTools)
 		r.Get("/user/{slug}/key-playbooks", app.listUserKeyPlaybooks)
+		r.Get("/user/{slug}/stats", app.getUserStats)
 
 		// Homepage routes
 		r.Get("/homepage/top-categories", app.getTopCategories)
