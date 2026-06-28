@@ -105,6 +105,15 @@ const postTypeMetadata = {
   },
 } as const;
 
+const goalPlaceholders = {
+  playbook:
+    "e.g. Know from which company your website visitors come from",
+  combo:
+    "e.g. Capture website visitor companies in HubSpot and auto-send them a personalized cold email via Lemlist",
+  comparison:
+    "e.g. Decide whether HubSpot or Pipedrive is the better CRM for a small sales team",
+} as const;
+
 export function PostCreationForm({
   user,
   type,
@@ -373,7 +382,11 @@ export function PostCreationForm({
                 Great goals are short and self explainatory
               </FormDescription>
               <FormControl>
-                <Textarea className="resize-none" {...field} />
+                <Textarea
+                  className="resize-none"
+                  placeholder={goalPlaceholders[postType]}
+                  {...field}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
