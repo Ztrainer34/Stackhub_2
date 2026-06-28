@@ -9,13 +9,7 @@ import PostCard from "@/components/post-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import CategoryFilter from "@/components/category-filter";
 import { Search } from "lucide-react";
 import { Post, PostType } from "@/lib/post";
 import { useAuth } from "@/lib/queries/use-auth";
@@ -127,7 +121,9 @@ export default function ProfileContent({
   const [page, setPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [starredCategory, setStarredCategory] = useState("all");
+  const [selectedStarredCategories, setSelectedStarredCategories] = useState<
+    string[]
+  >([]);
   const limit = 12;
 
   // Show secondary filters only on own profile and not on starred tab
@@ -136,7 +132,7 @@ export default function ProfileContent({
   // Reset filters when tab changes
   useEffect(() => {
     setStatusFilter("all");
-    setStarredCategory("all");
+    setSelectedStarredCategories([]);
     setPage(1);
   }, [activeTab]);
 
@@ -213,8 +209,12 @@ export default function ProfileContent({
     if (statusFilter === "published" && !post.is_published) return false;
     if (
       activeTab === "starred" &&
-      starredCategory !== "all" &&
-      !(post.categories?.some((c) => String(c.id) === starredCategory) ?? false)
+      selectedStarredCategories.length > 0 &&
+      !(
+        post.categories?.some((c) =>
+          selectedStarredCategories.includes(String(c.id))
+        ) ?? false
+      )
     ) {
       return false;
     }
@@ -223,20 +223,12 @@ export default function ProfileContent({
 
   const starredCategoryFilter =
     activeTab === "starred" && currentPosts.length > 0 ? (
-      <div className="mb-6 max-w-xs">
-        <Select value={starredCategory} onValueChange={setStarredCategory}>
-          <SelectTrigger>
-            <SelectValue placeholder="All categories" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All categories</SelectItem>
-            {starredCategories.map((c) => (
-              <SelectItem key={c.id} value={c.id}>
-                {c.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="mb-6">
+        <CategoryFilter
+          categories={starredCategories}
+          selected={selectedStarredCategories}
+          onChange={setSelectedStarredCategories}
+        />
       </div>
     ) : null;
 

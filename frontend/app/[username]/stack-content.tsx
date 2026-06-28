@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import CategoryFilter from "@/components/category-filter";
 import Link from "next/link";
 import { Tool } from "@/lib/tool";
 import { Layers, Eye, Search } from "lucide-react";
@@ -85,7 +86,7 @@ function ToolGridSkeleton() {
 function applyFilters(
   tools: Tool[],
   search: string,
-  category: string,
+  categories: string[],
   sort: SortOption
 ): Tool[] {
   const query = search.trim().toLowerCase();
@@ -97,8 +98,8 @@ function applyFilters(
       (tool.description?.toLowerCase().includes(query) ?? false);
 
     const matchesCategory =
-      category === "all" ||
-      (tool.categories?.some((c) => String(c.id) === category) ?? false);
+      categories.length === 0 ||
+      (tool.categories?.some((c) => categories.includes(String(c.id))) ?? false);
 
     return matchesSearch && matchesCategory;
   });
@@ -134,7 +135,7 @@ function ToolSection({
   emptyMessage,
 }: ToolSectionProps) {
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("all");
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [sort, setSort] = useState<SortOption>("name");
 
   // Category options come from the tools in this section only.
@@ -151,11 +152,11 @@ function ToolSection({
   }, [tools]);
 
   const visibleTools = useMemo(
-    () => applyFilters(tools, search, category, sort),
-    [tools, search, category, sort]
+    () => applyFilters(tools, search, selectedCategories, sort),
+    [tools, search, selectedCategories, sort]
   );
 
-  const hasFilters = search.trim() !== "" || category !== "all";
+  const hasFilters = search.trim() !== "" || selectedCategories.length > 0;
 
   return (
     <section className="mb-10">
@@ -171,40 +172,34 @@ function ToolSection({
 
       {/* Per-section controls: search, category filter, sort */}
       {!isLoading && !isError && tools.length > 0 && (
-        <div className="flex flex-col sm:flex-row gap-3 mb-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
-            <Input
-              placeholder={`Search ${title.toLowerCase()}...`}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10"
-            />
+        <div className="space-y-3 mb-4">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
+              <Input
+                placeholder={`Search ${title.toLowerCase()}...`}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+
+            <Select value={sort} onValueChange={(v) => setSort(v as SortOption)}>
+              <SelectTrigger className="sm:w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="name">Sort by name</SelectItem>
+                <SelectItem value="added">Sort by date added</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
-          <Select value={category} onValueChange={setCategory}>
-            <SelectTrigger className="sm:w-44">
-              <SelectValue placeholder="All categories" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All categories</SelectItem>
-              {categories.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={sort} onValueChange={(v) => setSort(v as SortOption)}>
-            <SelectTrigger className="sm:w-44">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="name">Sort by name</SelectItem>
-              <SelectItem value="added">Sort by date added</SelectItem>
-            </SelectContent>
-          </Select>
+          <CategoryFilter
+            categories={categories}
+            selected={selectedCategories}
+            onChange={setSelectedCategories}
+          />
         </div>
       )}
 
