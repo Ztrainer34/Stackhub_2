@@ -7,6 +7,7 @@ import { getServerAuthState } from "@/lib/auth-server";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { FollowButton } from "@/components/follow-button";
+import CommunitySearch from "./community-search";
 
 interface RecommendedUser extends User {
   display_name: string;
@@ -63,25 +64,32 @@ async function RecommendedUsersSection() {
   const users = await getTopRecommendedUsers("", supabase);
   const recommendedUsers = users as RecommendedUser[];
 
+  // Only show this section if there are recommendations.
   if (recommendedUsers.length === 0) {
-    return (
-      <div className="text-center py-12">
-        <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-        <p className="text-muted-foreground">No users found</p>
-      </div>
-    );
+    return null;
   }
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-      {recommendedUsers.map((user) => (
-        <RecommendedUserCard key={user.id} user={user} />
-      ))}
+    <div>
+      <h2 className="text-lg font-semibold text-primary mb-4">
+        People you may be interested in
+      </h2>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+        {recommendedUsers.map((user) => (
+          <RecommendedUserCard key={user.id} user={user} />
+        ))}
+      </div>
     </div>
   );
 }
 
 export default async function CommunityPage() {
+  const authState = await getServerAuthState();
+
+  if (authState.status !== "authenticated") {
+    redirect(authState.status === "unauthenticated" ? "/login" : "/");
+  }
+
   return (
     <div className="container mx-auto px-4 py-6 max-w-6xl">
       {/* Header */}
@@ -90,14 +98,16 @@ export default async function CommunityPage() {
           <Users className="w-8 h-8 text-primary" />
         </div>
         <div>
-          <h1 className="text-3xl font-bold">Discover People</h1>
+          <h1 className="text-3xl font-bold">Community</h1>
           <p className="text-muted-foreground">
-            Find creators with similar interests you haven&apos;t followed yet
+            Connect with creators and discover their playbooks
           </p>
         </div>
       </div>
 
-      <RecommendedUsersSection />
+      <CommunitySearch currentUserId={authState.user.id}>
+        <RecommendedUsersSection />
+      </CommunitySearch>
     </div>
   );
 }
