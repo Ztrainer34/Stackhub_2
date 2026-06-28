@@ -172,27 +172,15 @@ function ToolSection({
 
       {/* Per-section controls: search, category filter, sort */}
       {!isLoading && !isError && tools.length > 0 && (
-        <div className="space-y-3 mb-4">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
-              <Input
-                placeholder={`Search ${title.toLowerCase()}...`}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-
-            <Select value={sort} onValueChange={(v) => setSort(v as SortOption)}>
-              <SelectTrigger className="sm:w-44">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="name">Sort by name</SelectItem>
-                <SelectItem value="added">Sort by date added</SelectItem>
-              </SelectContent>
-            </Select>
+        <div className="flex flex-col sm:flex-row gap-3 mb-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
+            <Input
+              placeholder={`Search ${title.toLowerCase()}...`}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-10"
+            />
           </div>
 
           <CategoryFilter
@@ -200,6 +188,16 @@ function ToolSection({
             selected={selectedCategories}
             onChange={setSelectedCategories}
           />
+
+          <Select value={sort} onValueChange={(v) => setSort(v as SortOption)}>
+            <SelectTrigger className="sm:w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="name">Sort by name</SelectItem>
+              <SelectItem value="added">Sort by date added</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       )}
 

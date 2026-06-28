@@ -1,7 +1,15 @@
 "use client";
 
-import { Check, X } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export interface CategoryOption {
   id: string;
@@ -17,9 +25,9 @@ interface CategoryFilterProps {
 }
 
 /**
- * A row of clickable category chips. Click a chip to select/deselect it.
- * Multiple categories can be selected at once (OR filtering). When nothing is
- * selected, the "All" state is active and everything is shown.
+ * A dropdown category filter that allows selecting multiple categories at once.
+ * Clicking an item toggles it without closing the menu (OR filtering). When
+ * nothing is selected, the "All categories" state is active.
  */
 export default function CategoryFilter({
   categories,
@@ -37,53 +45,46 @@ export default function CategoryFilter({
     }
   };
 
-  const allActive = selected.length === 0;
+  const label =
+    selected.length === 0
+      ? "All categories"
+      : selected.length === 1
+      ? categories.find((c) => c.id === selected[0])?.name ?? "1 category"
+      : `${selected.length} categories`;
 
   return (
-    <div className={cn("flex flex-wrap items-center gap-2", className)}>
-      <button
-        type="button"
-        onClick={() => onChange([])}
+    <DropdownMenu>
+      <DropdownMenuTrigger
         className={cn(
-          "inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-          allActive
-            ? "bg-primary text-primary-foreground border-transparent"
-            : "bg-background text-muted-foreground hover:bg-muted"
+          "flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 sm:w-44",
+          className
         )}
       >
-        All
-      </button>
-
-      {categories.map((c) => {
-        const isSelected = selected.includes(c.id);
-        return (
-          <button
-            key={c.id}
-            type="button"
-            onClick={() => toggle(c.id)}
-            className={cn(
-              "inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-              isSelected
-                ? "bg-primary text-primary-foreground border-transparent"
-                : "bg-background text-foreground hover:bg-muted"
-            )}
-          >
-            {isSelected && <Check className="w-3 h-3" />}
-            {c.name}
-          </button>
-        );
-      })}
-
-      {selected.length > 0 && (
-        <button
-          type="button"
-          onClick={() => onChange([])}
-          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+        <span className="truncate">{label}</span>
+        <ChevronDown className="h-4 w-4 opacity-50 flex-shrink-0" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="max-h-72 overflow-y-auto w-56">
+        <DropdownMenuItem
+          onSelect={(e) => {
+            e.preventDefault();
+            onChange([]);
+          }}
+          className={cn(selected.length === 0 && "font-semibold")}
         >
-          <X className="w-3 h-3" />
-          Clear
-        </button>
-      )}
-    </div>
+          All categories
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        {categories.map((c) => (
+          <DropdownMenuCheckboxItem
+            key={c.id}
+            checked={selected.includes(c.id)}
+            onCheckedChange={() => toggle(c.id)}
+            onSelect={(e) => e.preventDefault()}
+          >
+            {c.name}
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
