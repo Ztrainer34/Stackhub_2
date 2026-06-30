@@ -24,7 +24,7 @@ export default function ConnectionsTabs({
 }: ConnectionsTabsProps) {
   return (
     <div>
-      <div className="flex gap-6 border-b mb-6 overflow-x-auto scrollbar-hide">
+      <div className="flex gap-6 border-b mb-6 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {tabs.map((tab) => (
           <Link
             key={tab.key}
