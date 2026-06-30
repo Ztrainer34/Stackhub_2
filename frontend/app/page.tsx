@@ -31,7 +31,7 @@ async function LandingPage() {
             </h1>
 
             <p className="text-xl text-muted-foreground max-w-2xl leading-relaxed">
-              Explore how makers, marketers and product pros make the most of modern tools.
+              Explore how builders, marketers and product pros make the most of modern tools.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md">
