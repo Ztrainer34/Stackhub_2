@@ -19,6 +19,7 @@ export type Tool = {
   is_published: boolean;
   is_in_stack: boolean;
   is_in_watchlist: boolean;
+  is_followed?: boolean;
   added_at?: string;
 };
 
@@ -129,9 +130,46 @@ export async function removeFromWatchlist(
   if (!response.ok) throw new Error("Failed to remove from watchlist");
 }
 
+export async function followTool(
+  supabaseClient: SupabaseClient,
+  toolId: string
+): Promise<void> {
+  const response = await fetchApiAuthenticated(
+    supabaseClient,
+    `/user/followed-tools/${toolId}`,
+    { method: "PUT" }
+  );
+
+  if (!response.ok) throw new Error("Failed to follow tool");
+}
+
+export async function unfollowTool(
+  supabaseClient: SupabaseClient,
+  toolId: string
+): Promise<void> {
+  const response = await fetchApiAuthenticated(
+    supabaseClient,
+    `/user/followed-tools/${toolId}`,
+    { method: "DELETE" }
+  );
+
+  if (!response.ok) throw new Error("Failed to unfollow tool");
+}
+
 export type UserToolsResponse = {
   tools: Tool[];
 };
+
+export async function getUserFollowedTools(
+  username: string
+): Promise<UserToolsResponse> {
+  const response = await fetchApi(
+    `/user/${encodeURIComponent(username)}/followed-tools`
+  );
+
+  if (!response.ok) throw new Error("Failed to fetch followed tools");
+  return response.json();
+}
 
 export async function getUserStack(username: string): Promise<UserToolsResponse> {
   const response = await fetchApi(

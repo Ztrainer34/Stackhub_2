@@ -1,6 +1,6 @@
-import { Wrench } from "lucide-react";
 import ProfileLayoutWrapper from "../profile-layout-wrapper";
 import ConnectionsTabs from "../connections-tabs";
+import FollowedToolsContent from "../followed-tools-content";
 
 export default async function ToolsFollowedPage({
   params,
@@ -12,15 +12,7 @@ export default async function ToolsFollowedPage({
   return (
     <ProfileLayoutWrapper username={username}>
       <ConnectionsTabs username={username} active="tools">
-        <div className="text-center py-16 border border-dashed rounded-lg">
-          <Wrench className="w-10 h-10 text-muted-foreground mx-auto mb-4" />
-          <p className="text-muted-foreground">
-            No tools followed yet.
-          </p>
-          <p className="text-sm text-muted-foreground mt-1">
-            Following tools is coming soon.
-          </p>
-        </div>
+        <FollowedToolsContent username={username} />
       </ConnectionsTabs>
     </ProfileLayoutWrapper>
   );

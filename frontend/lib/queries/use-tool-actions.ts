@@ -4,6 +4,8 @@ import {
   removeFromStack,
   addToWatchlist,
   removeFromWatchlist,
+  followTool,
+  unfollowTool,
   getTool,
 } from "../tool";
 import { createClient } from "@/utils/supabase/client";
@@ -131,14 +133,14 @@ export function useRemoveFromWatchlist() {
     onMutate: async (toolId) => {
       await queryClient.cancelQueries({ queryKey: ["tool", toolId] });
       const previousTool = queryClient.getQueryData(["tool", toolId]);
-      
+
       queryClient.setQueryData(["tool", toolId], (old: unknown) => {
         if (old && typeof old === 'object') {
           return { ...old, is_in_watchlist: false };
         }
         return old;
       });
-      
+
       return { previousTool };
     },
     onError: (_err, toolId, context) => {
@@ -146,6 +148,66 @@ export function useRemoveFromWatchlist() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["watchlist"] });
+    },
+  });
+}
+
+export function useFollowTool() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (toolId: string) => {
+      const supabase = createClient();
+      return followTool(supabase, toolId);
+    },
+    onMutate: async (toolId) => {
+      await queryClient.cancelQueries({ queryKey: ["tool", toolId] });
+      const previousTool = queryClient.getQueryData(["tool", toolId]);
+
+      queryClient.setQueryData(["tool", toolId], (old: unknown) => {
+        if (old && typeof old === "object") {
+          return { ...old, is_followed: true };
+        }
+        return old;
+      });
+
+      return { previousTool };
+    },
+    onError: (_err, toolId, context) => {
+      queryClient.setQueryData(["tool", toolId], context?.previousTool);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["followed-tools"] });
+    },
+  });
+}
+
+export function useUnfollowTool() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (toolId: string) => {
+      const supabase = createClient();
+      return unfollowTool(supabase, toolId);
+    },
+    onMutate: async (toolId) => {
+      await queryClient.cancelQueries({ queryKey: ["tool", toolId] });
+      const previousTool = queryClient.getQueryData(["tool", toolId]);
+
+      queryClient.setQueryData(["tool", toolId], (old: unknown) => {
+        if (old && typeof old === "object") {
+          return { ...old, is_followed: false };
+        }
+        return old;
+      });
+
+      return { previousTool };
+    },
+    onError: (_err, toolId, context) => {
+      queryClient.setQueryData(["tool", toolId], context?.previousTool);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["followed-tools"] });
     },
   });
 }

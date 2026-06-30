@@ -178,7 +178,7 @@ export default function ProfileContent({
 
   // The Stack tab has its own layout (active stack + watchlist sections)
   if (activeTab === "stack") {
-    return <StackContent username={username} />;
+    return <StackContent username={username} isOwnProfile={isOwnProfile} />;
   }
 
   // The Overview tab shows curated featured playbooks + key tools.

@@ -339,7 +339,8 @@ SELECT
   *,
   -- User status
   EXISTS(SELECT 1 FROM stack_items si WHERE si.profile_id = $2 AND si.tool_id = twd.id) AS is_in_stack,
-  EXISTS(SELECT 1 FROM watchlist_items wi WHERE wi.profile_id = $2 AND wi.tool_id = twd.id) AS is_in_watchlist
+  EXISTS(SELECT 1 FROM watchlist_items wi WHERE wi.profile_id = $2 AND wi.tool_id = twd.id) AS is_in_watchlist,
+  EXISTS(SELECT 1 FROM tool_follows tf WHERE tf.profile_id = $2 AND tf.tool_id = twd.id) AS is_followed
 FROM tools_with_details twd
 WHERE id = $1;
 
@@ -573,6 +574,24 @@ WHERE profile_id = $1 AND tool_id = $2;
 DELETE FROM stack_items
 WHERE profile_id = $1 AND tool_id = $2;
 
+-- name: FollowTool :exec
+INSERT INTO tool_follows (profile_id, tool_id)
+VALUES ($1, $2)
+ON CONFLICT (profile_id, tool_id) DO NOTHING;
+
+-- name: UnfollowTool :exec
+DELETE FROM tool_follows
+WHERE profile_id = $1 AND tool_id = $2;
+
+-- name: ListUserFollowedTools :many
+SELECT
+  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor, tf.added_at
+FROM tools_with_details twd
+JOIN tool_follows tf ON tf.tool_id = twd.id
+JOIN profiles p ON p.id = tf.profile_id
+WHERE p.username = $1
+ORDER BY twd.name;
+
 -- name: ListUserStack :many
 SELECT
   twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor, si.added_at
@@ -743,7 +762,8 @@ SELECT EXISTS(
 SELECT
   (SELECT COUNT(*) FROM posts WHERE author_id = $1 AND is_published = true)::int AS post_count,
   (SELECT COUNT(*) FROM user_follows WHERE followee_id = $1)::int AS follower_count,
-  (SELECT COUNT(*) FROM user_follows WHERE follower_id = $1)::int AS following_count;
+  (SELECT COUNT(*) FROM user_follows WHERE follower_id = $1)::int AS following_count,
+  (SELECT COUNT(*) FROM tool_follows WHERE profile_id = $1)::int AS tools_followed_count;
 
 -- name: ListFollowers :many
 SELECT

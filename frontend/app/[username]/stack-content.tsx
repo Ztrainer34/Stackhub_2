@@ -18,14 +18,29 @@ import Link from "next/link";
 import { Tool } from "@/lib/tool";
 import { Layers, Eye, Search } from "lucide-react";
 import { useUserStack, useUserWatchlist } from "@/lib/queries/use-user-tools";
+import {
+  ProfileToolActions,
+  ToolListType,
+} from "@/components/profile-tool-actions";
 
 interface StackContentProps {
   username: string;
+  isOwnProfile: boolean;
 }
 
 type SortOption = "name" | "added";
 
-function ToolCard({ tool }: { tool: Tool }) {
+function ToolCard({
+  tool,
+  isOwner,
+  listType,
+  username,
+}: {
+  tool: Tool;
+  isOwner: boolean;
+  listType: ToolListType;
+  username: string;
+}) {
   const truncatedDescription =
     tool.description && tool.description.length > 160
       ? tool.description.substring(0, 160) + "..."
@@ -42,9 +57,17 @@ function ToolCard({ tool }: { tool: Tool }) {
               </div>
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="text-lg font-semibold text-foreground mb-1 truncate">
-                {tool.name || "Unnamed Tool"}
-              </h3>
+              <div className="flex items-start justify-between gap-2">
+                <h3 className="text-lg font-semibold text-foreground mb-1 truncate">
+                  {tool.name || "Unnamed Tool"}
+                </h3>
+                <ProfileToolActions
+                  tool={tool}
+                  isOwner={isOwner}
+                  listType={listType}
+                  username={username}
+                />
+              </div>
               <p className="text-sm text-muted-foreground leading-relaxed line-clamp-2">
                 {truncatedDescription}
               </p>
@@ -124,6 +147,9 @@ interface ToolSectionProps {
   isLoading: boolean;
   isError: boolean;
   emptyMessage: string;
+  isOwner: boolean;
+  listType: ToolListType;
+  username: string;
 }
 
 function ToolSection({
@@ -133,6 +159,9 @@ function ToolSection({
   isLoading,
   isError,
   emptyMessage,
+  isOwner,
+  listType,
+  username,
 }: ToolSectionProps) {
   const [search, setSearch] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -224,7 +253,13 @@ function ToolSection({
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {visibleTools.map((tool) => (
-            <ToolCard key={tool.id} tool={tool} />
+            <ToolCard
+              key={tool.id}
+              tool={tool}
+              isOwner={isOwner}
+              listType={listType}
+              username={username}
+            />
           ))}
         </div>
       )}
@@ -232,7 +267,10 @@ function ToolSection({
   );
 }
 
-export default function StackContent({ username }: StackContentProps) {
+export default function StackContent({
+  username,
+  isOwnProfile,
+}: StackContentProps) {
   const stackQuery = useUserStack(username);
   const watchlistQuery = useUserWatchlist(username);
 
@@ -245,6 +283,9 @@ export default function StackContent({ username }: StackContentProps) {
         isLoading={stackQuery.isLoading}
         isError={!!stackQuery.error}
         emptyMessage="No tools in the stack yet."
+        isOwner={isOwnProfile}
+        listType="stack"
+        username={username}
       />
 
       <ToolSection
@@ -254,6 +295,9 @@ export default function StackContent({ username }: StackContentProps) {
         isLoading={watchlistQuery.isLoading}
         isError={!!watchlistQuery.error}
         emptyMessage="No tools in the watchlist yet."
+        isOwner={isOwnProfile}
+        listType="watchlist"
+        username={username}
       />
     </div>
   );

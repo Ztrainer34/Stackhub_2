@@ -747,7 +747,8 @@ SELECT
   id, name, description, logo_url, created_at, updated_at, categories, vendor,
   -- User status
   EXISTS(SELECT 1 FROM stack_items si WHERE si.profile_id = $2 AND si.tool_id = twd.id) AS is_in_stack,
-  EXISTS(SELECT 1 FROM watchlist_items wi WHERE wi.profile_id = $2 AND wi.tool_id = twd.id) AS is_in_watchlist
+  EXISTS(SELECT 1 FROM watchlist_items wi WHERE wi.profile_id = $2 AND wi.tool_id = twd.id) AS is_in_watchlist,
+  EXISTS(SELECT 1 FROM tool_follows tf WHERE tf.profile_id = $2 AND tf.tool_id = twd.id) AS is_followed
 FROM tools_with_details twd
 WHERE id = $1
 `
@@ -768,6 +769,7 @@ type GetToolAuthenticatedRow struct {
 	Vendor        json.RawMessage    `json:"vendor"`
 	IsInStack     bool               `json:"is_in_stack"`
 	IsInWatchlist bool               `json:"is_in_watchlist"`
+	IsFollowed    bool               `json:"is_followed"`
 }
 
 func (q *Queries) GetToolAuthenticated(ctx context.Context, arg GetToolAuthenticatedParams) (GetToolAuthenticatedRow, error) {
@@ -784,6 +786,7 @@ func (q *Queries) GetToolAuthenticated(ctx context.Context, arg GetToolAuthentic
 		&i.Vendor,
 		&i.IsInStack,
 		&i.IsInWatchlist,
+		&i.IsFollowed,
 	)
 	return i, err
 }
@@ -1270,19 +1273,26 @@ const getUserStats = `-- name: GetUserStats :one
 SELECT
   (SELECT COUNT(*) FROM posts WHERE author_id = $1 AND is_published = true)::int AS post_count,
   (SELECT COUNT(*) FROM user_follows WHERE followee_id = $1)::int AS follower_count,
-  (SELECT COUNT(*) FROM user_follows WHERE follower_id = $1)::int AS following_count
+  (SELECT COUNT(*) FROM user_follows WHERE follower_id = $1)::int AS following_count,
+  (SELECT COUNT(*) FROM tool_follows WHERE profile_id = $1)::int AS tools_followed_count
 `
 
 type GetUserStatsRow struct {
-	PostCount      int32 `json:"post_count"`
-	FollowerCount  int32 `json:"follower_count"`
-	FollowingCount int32 `json:"following_count"`
+	PostCount          int32 `json:"post_count"`
+	FollowerCount      int32 `json:"follower_count"`
+	FollowingCount     int32 `json:"following_count"`
+	ToolsFollowedCount int32 `json:"tools_followed_count"`
 }
 
 func (q *Queries) GetUserStats(ctx context.Context, authorID uuid.UUID) (GetUserStatsRow, error) {
 	row := q.db.QueryRow(ctx, getUserStats, authorID)
 	var i GetUserStatsRow
-	err := row.Scan(&i.PostCount, &i.FollowerCount, &i.FollowingCount)
+	err := row.Scan(
+		&i.PostCount,
+		&i.FollowerCount,
+		&i.FollowingCount,
+		&i.ToolsFollowedCount,
+	)
 	return i, err
 }
 
@@ -2470,6 +2480,89 @@ type RemoveFromWatchlistParams struct {
 func (q *Queries) RemoveFromWatchlist(ctx context.Context, arg RemoveFromWatchlistParams) error {
 	_, err := q.db.Exec(ctx, removeFromWatchlist, arg.ProfileID, arg.ToolID)
 	return err
+}
+
+const followTool = `-- name: FollowTool :exec
+INSERT INTO tool_follows (profile_id, tool_id)
+VALUES ($1, $2)
+ON CONFLICT (profile_id, tool_id) DO NOTHING
+`
+
+type FollowToolParams struct {
+	ProfileID uuid.UUID `json:"profile_id"`
+	ToolID    uuid.UUID `json:"tool_id"`
+}
+
+func (q *Queries) FollowTool(ctx context.Context, arg FollowToolParams) error {
+	_, err := q.db.Exec(ctx, followTool, arg.ProfileID, arg.ToolID)
+	return err
+}
+
+const unfollowTool = `-- name: UnfollowTool :exec
+DELETE FROM tool_follows
+WHERE profile_id = $1 AND tool_id = $2
+`
+
+type UnfollowToolParams struct {
+	ProfileID uuid.UUID `json:"profile_id"`
+	ToolID    uuid.UUID `json:"tool_id"`
+}
+
+func (q *Queries) UnfollowTool(ctx context.Context, arg UnfollowToolParams) error {
+	_, err := q.db.Exec(ctx, unfollowTool, arg.ProfileID, arg.ToolID)
+	return err
+}
+
+const listUserFollowedTools = `-- name: ListUserFollowedTools :many
+SELECT
+  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor, tf.added_at
+FROM tools_with_details twd
+JOIN tool_follows tf ON tf.tool_id = twd.id
+JOIN profiles p ON p.id = tf.profile_id
+WHERE p.username = $1
+ORDER BY twd.name
+`
+
+type ListUserFollowedToolsRow struct {
+	ID          uuid.UUID          `json:"id"`
+	Name        string             `json:"name"`
+	Description pgtype.Text        `json:"description"`
+	LogoUrl     pgtype.Text        `json:"logo_url"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	Categories  interface{}        `json:"categories"`
+	Vendor      json.RawMessage    `json:"vendor"`
+	AddedAt     pgtype.Timestamptz `json:"added_at"`
+}
+
+func (q *Queries) ListUserFollowedTools(ctx context.Context, username string) ([]ListUserFollowedToolsRow, error) {
+	rows, err := q.db.Query(ctx, listUserFollowedTools, username)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserFollowedToolsRow
+	for rows.Next() {
+		var i ListUserFollowedToolsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.LogoUrl,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Categories,
+			&i.Vendor,
+			&i.AddedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const removePostComment = `-- name: RemovePostComment :exec

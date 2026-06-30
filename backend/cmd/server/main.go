@@ -2200,6 +2200,83 @@ func (app *App) removeFromWatchlist(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func (app *App) followTool(w http.ResponseWriter, r *http.Request) {
+	userID := extractUserIDFromRequest(r)
+
+	toolIDString := chi.URLParam(r, "tool_id")
+	toolID, err := uuid.Parse(toolIDString)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Malformed id", http.StatusBadRequest)
+		return
+	}
+
+	err = app.queries.FollowTool(r.Context(), db.FollowToolParams{
+		ProfileID: userID,
+		ToolID:    toolID,
+	})
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to follow tool", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func (app *App) unfollowTool(w http.ResponseWriter, r *http.Request) {
+	userID := extractUserIDFromRequest(r)
+
+	toolIDString := chi.URLParam(r, "tool_id")
+	toolID, err := uuid.Parse(toolIDString)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Malformed id", http.StatusBadRequest)
+		return
+	}
+
+	err = app.queries.UnfollowTool(r.Context(), db.UnfollowToolParams{
+		ProfileID: userID,
+		ToolID:    toolID,
+	})
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to unfollow tool", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func (app *App) listUserFollowedTools(w http.ResponseWriter, r *http.Request) {
+	username := chi.URLParam(r, "slug")
+
+	if username == "" {
+		http.Error(w, "Username cannot be empty", http.StatusBadRequest)
+		return
+	}
+
+	tools, err := app.queries.ListUserFollowedTools(r.Context(), username)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to fetch followed tools", http.StatusInternalServerError)
+		return
+	}
+
+	if tools == nil {
+		tools = []db.ListUserFollowedToolsRow{}
+	}
+
+	response := struct {
+		Tools []db.ListUserFollowedToolsRow `json:"tools"`
+	}{
+		Tools: tools,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 func (app *App) listUserStack(w http.ResponseWriter, r *http.Request) {
 	username := chi.URLParam(r, "slug")
 
@@ -3062,6 +3139,8 @@ func main() {
 		r.Delete("/user/stack/{tool_id}", app.removeFromStack)
 		r.Put("/user/watchlist/{tool_id}", app.addToWatchlist)
 		r.Delete("/user/watchlist/{tool_id}", app.removeFromWatchlist)
+		r.Put("/user/followed-tools/{tool_id}", app.followTool)
+		r.Delete("/user/followed-tools/{tool_id}", app.unfollowTool)
 
 		r.Put("/user/key-tools", app.setKeyTools)
 		r.Put("/user/key-playbooks", app.setKeyPlaybooks)
@@ -3122,6 +3201,7 @@ func main() {
 		r.Get("/user/{slug}/watchlist", app.listUserWatchlist)
 		r.Get("/user/{slug}/key-tools", app.listUserKeyTools)
 		r.Get("/user/{slug}/key-playbooks", app.listUserKeyPlaybooks)
+		r.Get("/user/{slug}/followed-tools", app.listUserFollowedTools)
 		r.Get("/user/{slug}/stats", app.getUserStats)
 
 		// Homepage routes

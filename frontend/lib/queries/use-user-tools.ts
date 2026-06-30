@@ -3,6 +3,7 @@ import {
   getUserStack,
   getUserWatchlist,
   getUserKeyTools,
+  getUserFollowedTools,
   setKeyTools,
   UserToolsResponse,
 } from "@/lib/tool";
@@ -21,6 +22,14 @@ export function useUserWatchlist(username: string, enabled: boolean = true) {
   return useQuery<UserToolsResponse>({
     queryKey: ["user-watchlist", username],
     queryFn: () => getUserWatchlist(username),
+    enabled: enabled && !!username,
+  });
+}
+
+export function useUserFollowedTools(username: string, enabled: boolean = true) {
+  return useQuery<UserToolsResponse>({
+    queryKey: ["followed-tools", username],
+    queryFn: () => getUserFollowedTools(username),
     enabled: enabled && !!username,
   });
 }
