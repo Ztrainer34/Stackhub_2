@@ -43,6 +43,9 @@ export type UserStats = {
   post_count: number;
   follower_count: number;
   following_count: number;
+  // Optional: tool-following isn't implemented yet, so the backend may not
+  // return this. Defaults to 0 on the frontend.
+  tools_followed_count?: number;
 };
 
 export async function getUserStats(username: string): Promise<UserStats> {

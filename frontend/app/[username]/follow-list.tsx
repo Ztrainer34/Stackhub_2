@@ -30,8 +30,6 @@ export default function FollowList({ username, kind }: FollowListProps) {
 
   return (
     <div>
-      <h1 className="text-xl font-semibold mb-6">{title}</h1>
-
       {isLoading ? (
         <div className="space-y-3">
           {Array.from({ length: 5 }).map((_, i) => (

@@ -1,4 +1,5 @@
 import ProfileLayoutWrapper from "../profile-layout-wrapper";
+import ConnectionsTabs from "../connections-tabs";
 import FollowList from "../follow-list";
 
 export default async function FollowersPage({
@@ -10,7 +11,9 @@ export default async function FollowersPage({
 
   return (
     <ProfileLayoutWrapper username={username}>
-      <FollowList username={username} kind="followers" />
+      <ConnectionsTabs username={username} active="followers">
+        <FollowList username={username} kind="followers" />
+      </ConnectionsTabs>
     </ProfileLayoutWrapper>
   );
 }

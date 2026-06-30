@@ -26,6 +26,7 @@ export default async function ProfileLayoutWrapper({ username, children }: Profi
     post_count: 0,
     follower_count: 0,
     following_count: 0,
+    tools_followed_count: 0,
   }));
 
   // Check if user is authenticated and if this is their own profile
@@ -133,6 +134,15 @@ export default async function ProfileLayoutWrapper({ username, children }: Profi
                   >
                     <span className="text-muted-foreground">Following</span>
                     <span className="font-medium">{stats.following_count}</span>
+                  </Link>
+                  <Link
+                    href={`/${user.username}/tools-followed`}
+                    className="flex justify-between text-sm rounded-md px-2 py-1.5 -mx-2 hover:bg-muted transition-colors"
+                  >
+                    <span className="text-muted-foreground">Tools followed</span>
+                    <span className="font-medium">
+                      {stats.tools_followed_count ?? 0}
+                    </span>
                   </Link>
                 </div>
 
