@@ -2,6 +2,7 @@
 
 import {
   useUserPosts,
+  useUserPostsByStatus,
   useUserStarredPosts,
 } from "@/lib/queries/use-user-playbooks";
 import { useState, useEffect, useMemo } from "react";
@@ -126,8 +127,12 @@ export default function ProfileContent({
   >([]);
   const limit = 12;
 
-  // Show secondary filters only on own profile and not on starred tab
-  const showSecondaryFilters = isOwnProfile && activeTab !== "starred";
+  const isApprovalTab = activeTab === "waiting" || activeTab === "rejected";
+
+  // Show secondary filters only on own profile and not on the starred or
+  // approval tabs.
+  const showSecondaryFilters =
+    isOwnProfile && activeTab !== "starred" && !isApprovalTab;
 
   // Reset filters when tab changes
   useEffect(() => {
@@ -140,7 +145,10 @@ export default function ProfileContent({
   // "Featured Playbooks" section instead of the full post list, so it doesn't
   // need this query.
   const postsQuery = useUserPosts(
-    activeTab !== "starred" && activeTab !== "stack" && activeTab !== "overview",
+    activeTab !== "starred" &&
+      activeTab !== "stack" &&
+      activeTab !== "overview" &&
+      !isApprovalTab,
     username,
     page,
     limit,
@@ -154,8 +162,20 @@ export default function ProfileContent({
     limit
   );
 
+  const approvalQuery = useUserPostsByStatus(
+    isApprovalTab && isOwnProfile,
+    username,
+    activeTab === "rejected" ? "rejected" : "waiting",
+    page,
+    limit
+  );
+
   // Get current data based on active tab
-  const currentQuery = activeTab === "starred" ? starredQuery : postsQuery;
+  const currentQuery = isApprovalTab
+    ? approvalQuery
+    : activeTab === "starred"
+    ? starredQuery
+    : postsQuery;
   const currentPosts = useMemo(
     () => currentQuery.data?.posts || [],
     [currentQuery.data]
@@ -231,6 +251,23 @@ export default function ProfileContent({
         />
       </div>
     ) : null;
+
+  const approvalBanner = isApprovalTab ? (
+    <div className="mb-6 rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground">
+      {activeTab === "waiting" ? (
+        <>
+          These posts use a tool that&apos;s still under review. While the tool is
+          waiting for approval, the post stays here. Once approved, it will
+          behave like all your other posts.
+        </>
+      ) : (
+        <>
+          The tool suggested for these posts was rejected. Edit the post to swap
+          in an existing tool and it will rejoin your other posts.
+        </>
+      )}
+    </div>
+  ) : null;
 
   // Pagination handlers
   const handlePreviousPage = () => setPage((prev) => Math.max(1, prev - 1));
@@ -335,6 +372,10 @@ export default function ProfileContent({
     const emptyMessage =
       activeTab === "starred"
         ? "No starred posts found"
+        : activeTab === "waiting"
+        ? "No posts waiting for approval"
+        : activeTab === "rejected"
+        ? "No rejected posts"
         : `No ${activeTab === "overview" ? "posts" : activeTab} found`;
     return (
       <>
@@ -346,6 +387,7 @@ export default function ProfileContent({
             counts={filterCounts}
           />
         )}
+        {approvalBanner}
         <EmptyState message={emptyMessage} />
       </>
     );
@@ -361,6 +403,7 @@ export default function ProfileContent({
           counts={filterCounts}
         />
       )}
+      {approvalBanner}
       {starredCategoryFilter}
       {filteredPosts.length === 0 ? (
         <EmptyState message="No posts match the selected filters" />

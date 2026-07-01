@@ -2229,14 +2229,104 @@ func (q *Queries) ListToolTickets(ctx context.Context, arg ListToolTicketsParams
 	return items, nil
 }
 
+const listUserPostsByApprovalStatus = `-- name: ListUserPostsByApprovalStatus :many
+SELECT
+  id, type, name, slug, description, updated_at, created_at, last_draft_update, last_publish, author_id, is_published, author_username, tools,
+  COUNT(*) OVER() AS total_count
+FROM posts_with_tools
+WHERE
+  author_username = $1
+  AND author_id = $4
+  AND (
+    ($5::text = 'waiting'
+      AND EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = posts_with_tools.id AND tt.status = 'pending'))
+    OR
+    ($5::text = 'rejected'
+      AND EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = posts_with_tools.id AND tt.status = 'rejected')
+      AND NOT EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = posts_with_tools.id AND tt.status = 'pending'))
+  )
+ORDER BY updated_at DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListUserPostsByApprovalStatusParams struct {
+	AuthorUsername  string    `json:"author_username"`
+	Limit           int32     `json:"limit"`
+	Offset          int32     `json:"offset"`
+	AuthenticatedID uuid.UUID `json:"authenticated_id"`
+	ApprovalStatus  string    `json:"approval_status"`
+}
+
+type ListUserPostsByApprovalStatusRow struct {
+	ID              uuid.UUID          `json:"id"`
+	Type            string             `json:"type"`
+	Name            string             `json:"name"`
+	Slug            string             `json:"slug"`
+	Description     string             `json:"description"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	LastDraftUpdate pgtype.Timestamptz `json:"last_draft_update"`
+	LastPublish     pgtype.Timestamptz `json:"last_publish"`
+	AuthorID        uuid.UUID          `json:"author_id"`
+	IsPublished     pgtype.Bool        `json:"is_published"`
+	AuthorUsername  string             `json:"author_username"`
+	Tools           json.RawMessage    `json:"tools"`
+	TotalCount      int64              `json:"total_count"`
+}
+
+func (q *Queries) ListUserPostsByApprovalStatus(ctx context.Context, arg ListUserPostsByApprovalStatusParams) ([]ListUserPostsByApprovalStatusRow, error) {
+	rows, err := q.db.Query(ctx, listUserPostsByApprovalStatus,
+		arg.AuthorUsername,
+		arg.Limit,
+		arg.Offset,
+		arg.AuthenticatedID,
+		arg.ApprovalStatus,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserPostsByApprovalStatusRow
+	for rows.Next() {
+		var i ListUserPostsByApprovalStatusRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Type,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.UpdatedAt,
+			&i.CreatedAt,
+			&i.LastDraftUpdate,
+			&i.LastPublish,
+			&i.AuthorID,
+			&i.IsPublished,
+			&i.AuthorUsername,
+			&i.Tools,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserPosts = `-- name: ListUserPosts :many
-SELECT 
+SELECT
   id, type, name, slug, description, updated_at, created_at, last_draft_update, last_publish, author_id, is_published, author_username, tools,
   COUNT(*) OVER() AS total_count
 FROM posts_with_tools
 WHERE
   author_username = $1 AND (($4::boolean = true AND author_id = $5) OR is_published)
   AND ($6::boolean = false OR type = $7)
+  AND NOT EXISTS (
+    SELECT 1 FROM tool_tickets tt
+    WHERE tt.post_id = posts_with_tools.id AND tt.status IN ('pending', 'rejected')
+  )
 ORDER BY updated_at DESC
 LIMIT $2 OFFSET $3
 `

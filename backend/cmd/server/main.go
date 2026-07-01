@@ -871,6 +871,77 @@ func (app *App) listUserPosts(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// listUserPostsByApprovalStatus returns the authenticated user's own posts that
+// are waiting for tool approval or were rejected. It is owner-only: the query
+// filters on author_id = the authenticated user, so requesting another user's
+// slug yields no results.
+func (app *App) listUserPostsByApprovalStatus(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+
+	status := r.URL.Query().Get("status")
+	if status != "waiting" && status != "rejected" {
+		http.Error(w, "status must be 'waiting' or 'rejected'", http.StatusBadRequest)
+		return
+	}
+
+	page := 1
+	limit := 20
+	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p >= 1 {
+			page = p
+		}
+	}
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
+			limit = l
+		}
+	}
+
+	offset := (page - 1) * limit
+
+	res, err := app.queries.ListUserPostsByApprovalStatus(r.Context(), db.ListUserPostsByApprovalStatusParams{
+		AuthorUsername:  slug,
+		Limit:           int32(limit),
+		Offset:          int32(offset),
+		AuthenticatedID: extractUserIDFromRequest(r),
+		ApprovalStatus:  status,
+	})
+
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to list posts", http.StatusInternalServerError)
+		return
+	}
+
+	if res == nil {
+		res = []db.ListUserPostsByApprovalStatusRow{}
+	}
+
+	totalCount := int32(0)
+	if len(res) > 0 {
+		totalCount = int32(res[0].TotalCount)
+	}
+
+	totalPages := (totalCount + int32(limit) - 1) / int32(limit)
+
+	response := struct {
+		Posts      []db.ListUserPostsByApprovalStatusRow `json:"posts"`
+		Page       int                                   `json:"page"`
+		Limit      int                                   `json:"limit"`
+		TotalCount int32                                 `json:"total_count"`
+		TotalPages int32                                 `json:"total_pages"`
+	}{
+		Posts:      res,
+		Page:       page,
+		Limit:      limit,
+		TotalCount: totalCount,
+		TotalPages: totalPages,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 func (app *App) listUserStarredPosts(w http.ResponseWriter, r *http.Request) {
 	username := chi.URLParam(r, "slug")
 
@@ -3162,6 +3233,9 @@ func main() {
 
 		r.Put("/user/key-tools", app.setKeyTools)
 		r.Put("/user/key-playbooks", app.setKeyPlaybooks)
+
+		// Owner-only: posts pending tool approval or rejected.
+		r.Get("/user/{slug}/approval-posts", app.listUserPostsByApprovalStatus)
 
 		r.Put("/user/follow/{user_id}", app.followUser)
 		r.Delete("/user/follow/{user_id}", app.unfollowUser)

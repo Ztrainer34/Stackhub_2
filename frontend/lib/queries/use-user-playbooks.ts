@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   listUserPosts,
+  listUserPostsByStatus,
   listUserStarredPosts,
   getUserKeyPlaybooks,
   setKeyPlaybooks,
@@ -21,6 +22,23 @@ export function useUserPosts(
     queryFn: async () => {
       const supabase = createClient();
       return listUserPosts(username, page, limit, postType, supabase);
+    },
+    enabled,
+  });
+}
+
+export function useUserPostsByStatus(
+  enabled: boolean,
+  username: string,
+  status: "waiting" | "rejected",
+  page: number = 1,
+  limit: number = 20
+) {
+  return useQuery({
+    queryKey: ["approval-posts", username, status, page, limit],
+    queryFn: async () => {
+      const supabase = createClient();
+      return listUserPostsByStatus(username, status, page, limit, supabase);
     },
     enabled,
   });

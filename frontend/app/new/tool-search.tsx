@@ -271,6 +271,23 @@ export function ToolSearch({
               </DialogDescription>
             </DialogHeader>
 
+            <div className="mb-4 rounded-lg border bg-muted/40 p-3 text-left text-xs text-muted-foreground space-y-2">
+              <p>
+                Until your tool is approved, your post will appear in your
+                profile under the{" "}
+                <span className="font-medium text-foreground">
+                  Waiting for approval
+                </span>{" "}
+                tab. Once approved, your post will behave like all your other
+                posts.
+              </p>
+              <p>
+                If rejected, you&apos;ll find your post under the{" "}
+                <span className="font-medium text-foreground">Rejected</span>{" "}
+                tab.
+              </p>
+            </div>
+
             <Button
               type="button"
               onClick={handleContinue}

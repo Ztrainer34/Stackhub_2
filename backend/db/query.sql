@@ -122,13 +122,38 @@ SELECT
   EXISTS(SELECT 1 FROM post_stars WHERE post_id = $1 AND liker_id = $2) AS is_starred;
 
 -- name: ListUserPosts :many
-SELECT 
+SELECT
   *,
   COUNT(*) OVER() AS total_count
 FROM posts_with_tools
 WHERE
   author_username = $1 AND ((sqlc.arg(is_authenticated)::boolean = true AND author_id = sqlc.arg(authenticated_id)) OR is_published)
   AND (sqlc.arg(use_post_filter)::boolean = false OR type = sqlc.arg(post_filter))
+  -- Hide posts whose suggested tool is still pending or was rejected. They live
+  -- in the dedicated "waiting for approval" / "rejected" tabs until approved.
+  AND NOT EXISTS (
+    SELECT 1 FROM tool_tickets tt
+    WHERE tt.post_id = posts_with_tools.id AND tt.status IN ('pending', 'rejected')
+  )
+ORDER BY updated_at DESC
+LIMIT $2 OFFSET $3;
+
+-- name: ListUserPostsByApprovalStatus :many
+SELECT
+  *,
+  COUNT(*) OVER() AS total_count
+FROM posts_with_tools
+WHERE
+  author_username = $1
+  AND author_id = sqlc.arg(authenticated_id)
+  AND (
+    (sqlc.arg(approval_status)::text = 'waiting'
+      AND EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = posts_with_tools.id AND tt.status = 'pending'))
+    OR
+    (sqlc.arg(approval_status)::text = 'rejected'
+      AND EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = posts_with_tools.id AND tt.status = 'rejected')
+      AND NOT EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = posts_with_tools.id AND tt.status = 'pending'))
+  )
 ORDER BY updated_at DESC
 LIMIT $2 OFFSET $3;
 
