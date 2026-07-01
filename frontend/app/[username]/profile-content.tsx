@@ -24,7 +24,7 @@ interface ProfileContentProps {
   activeTab: string;
 }
 
-type StatusFilter = "all" | "drafts" | "published";
+type StatusFilter = "all" | "drafts" | "published" | "waiting" | "rejected";
 
 interface SecondaryFiltersProps {
   activeFilter: StatusFilter;
@@ -44,6 +44,8 @@ const SecondaryFilters = ({
     { key: "all", label: "All" },
     { key: "drafts", label: "Drafts", count: counts.drafts },
     { key: "published", label: "Published", count: counts.published },
+    { key: "waiting", label: "Waiting for approval" },
+    { key: "rejected", label: "Rejected" },
   ];
 
   return (
@@ -127,12 +129,20 @@ export default function ProfileContent({
   >([]);
   const limit = 12;
 
-  const isApprovalTab = activeTab === "waiting" || activeTab === "rejected";
+  // Content tabs (playbooks / combos / comparisons) share the post list +
+  // secondary status filters. Overview / stack / starred have their own layout.
+  const isContentTab =
+    activeTab !== "starred" &&
+    activeTab !== "stack" &&
+    activeTab !== "overview";
 
-  // Show secondary filters only on own profile and not on the starred or
-  // approval tabs.
-  const showSecondaryFilters =
-    isOwnProfile && activeTab !== "starred" && !isApprovalTab;
+  // "Waiting for approval" and "Rejected" are secondary status filters (not
+  // separate tabs) — they pull from a dedicated owner-only endpoint.
+  const isApprovalFilter =
+    statusFilter === "waiting" || statusFilter === "rejected";
+
+  // Show secondary filters only on own profile and not on the starred tab.
+  const showSecondaryFilters = isOwnProfile && activeTab !== "starred";
 
   // Reset filters when tab changes
   useEffect(() => {
@@ -141,14 +151,16 @@ export default function ProfileContent({
     setPage(1);
   }, [activeTab]);
 
+  // Reset to page 1 when switching status filter (different result set).
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter]);
+
   // Fetch posts based on current tab. The overview tab shows a curated
   // "Featured Playbooks" section instead of the full post list, so it doesn't
   // need this query.
   const postsQuery = useUserPosts(
-    activeTab !== "starred" &&
-      activeTab !== "stack" &&
-      activeTab !== "overview" &&
-      !isApprovalTab,
+    isContentTab && !isApprovalFilter,
     username,
     page,
     limit,
@@ -163,19 +175,21 @@ export default function ProfileContent({
   );
 
   const approvalQuery = useUserPostsByStatus(
-    isApprovalTab && isOwnProfile,
+    isContentTab && isApprovalFilter && isOwnProfile,
     username,
-    activeTab === "rejected" ? "rejected" : "waiting",
+    statusFilter === "rejected" ? "rejected" : "waiting",
+    tabNameToPostType(activeTab),
     page,
     limit
   );
 
-  // Get current data based on active tab
-  const currentQuery = isApprovalTab
-    ? approvalQuery
-    : activeTab === "starred"
-    ? starredQuery
-    : postsQuery;
+  // Get current data based on active tab / filter
+  const currentQuery =
+    activeTab === "starred"
+      ? starredQuery
+      : isApprovalFilter
+      ? approvalQuery
+      : postsQuery;
   const currentPosts = useMemo(
     () => currentQuery.data?.posts || [],
     [currentQuery.data]
@@ -252,9 +266,9 @@ export default function ProfileContent({
       </div>
     ) : null;
 
-  const approvalBanner = isApprovalTab ? (
+  const approvalBanner = isApprovalFilter ? (
     <div className="mb-6 rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground">
-      {activeTab === "waiting" ? (
+      {statusFilter === "waiting" ? (
         <>
           These posts use a tool that&apos;s still under review. While the tool is
           waiting for approval, the post stays here. Once approved, it will
@@ -372,9 +386,9 @@ export default function ProfileContent({
     const emptyMessage =
       activeTab === "starred"
         ? "No starred posts found"
-        : activeTab === "waiting"
+        : statusFilter === "waiting"
         ? "No posts waiting for approval"
-        : activeTab === "rejected"
+        : statusFilter === "rejected"
         ? "No rejected posts"
         : `No ${activeTab === "overview" ? "posts" : activeTab} found`;
     return (

@@ -31,14 +31,15 @@ export function useUserPostsByStatus(
   enabled: boolean,
   username: string,
   status: "waiting" | "rejected",
+  postType: PostType | "" = "",
   page: number = 1,
   limit: number = 20
 ) {
   return useQuery({
-    queryKey: ["approval-posts", username, status, page, limit],
+    queryKey: ["approval-posts", username, status, postType, page, limit],
     queryFn: async () => {
       const supabase = createClient();
-      return listUserPostsByStatus(username, status, page, limit, supabase);
+      return listUserPostsByStatus(username, status, postType, page, limit, supabase);
     },
     enabled,
   });

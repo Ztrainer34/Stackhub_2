@@ -899,13 +899,20 @@ func (app *App) listUserPostsByApprovalStatus(w http.ResponseWriter, r *http.Req
 
 	offset := (page - 1) * limit
 
-	res, err := app.queries.ListUserPostsByApprovalStatus(r.Context(), db.ListUserPostsByApprovalStatusParams{
+	params := db.ListUserPostsByApprovalStatusParams{
 		AuthorUsername:  slug,
 		Limit:           int32(limit),
 		Offset:          int32(offset),
 		AuthenticatedID: extractUserIDFromRequest(r),
 		ApprovalStatus:  status,
-	})
+	}
+
+	if typeStr := r.URL.Query().Get("type"); typeStr != "" {
+		params.UsePostFilter = true
+		params.PostFilter = typeStr
+	}
+
+	res, err := app.queries.ListUserPostsByApprovalStatus(r.Context(), params)
 
 	if err != nil {
 		log.Println(err)

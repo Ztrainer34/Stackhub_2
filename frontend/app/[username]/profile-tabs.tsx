@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/lib/queries/use-auth";
 
 interface ProfileTabsProps {
   username: string;
@@ -12,10 +11,6 @@ interface ProfileTabsProps {
 export default function ProfileTabs({ username }: ProfileTabsProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const auth = useAuth();
-  const isOwnProfile =
-    auth.data?.status === "authenticated" &&
-    auth.data.user.username === username;
 
   // Determine active tab based on pathname and search params
   const getActiveTab = () => {
@@ -37,21 +32,6 @@ export default function ProfileTabs({ username }: ProfileTabsProps) {
     { key: "combos", label: "Combos", href: `/${username}?tab=combos` },
     { key: "comparisons", label: "Comparisons", href: `/${username}?tab=comparisons` },
     { key: "starred", label: "Starred", href: `/${username}?tab=starred` },
-    // Owner-only tabs for posts pending tool approval or rejected.
-    ...(isOwnProfile
-      ? [
-          {
-            key: "waiting",
-            label: "Waiting for approval",
-            href: `/${username}?tab=waiting`,
-          },
-          {
-            key: "rejected",
-            label: "Rejected",
-            href: `/${username}?tab=rejected`,
-          },
-        ]
-      : []),
   ];
 
   return (

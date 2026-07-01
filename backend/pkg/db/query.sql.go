@@ -2237,6 +2237,7 @@ FROM posts_with_tools
 WHERE
   author_username = $1
   AND author_id = $4
+  AND ($6::boolean = false OR type = $7)
   AND (
     ($5::text = 'waiting'
       AND EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = posts_with_tools.id AND tt.status = 'pending'))
@@ -2255,6 +2256,8 @@ type ListUserPostsByApprovalStatusParams struct {
 	Offset          int32     `json:"offset"`
 	AuthenticatedID uuid.UUID `json:"authenticated_id"`
 	ApprovalStatus  string    `json:"approval_status"`
+	UsePostFilter   bool      `json:"use_post_filter"`
+	PostFilter      string    `json:"post_filter"`
 }
 
 type ListUserPostsByApprovalStatusRow struct {
@@ -2281,6 +2284,8 @@ func (q *Queries) ListUserPostsByApprovalStatus(ctx context.Context, arg ListUse
 		arg.Offset,
 		arg.AuthenticatedID,
 		arg.ApprovalStatus,
+		arg.UsePostFilter,
+		arg.PostFilter,
 	)
 	if err != nil {
 		return nil, err

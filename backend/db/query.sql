@@ -146,6 +146,7 @@ FROM posts_with_tools
 WHERE
   author_username = $1
   AND author_id = sqlc.arg(authenticated_id)
+  AND (sqlc.arg(use_post_filter)::boolean = false OR type = sqlc.arg(post_filter))
   AND (
     (sqlc.arg(approval_status)::text = 'waiting'
       AND EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = posts_with_tools.id AND tt.status = 'pending'))
