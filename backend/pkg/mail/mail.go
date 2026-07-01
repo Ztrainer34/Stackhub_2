@@ -43,7 +43,7 @@ func (m *Mailer) SendWelcome(ctx context.Context, to string, data WelcomeData) e
 	params := &resend.SendEmailRequest{
 		From:    fmt.Sprintf("StackHub <welcome@%s>", m.domain),
 		To:      []string{to},
-		Subject: "Welcome to StackHub, your Knowledge Hub for tools",
+		Subject: "Welcome to StackHub, your Hub for tools",
 		Html:    buffer.String(),
 	}
 

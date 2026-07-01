@@ -2825,6 +2825,24 @@ func (app *App) completeOnboarding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Send the welcome email for Google (OAuth) sign-ups only. Magic-link
+	// users already receive a welcome as part of their sign-up email, so
+	// sending here too would double up.
+	if _, claims, claimsErr := jwtauth.FromContext(r.Context()); claimsErr == nil {
+		email, _ := claims["email"].(string)
+		provider := ""
+		if appMetadata, ok := claims["app_metadata"].(map[string]interface{}); ok {
+			provider, _ = appMetadata["provider"].(string)
+		}
+		if provider == "google" && email != "" && app.mailer != nil {
+			go func(to, name string) {
+				if err := app.mailer.SendWelcome(context.Background(), to, mail.WelcomeData{FirstName: name}); err != nil {
+					log.Println("failed to send welcome email:", err)
+				}
+			}(email, displayName)
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(profile)
 }
