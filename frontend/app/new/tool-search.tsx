@@ -50,7 +50,6 @@ export function ToolSearch({
   const [view, setView] = React.useState<DialogView>('search');
   const [searchQuery, setSearchQuery] = React.useState("");
   const [debouncedQuery, setDebouncedQuery] = React.useState("");
-  const [submittedToolName, setSubmittedToolName] = React.useState("");
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   // Reset view when dialog closes
@@ -60,7 +59,6 @@ export function ToolSearch({
       const timer = setTimeout(() => {
         setView('search');
         setSearchQuery("");
-        setSubmittedToolName("");
       }, 200);
       return () => clearTimeout(timer);
     }
@@ -118,7 +116,6 @@ export function ToolSearch({
         categories: data.categories,
         type: 'suggested',
       };
-      setSubmittedToolName(data.name);
       onSuggestTool(suggestedTool);
       setView('confirmation');
     }
@@ -231,8 +228,15 @@ export function ToolSearch({
             <div className="p-4 pb-2">
               <DialogHeader>
                 <DialogTitle>Add tool</DialogTitle>
-                <DialogDescription className="text-sm">
-                  Couldn&apos;t find your tool? Add it here and we&apos;ll review it.
+                <DialogDescription className="text-sm space-y-2 pt-1">
+                  <span className="block">
+                    Couldn&apos;t find a tool and want to add it? Amazing! Thank
+                    you for your contribution 🙏
+                  </span>
+                  <span className="block">
+                    Other users will rely on the information you fill in. So
+                    please double check its accuracy 🔍
+                  </span>
                 </DialogDescription>
               </DialogHeader>
             </div>
@@ -250,25 +254,29 @@ export function ToolSearch({
         )}
 
         {view === 'confirmation' && (
-          <div className="p-4">
+          <div className="p-6 text-center">
             <DialogHeader className="mb-4">
-              <DialogTitle>Thank you for adding a new tool!</DialogTitle>
-              <DialogDescription className="text-sm pt-2">
-                Once we&apos;ve reviewed it, we&apos;ll add your tool to StackHub. You can continue creating your post now.
+              <DialogTitle className="text-center">
+                Thank you for adding a new tool!
+              </DialogTitle>
+              <DialogDescription className="text-sm pt-3 space-y-3 text-center">
+                <span className="block">
+                  Once we&apos;ve reviewed the information, we&apos;ll add your
+                  tool to StackHub and notify you.
+                </span>
+                <span className="block">
+                  In the meantime, you can go ahead and create your playbook.
+                  We&apos;ll link the tool&apos;s info once it&apos;s live.
+                </span>
               </DialogDescription>
             </DialogHeader>
-
-            <div className="bg-muted/50 rounded-lg p-3 mb-4">
-              <p className="text-xs text-muted-foreground">Tool added:</p>
-              <p className="font-medium">{submittedToolName}</p>
-            </div>
 
             <Button
               type="button"
               onClick={handleContinue}
               className="w-full bg-green-600 hover:bg-green-700"
             >
-              Continue my post
+              Continue my Playbook
             </Button>
           </div>
         )}
