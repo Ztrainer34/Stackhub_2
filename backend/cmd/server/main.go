@@ -64,6 +64,23 @@ func ToPgUUID(u uuid.UUID) pgtype.UUID {
 	return pgtype.UUID{Bytes: u, Valid: true}
 }
 
+// actorDisplayName returns a friendly name for the acting user (display name,
+// falling back to username, then a generic label) for use in notifications and
+// emails.
+func actorDisplayName(q *db.Queries, ctx context.Context, userID uuid.UUID) string {
+	profile, err := q.GetProfile(ctx, userID)
+	if err != nil {
+		return "Someone"
+	}
+	if profile.DisplayName != "" {
+		return profile.DisplayName
+	}
+	if profile.Username != "" {
+		return profile.Username
+	}
+	return "Someone"
+}
+
 func (app *App) createPost(w http.ResponseWriter, r *http.Request) {
 	userID := extractUserIDFromRequest(r)
 
@@ -488,11 +505,19 @@ func (app *App) starPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get post info for notification
+	var (
+		emailNotify  bool
+		recipientID  uuid.UUID
+		actorName    string
+		playbookName string
+	)
 	post, err := qtx.GetPost(r.Context(), id)
 	if err != nil {
 		log.Println(err)
 		// Continue even if we can't get post info
 	} else if post.AuthorID != userID { // Don't notify if starring own post
+		actorName = actorDisplayName(qtx, r.Context(), userID)
+
 		// Create notification (with spam protection built-in)
 		entityType := "post"
 		notificationParams := db.CreateNotificationParams{
@@ -501,14 +526,19 @@ func (app *App) starPost(w http.ResponseWriter, r *http.Request) {
 			Type:        "post_star",
 			EntityID:    ToPgUUID(id),
 			EntityType:  ToPgText(&entityType),
-			Title:       "Post starred",
-			Message:     fmt.Sprintf("Someone starred your post \"%s\"", post.Name),
+			Title:       "New star",
+			Message:     fmt.Sprintf("%s starred “%s”", actorName, post.Name),
 		}
 
-		err = qtx.CreateNotification(r.Context(), notificationParams)
-		if err != nil {
-			log.Println(err)
+		rows, nerr := qtx.CreateNotification(r.Context(), notificationParams)
+		if nerr != nil {
+			log.Println(nerr)
 			// Don't fail the star if notification fails
+		} else if rows > 0 {
+			// New notification (not deduped) → also send the email.
+			emailNotify = true
+			recipientID = post.AuthorID
+			playbookName = post.Name
 		}
 	}
 
@@ -517,6 +547,19 @@ func (app *App) starPost(w http.ResponseWriter, r *http.Request) {
 		log.Println(err)
 		http.Error(w, "Failed to commit transaction", http.StatusInternalServerError)
 		return
+	}
+
+	if emailNotify && app.mailer != nil {
+		go func(rid uuid.UUID, actor, playbook string) {
+			email, eerr := app.queries.GetUserEmail(context.Background(), rid)
+			if eerr != nil || email == "" {
+				log.Println("star email: could not resolve recipient email:", eerr)
+				return
+			}
+			if err := app.mailer.SendPlaybookStarred(context.Background(), email, actor, playbook); err != nil {
+				log.Println("star email:", err)
+			}
+		}(recipientID, actorName, playbookName)
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -615,7 +658,7 @@ func (app *App) createPostComment(w http.ResponseWriter, r *http.Request) {
 			Message:     fmt.Sprintf("Someone commented on your post \"%s\"", post.Name),
 		}
 
-		err = qtx.CreateNotification(r.Context(), notificationParams)
+		_, err = qtx.CreateNotification(r.Context(), notificationParams)
 		if err != nil {
 			log.Println(err)
 			// Don't fail the comment if notification fails
@@ -2791,6 +2834,7 @@ func (app *App) followUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create notification (with spam protection built-in)
+	actorName := actorDisplayName(qtx, r.Context(), userID)
 	notificationParams := db.CreateNotificationParams{
 		RecipientID: followeeID,
 		ActorID:     ToPgUUID(userID),
@@ -2798,13 +2842,16 @@ func (app *App) followUser(w http.ResponseWriter, r *http.Request) {
 		EntityID:    pgtype.UUID{Valid: false},
 		EntityType:  pgtype.Text{Valid: false},
 		Title:       "New follower",
-		Message:     "Someone started following you",
+		Message:     fmt.Sprintf("%s is now following you", actorName),
 	}
 
-	err = qtx.CreateNotification(r.Context(), notificationParams)
-	if err != nil {
-		log.Println(err)
+	emailNotify := false
+	rows, nerr := qtx.CreateNotification(r.Context(), notificationParams)
+	if nerr != nil {
+		log.Println(nerr)
 		// Don't fail the follow if notification fails
+	} else if rows > 0 {
+		emailNotify = true
 	}
 
 	err = tx.Commit(r.Context())
@@ -2812,6 +2859,19 @@ func (app *App) followUser(w http.ResponseWriter, r *http.Request) {
 		log.Println(err)
 		http.Error(w, "Failed to commit transaction", http.StatusInternalServerError)
 		return
+	}
+
+	if emailNotify && app.mailer != nil {
+		go func(rid uuid.UUID, actor string) {
+			email, eerr := app.queries.GetUserEmail(context.Background(), rid)
+			if eerr != nil || email == "" {
+				log.Println("follow email: could not resolve recipient email:", eerr)
+				return
+			}
+			if err := app.mailer.SendNewFollower(context.Background(), email, actor); err != nil {
+				log.Println("follow email:", err)
+			}
+		}(followeeID, actorName)
 	}
 
 	w.WriteHeader(http.StatusOK)

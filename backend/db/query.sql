@@ -830,17 +830,20 @@ WHERE uf.follower_id = sqlc.arg(target_id)
 ORDER BY p.username
 LIMIT sqlc.arg(lim) OFFSET sqlc.arg(off);
 
--- name: CreateNotification :exec
+-- name: CreateNotification :execrows
 INSERT INTO notifications (recipient_id, actor_id, type, entity_id, entity_type, title, message)
 SELECT $1, $2, $3, $4, $5, $6, $7
 WHERE NOT EXISTS (
-  SELECT 1 FROM notifications 
-  WHERE recipient_id = $1 
-  AND actor_id = $2 
-  AND type = $3 
+  SELECT 1 FROM notifications
+  WHERE recipient_id = $1
+  AND actor_id = $2
+  AND type = $3
   AND entity_id = $4
   AND created_at > NOW() - INTERVAL '1 hour'
 );
+
+-- name: GetUserEmail :one
+SELECT email::text FROM auth.users WHERE id = $1;
 
 -- name: GetUserNotifications :many
 SELECT 

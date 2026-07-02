@@ -226,14 +226,14 @@ func (q *Queries) CreateCategoryIfNotExist(ctx context.Context, name string) (Ca
 	return i, err
 }
 
-const createNotification = `-- name: CreateNotification :exec
+const createNotification = `-- name: CreateNotification :execrows
 INSERT INTO notifications (recipient_id, actor_id, type, entity_id, entity_type, title, message)
 SELECT $1, $2, $3, $4, $5, $6, $7
 WHERE NOT EXISTS (
-  SELECT 1 FROM notifications 
-  WHERE recipient_id = $1 
-  AND actor_id = $2 
-  AND type = $3 
+  SELECT 1 FROM notifications
+  WHERE recipient_id = $1
+  AND actor_id = $2
+  AND type = $3
   AND entity_id = $4
   AND created_at > NOW() - INTERVAL '1 hour'
 )
@@ -249,8 +249,8 @@ type CreateNotificationParams struct {
 	Message     string      `json:"message"`
 }
 
-func (q *Queries) CreateNotification(ctx context.Context, arg CreateNotificationParams) error {
-	_, err := q.db.Exec(ctx, createNotification,
+func (q *Queries) CreateNotification(ctx context.Context, arg CreateNotificationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, createNotification,
 		arg.RecipientID,
 		arg.ActorID,
 		arg.Type,
@@ -259,7 +259,21 @@ func (q *Queries) CreateNotification(ctx context.Context, arg CreateNotification
 		arg.Title,
 		arg.Message,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getUserEmail = `-- name: GetUserEmail :one
+SELECT email::text FROM auth.users WHERE id = $1
+`
+
+func (q *Queries) GetUserEmail(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getUserEmail, id)
+	var email string
+	err := row.Scan(&email)
+	return email, err
 }
 
 const createPost = `-- name: CreatePost :one
