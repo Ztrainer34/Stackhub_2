@@ -309,8 +309,12 @@ func (app *App) publishPost(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	var form post.PublishPostForm
+	// Decode the editor content sent with the publish request. Without this the
+	// content stays nil and we fall through to PublishPost, which copies the
+	// (possibly stale/empty) draft_content into content — wiping the post.
+	decodeErr := json.NewDecoder(r.Body).Decode(&form)
 
-	if form.Content != nil && err == nil {
+	if form.Content != nil && decodeErr == nil {
 		var contentJson map[string]interface{}
 		err = json.Unmarshal([]byte(*form.Content), &contentJson)
 		if err != nil {
