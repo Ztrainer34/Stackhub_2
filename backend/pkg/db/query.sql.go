@@ -2233,18 +2233,18 @@ const listUserPostsByApprovalStatus = `-- name: ListUserPostsByApprovalStatus :m
 SELECT
   id, type, name, slug, description, updated_at, created_at, last_draft_update, last_publish, author_id, is_published, author_username, tools,
   COUNT(*) OVER() AS total_count
-FROM posts_with_tools
+FROM posts_with_tools_and_tickets
 WHERE
   author_username = $1
   AND author_id = $4
   AND ($6::boolean = false OR type = $7)
   AND (
     ($5::text = 'waiting'
-      AND EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = posts_with_tools.id AND tt.status = 'pending'))
+      AND EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = posts_with_tools_and_tickets.id AND tt.status = 'pending'))
     OR
     ($5::text = 'rejected'
-      AND EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = posts_with_tools.id AND tt.status = 'rejected')
-      AND NOT EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = posts_with_tools.id AND tt.status = 'pending'))
+      AND EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = posts_with_tools_and_tickets.id AND tt.status = 'rejected')
+      AND NOT EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = posts_with_tools_and_tickets.id AND tt.status = 'pending'))
   )
 ORDER BY updated_at DESC
 LIMIT $2 OFFSET $3

@@ -139,21 +139,24 @@ ORDER BY updated_at DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListUserPostsByApprovalStatus :many
+-- Uses posts_with_tools_and_tickets (LEFT JOIN) so posts whose only tool is a
+-- still-pending ticket are included. posts_with_tools INNER-JOINs post_tools and
+-- would drop them entirely.
 SELECT
   *,
   COUNT(*) OVER() AS total_count
-FROM posts_with_tools
+FROM posts_with_tools_and_tickets
 WHERE
   author_username = $1
   AND author_id = sqlc.arg(authenticated_id)
   AND (sqlc.arg(use_post_filter)::boolean = false OR type = sqlc.arg(post_filter))
   AND (
     (sqlc.arg(approval_status)::text = 'waiting'
-      AND EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = posts_with_tools.id AND tt.status = 'pending'))
+      AND EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = posts_with_tools_and_tickets.id AND tt.status = 'pending'))
     OR
     (sqlc.arg(approval_status)::text = 'rejected'
-      AND EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = posts_with_tools.id AND tt.status = 'rejected')
-      AND NOT EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = posts_with_tools.id AND tt.status = 'pending'))
+      AND EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = posts_with_tools_and_tickets.id AND tt.status = 'rejected')
+      AND NOT EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = posts_with_tools_and_tickets.id AND tt.status = 'pending'))
   )
 ORDER BY updated_at DESC
 LIMIT $2 OFFSET $3;

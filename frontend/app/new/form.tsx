@@ -107,7 +107,7 @@ const postTypeMetadata = {
 
 const goalPlaceholders = {
   playbook:
-    "e.g. Know from which company your website visitors come from",
+    "e.g. Know from which company your website visitors come from thanks to Hubspot",
   combo:
     "e.g. Capture website visitor companies in HubSpot and auto-send them a personalized cold email via Lemlist",
   comparison:
