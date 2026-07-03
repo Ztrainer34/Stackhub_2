@@ -71,7 +71,7 @@ import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils"
 // --- Styles ---
 import "@/components/tiptap-templates/simple/simple-editor.scss"
 
-import { Post } from "@/lib/post"
+import { Post, renamePost } from "@/lib/post"
 import { createClient } from "@/utils/supabase/client"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
@@ -198,6 +198,36 @@ export default function Editor({
 
   const router = useRouter();
 
+  const [title, setTitle] = React.useState(post.name);
+  const titleRef = React.useRef<HTMLTextAreaElement>(null);
+
+  // Grow the title field to fit its content (Medium-style single growing line).
+  const autoGrowTitle = React.useCallback(() => {
+    const el = titleRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, []);
+
+  React.useEffect(() => {
+    autoGrowTitle();
+  }, [autoGrowTitle]);
+
+  // Rename the post (and update its slug) when the title changed. Returns the
+  // new slug, or null when unchanged. Old URLs 301-redirect to the new slug
+  // server-side via the slug-history lookup.
+  const renameIfTitleChanged = async (
+    supabaseClient: ReturnType<typeof createClient>
+  ): Promise<string | null> => {
+    const trimmed = title.trim();
+    if (!trimmed || trimmed === post.name) return null;
+    const { new_slug } = await renamePost(supabaseClient, post.id, {
+      name: trimmed,
+      description: post.description,
+    });
+    return new_slug;
+  };
+
   let content = undefined;
 
   if (postContent) {
@@ -274,12 +304,23 @@ export default function Editor({
       }
     );
 
-    if (resp.ok) {
-      router.push(redirectUrl);
-    } else {
+    if (!resp.ok) {
       // FIXME
       toast("Error", {});
+      return;
     }
+
+    let newSlug: string | null = null;
+    try {
+      newSlug = await renameIfTitleChanged(supabaseClient);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update title");
+      return;
+    }
+
+    router.push(
+      newSlug ? `/${post.author_username}/${newSlug}` : redirectUrl
+    );
   };
 
   const publishPost = async () => {
@@ -307,12 +348,23 @@ export default function Editor({
       }
     );
 
-    if (resp.ok) {
-      router.push(redirectUrl);
-    } else {
+    if (!resp.ok) {
       // FIXME
       toast("Error", {});
+      return;
     }
+
+    let newSlug: string | null = null;
+    try {
+      newSlug = await renameIfTitleChanged(supabaseClient);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update title");
+      return;
+    }
+
+    router.push(
+      newSlug ? `/${post.author_username}/${newSlug}` : redirectUrl
+    );
   };
 
 
@@ -357,7 +409,25 @@ export default function Editor({
         </Toolbar>
 
         <div className="simple-editor-title">
-          <h1>{post.name}</h1>
+          <textarea
+            ref={titleRef}
+            value={title}
+            onChange={(e) => {
+              setTitle(e.target.value)
+              autoGrowTitle()
+            }}
+            onKeyDown={(e) => {
+              // Enter should not add a line break — jump into the content.
+              if (e.key === "Enter") {
+                e.preventDefault()
+                editor?.chain().focus().run()
+              }
+            }}
+            rows={1}
+            placeholder="Untitled"
+            spellCheck={false}
+            aria-label="Playbook title"
+          />
         </div>
 
         <EditorContent

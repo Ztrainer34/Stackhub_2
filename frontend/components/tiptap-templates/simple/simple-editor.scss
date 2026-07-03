@@ -85,12 +85,36 @@ body,
   word-break: break-word;
 }
 
+.simple-editor-title textarea {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  resize: none;
+  overflow: hidden;
+  font-family: inherit;
+  font-size: 2.5rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  word-break: break-word;
+  color: inherit;
+}
+
+.simple-editor-title textarea::placeholder {
+  color: var(--tt-gray-light-a-400, #b4b4b4);
+}
+
 @media screen and (max-width: 480px) {
   .simple-editor-title {
     padding: 1rem 1.5rem 0;
   }
 
-  .simple-editor-title h1 {
+  .simple-editor-title h1,
+  .simple-editor-title textarea {
     font-size: 2rem;
   }
 }
