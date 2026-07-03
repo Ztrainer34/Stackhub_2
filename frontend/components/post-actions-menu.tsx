@@ -126,14 +126,26 @@ export default function PostActionsMenu({ post }: PostActionsMenuProps) {
       });
     }
 
-    setDialogOpen(false);
+    handleDialogOpenChange(false);
   };
 
   const isProcessing = deletePostMutation.isPending || publishPostMutation.isPending || unpublishPostMutation.isPending;
 
+  // Opening a Radix Dialog from inside a DropdownMenu can leave
+  // `pointer-events: none` stuck on <body>, freezing the whole page. Clear it
+  // whenever the dialog closes as a safety net.
+  const handleDialogOpenChange = (open: boolean) => {
+    setDialogOpen(open);
+    if (!open) {
+      setTimeout(() => {
+        document.body.style.pointerEvents = "";
+      }, 0);
+    }
+  };
+
   return (
     <>
-      <DropdownMenu>
+      <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
             <MoreVertical className="h-4 w-4" />
@@ -163,7 +175,7 @@ export default function PostActionsMenu({ post }: PostActionsMenuProps) {
       </DropdownMenu>
       <ConfirmationDialog
         open={dialogOpen}
-        onOpenChange={setDialogOpen}
+        onOpenChange={handleDialogOpenChange}
         action={dialogAction}
         isProcessing={isProcessing}
         onConfirm={handleConfirmAction}
