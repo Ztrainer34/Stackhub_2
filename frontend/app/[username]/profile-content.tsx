@@ -160,11 +160,18 @@ export default function ProfileContent({
     setPage(1);
   }, [statusFilter]);
 
+  // For the owner, the "All", "Waiting for approval" and "Rejected" filters use
+  // the tickets-aware endpoint so that pending/rejected posts are included (the
+  // normal post list hides them). Drafts/Published (and any visitor view) use
+  // the standard post list.
+  const useOwnerStatusQuery =
+    isContentTab && isOwnProfile && (isApprovalFilter || statusFilter === "all");
+
   // Fetch posts based on current tab. The overview tab shows a curated
   // "Featured Playbooks" section instead of the full post list, so it doesn't
   // need this query.
   const postsQuery = useUserPosts(
-    isContentTab && !isApprovalFilter,
+    isContentTab && !useOwnerStatusQuery,
     username,
     page,
     limit,
@@ -178,10 +185,14 @@ export default function ProfileContent({
     limit
   );
 
-  const approvalQuery = useUserPostsByStatus(
-    isContentTab && isApprovalFilter && isOwnProfile,
+  const ownerStatusQuery = useUserPostsByStatus(
+    useOwnerStatusQuery,
     username,
-    statusFilter === "rejected" ? "rejected" : "waiting",
+    statusFilter === "waiting"
+      ? "waiting"
+      : statusFilter === "rejected"
+      ? "rejected"
+      : "all",
     tabNameToPostType(activeTab),
     page,
     limit
@@ -199,8 +210,8 @@ export default function ProfileContent({
   const currentQuery =
     activeTab === "starred"
       ? starredQuery
-      : isApprovalFilter
-      ? approvalQuery
+      : useOwnerStatusQuery
+      ? ownerStatusQuery
       : postsQuery;
   const currentPosts = useMemo(
     () => currentQuery.data?.posts || [],

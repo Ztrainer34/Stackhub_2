@@ -926,8 +926,8 @@ func (app *App) listUserPostsByApprovalStatus(w http.ResponseWriter, r *http.Req
 	slug := chi.URLParam(r, "slug")
 
 	status := r.URL.Query().Get("status")
-	if status != "waiting" && status != "rejected" {
-		http.Error(w, "status must be 'waiting' or 'rejected'", http.StatusBadRequest)
+	if status != "waiting" && status != "rejected" && status != "all" {
+		http.Error(w, "status must be 'waiting', 'rejected' or 'all'", http.StatusBadRequest)
 		return
 	}
 

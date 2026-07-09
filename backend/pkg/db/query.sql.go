@@ -2253,6 +2253,8 @@ WHERE
   AND author_id = $4
   AND ($6::boolean = false OR type = $7)
   AND (
+    $5::text = 'all'
+    OR
     ($5::text = 'waiting'
       AND EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = posts_with_tools_and_tickets.id AND tt.status = 'pending'))
     OR

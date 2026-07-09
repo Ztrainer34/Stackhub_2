@@ -31,7 +31,7 @@ export function useUserPosts(
 export function useUserPostsByStatus(
   enabled: boolean,
   username: string,
-  status: "waiting" | "rejected",
+  status: "waiting" | "rejected" | "all",
   postType: PostType | "" = "",
   page: number = 1,
   limit: number = 20
