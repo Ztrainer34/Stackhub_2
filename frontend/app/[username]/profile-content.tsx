@@ -245,7 +245,12 @@ export default function ProfileContent({
   // Counts for the secondary filter buttons, from the dedicated counts query.
   const counts = postCountsQuery.data;
   const filterCounts = {
-    all: (counts?.published ?? 0) + (counts?.drafts ?? 0),
+    // "All" is the grand total across every status.
+    all:
+      (counts?.published ?? 0) +
+      (counts?.drafts ?? 0) +
+      (counts?.waiting ?? 0) +
+      (counts?.rejected ?? 0),
     drafts: counts?.drafts ?? 0,
     published: counts?.published ?? 0,
     waiting: counts?.waiting ?? 0,
