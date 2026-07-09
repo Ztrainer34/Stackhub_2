@@ -996,6 +996,29 @@ func (app *App) listUserPostsByApprovalStatus(w http.ResponseWriter, r *http.Req
 	json.NewEncoder(w).Encode(response)
 }
 
+// getUserPostCounts returns the authenticated user's own post counts per status
+// filter (published / drafts / waiting / rejected), optionally scoped to a post
+// type. Owner-only: it always counts the authenticated user's posts.
+func (app *App) getUserPostCounts(w http.ResponseWriter, r *http.Request) {
+	params := db.GetUserPostCountsParams{
+		AuthorID: extractUserIDFromRequest(r),
+	}
+	if typeStr := r.URL.Query().Get("type"); typeStr != "" {
+		params.UsePostFilter = true
+		params.PostFilter = typeStr
+	}
+
+	counts, err := app.queries.GetUserPostCounts(r.Context(), params)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to get post counts", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(counts)
+}
+
 func (app *App) listUserStarredPosts(w http.ResponseWriter, r *http.Request) {
 	username := chi.URLParam(r, "slug")
 
@@ -3307,6 +3330,8 @@ func main() {
 
 		// Owner-only: posts pending tool approval or rejected.
 		r.Get("/user/{slug}/approval-posts", app.listUserPostsByApprovalStatus)
+		// Owner-only: post counts per status filter.
+		r.Get("/user/{slug}/post-counts", app.getUserPostCounts)
 
 		r.Put("/user/follow/{user_id}", app.followUser)
 		r.Delete("/user/follow/{user_id}", app.unfollowUser)

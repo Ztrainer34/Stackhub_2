@@ -106,6 +106,21 @@ export async function listUserPosts(username: string, page: number = 1, limit: n
   return (await resp.json()) as PaginatedPostsResponse;
 }
 
+export interface PostCounts {
+  published: number;
+  drafts: number;
+  waiting: number;
+  rejected: number;
+}
+
+export async function getUserPostCounts(username: string, postType: PostType | "" = "", supabaseClient: SupabaseClient): Promise<PostCounts> {
+  const resp = await fetchApiAuthenticated(supabaseClient, `/user/${username}/post-counts?type=${postType}`);
+
+  if (!resp.ok) throw new Error("Failed to get post counts");
+
+  return (await resp.json()) as PostCounts;
+}
+
 export async function listUserPostsByStatus(username: string, status: "waiting" | "rejected", postType: PostType | "" = "", page: number = 1, limit: number = 20, supabaseClient: SupabaseClient): Promise<PaginatedPostsResponse> {
   const resp = await fetchApiAuthenticated(supabaseClient, `/user/${username}/approval-posts?status=${status}&type=${postType}&page=${page}&limit=${limit}`);
 

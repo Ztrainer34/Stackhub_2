@@ -2334,6 +2334,48 @@ func (q *Queries) ListUserPostsByApprovalStatus(ctx context.Context, arg ListUse
 	return items, nil
 }
 
+const getUserPostCounts = `-- name: GetUserPostCounts :one
+SELECT
+  COUNT(*) FILTER (WHERE NOT sub.has_pending AND NOT sub.has_rejected AND sub.is_published)::int AS published,
+  COUNT(*) FILTER (WHERE NOT sub.has_pending AND NOT sub.has_rejected AND NOT sub.is_published)::int AS drafts,
+  COUNT(*) FILTER (WHERE sub.has_pending)::int AS waiting,
+  COUNT(*) FILTER (WHERE sub.has_rejected AND NOT sub.has_pending)::int AS rejected
+FROM (
+  SELECT
+    COALESCE(p.is_published, false) AS is_published,
+    EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = p.id AND tt.status = 'pending') AS has_pending,
+    EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = p.id AND tt.status = 'rejected') AS has_rejected
+  FROM posts p
+  WHERE p.author_id = $1
+    AND ($2::boolean = false OR p.type = $3)
+) sub
+`
+
+type GetUserPostCountsParams struct {
+	AuthorID      uuid.UUID `json:"author_id"`
+	UsePostFilter bool      `json:"use_post_filter"`
+	PostFilter    string    `json:"post_filter"`
+}
+
+type GetUserPostCountsRow struct {
+	Published int32 `json:"published"`
+	Drafts    int32 `json:"drafts"`
+	Waiting   int32 `json:"waiting"`
+	Rejected  int32 `json:"rejected"`
+}
+
+func (q *Queries) GetUserPostCounts(ctx context.Context, arg GetUserPostCountsParams) (GetUserPostCountsRow, error) {
+	row := q.db.QueryRow(ctx, getUserPostCounts, arg.AuthorID, arg.UsePostFilter, arg.PostFilter)
+	var i GetUserPostCountsRow
+	err := row.Scan(
+		&i.Published,
+		&i.Drafts,
+		&i.Waiting,
+		&i.Rejected,
+	)
+	return i, err
+}
+
 const listUserPosts = `-- name: ListUserPosts :many
 SELECT
   id, type, name, slug, description, updated_at, created_at, last_draft_update, last_publish, author_id, is_published, author_username, tools,

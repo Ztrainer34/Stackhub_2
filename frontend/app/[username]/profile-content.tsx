@@ -3,6 +3,7 @@
 import {
   useUserPosts,
   useUserPostsByStatus,
+  useUserPostCounts,
   useUserStarredPosts,
 } from "@/lib/queries/use-user-playbooks";
 import { useState, useEffect, useMemo } from "react";
@@ -30,8 +31,11 @@ interface SecondaryFiltersProps {
   activeFilter: StatusFilter;
   onFilterChange: (filter: StatusFilter) => void;
   counts: {
+    all: number;
     drafts: number;
     published: number;
+    waiting: number;
+    rejected: number;
   };
 }
 
@@ -41,11 +45,11 @@ const SecondaryFilters = ({
   counts,
 }: SecondaryFiltersProps) => {
   const filters: Array<{ key: StatusFilter; label: string; count?: number }> = [
-    { key: "all", label: "All" },
+    { key: "all", label: "All", count: counts.all },
     { key: "drafts", label: "Drafts", count: counts.drafts },
     { key: "published", label: "Published", count: counts.published },
-    { key: "waiting", label: "Waiting for approval" },
-    { key: "rejected", label: "Rejected" },
+    { key: "waiting", label: "Waiting for approval", count: counts.waiting },
+    { key: "rejected", label: "Rejected", count: counts.rejected },
   ];
 
   return (
@@ -62,7 +66,7 @@ const SecondaryFilters = ({
           )}
         >
           {filter.label}
-          {filter.count !== undefined && filter.count > 0 && (
+          {filter.count !== undefined && (
             <span
               className={cn(
                 "ml-1.5 px-1.5 py-0.5 text-xs rounded-full font-medium",
@@ -183,6 +187,14 @@ export default function ProfileContent({
     limit
   );
 
+  // Accurate per-status counts for the filter buttons. Independent of the
+  // active filter, so switching filters no longer changes the displayed counts.
+  const postCountsQuery = useUserPostCounts(
+    isContentTab && isOwnProfile,
+    username,
+    tabNameToPostType(activeTab)
+  );
+
   // Get current data based on active tab / filter
   const currentQuery =
     activeTab === "starred"
@@ -230,10 +242,14 @@ export default function ProfileContent({
     );
   }
 
-  // Calculate counts for secondary filters (only for own profile)
+  // Counts for the secondary filter buttons, from the dedicated counts query.
+  const counts = postCountsQuery.data;
   const filterCounts = {
-    drafts: currentPosts.filter((p) => !p.is_published).length,
-    published: currentPosts.filter((p) => p.is_published).length,
+    all: (counts?.published ?? 0) + (counts?.drafts ?? 0),
+    drafts: counts?.drafts ?? 0,
+    published: counts?.published ?? 0,
+    waiting: counts?.waiting ?? 0,
+    rejected: counts?.rejected ?? 0,
   };
 
   // Filter posts based on status filter (client-side for now) and, on the
@@ -354,7 +370,7 @@ export default function ProfileContent({
           <SecondaryFilters
             activeFilter={statusFilter}
             onFilterChange={setStatusFilter}
-            counts={{ drafts: 0, published: 0 }}
+            counts={filterCounts}
           />
         )}
         <LoadingSkeleton />
@@ -370,7 +386,7 @@ export default function ProfileContent({
           <SecondaryFilters
             activeFilter={statusFilter}
             onFilterChange={setStatusFilter}
-            counts={{ drafts: 0, published: 0 }}
+            counts={filterCounts}
           />
         )}
         <EmptyState

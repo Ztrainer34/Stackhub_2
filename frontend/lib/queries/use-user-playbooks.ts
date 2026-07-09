@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   listUserPosts,
   listUserPostsByStatus,
+  getUserPostCounts,
   listUserStarredPosts,
   getUserKeyPlaybooks,
   setKeyPlaybooks,
@@ -40,6 +41,21 @@ export function useUserPostsByStatus(
     queryFn: async () => {
       const supabase = createClient();
       return listUserPostsByStatus(username, status, postType, page, limit, supabase);
+    },
+    enabled,
+  });
+}
+
+export function useUserPostCounts(
+  enabled: boolean,
+  username: string,
+  postType: PostType | "" = ""
+) {
+  return useQuery({
+    queryKey: ["post-counts", username, postType],
+    queryFn: async () => {
+      const supabase = createClient();
+      return getUserPostCounts(username, postType, supabase);
     },
     enabled,
   });

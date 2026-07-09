@@ -161,6 +161,25 @@ WHERE
 ORDER BY updated_at DESC
 LIMIT $2 OFFSET $3;
 
+-- name: GetUserPostCounts :one
+-- Owner-only counts for the profile status filters. Each category is mutually
+-- exclusive: waiting = has a pending ticket; rejected = has a rejected ticket
+-- and no pending; published/drafts = neither, split by publish state.
+SELECT
+  COUNT(*) FILTER (WHERE NOT sub.has_pending AND NOT sub.has_rejected AND sub.is_published)::int AS published,
+  COUNT(*) FILTER (WHERE NOT sub.has_pending AND NOT sub.has_rejected AND NOT sub.is_published)::int AS drafts,
+  COUNT(*) FILTER (WHERE sub.has_pending)::int AS waiting,
+  COUNT(*) FILTER (WHERE sub.has_rejected AND NOT sub.has_pending)::int AS rejected
+FROM (
+  SELECT
+    COALESCE(p.is_published, false) AS is_published,
+    EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = p.id AND tt.status = 'pending') AS has_pending,
+    EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = p.id AND tt.status = 'rejected') AS has_rejected
+  FROM posts p
+  WHERE p.author_id = sqlc.arg(author_id)
+    AND (sqlc.arg(use_post_filter)::boolean = false OR p.type = sqlc.arg(post_filter))
+) sub;
+
 -- name: UpdatePost :exec
 UPDATE posts
 SET name = $2, description = $3, updated_at = now()
