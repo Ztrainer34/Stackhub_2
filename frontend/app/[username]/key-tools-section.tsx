@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Pencil, Check } from "lucide-react";
-import { Tool } from "@/lib/tool";
+import { Tool, toolHref } from "@/lib/tool";
 import { ToolLogo } from "@/components/tool-logo";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -33,7 +33,7 @@ interface KeyToolsSectionProps {
 function KeyToolSlot({ tool }: { tool: Tool }) {
   return (
     <Link
-      href={`/tool/${tool.id}`}
+      href={toolHref(tool)}
       className="flex flex-col items-center gap-2 group"
     >
       <div className="bg-white rounded-full border shadow-sm flex items-center justify-center p-3 transition-shadow group-hover:shadow-md">

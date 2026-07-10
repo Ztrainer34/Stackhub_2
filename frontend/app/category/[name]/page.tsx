@@ -8,7 +8,7 @@ import {
 import { ToolLogo } from "@/components/tool-logo";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
-import { Tool } from "@/lib/tool";
+import { Tool, toolHref } from "@/lib/tool";
 import { Pagination } from "@/components/pagination";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useCategoryTools, useCategory } from "@/lib/queries/use-category-tools";
@@ -25,7 +25,7 @@ function ToolCard({ tool }: ToolCardProps) {
     : tool.description || "No description available";
 
   return (
-    <Link href={`/tool/${tool.id}`}>
+    <Link href={toolHref(tool)}>
       <Card className="h-full hover:shadow-lg transition-shadow duration-200 cursor-pointer flex flex-col">
         <CardContent className="p-6 flex flex-col flex-1">
           <div className="flex items-start gap-4 mb-4">

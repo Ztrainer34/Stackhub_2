@@ -45,7 +45,7 @@ export default function HomepageContent({
           <CardContent>
             <Link href="/new">
               <Button className="w-full">
-                Start Writing
+                Add Playbook
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>

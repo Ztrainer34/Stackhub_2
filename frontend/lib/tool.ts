@@ -31,6 +31,26 @@ export type PaginatedToolsResponse = {
   total_pages: number;
 };
 
+/**
+ * URL slug for a tool: the name lowercased, with every run of non-alphanumeric
+ * characters collapsed to "-" (e.g. "Brevo Marketing Platform" ->
+ * "brevo-marketing-platform").
+ *
+ * Must stay in sync with the GetToolIDBySlug query in the backend.
+ */
+export function toolSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+/** Canonical path to a tool's page. */
+export function toolHref(tool: { name: string; id: string }): string {
+  const slug = toolSlug(tool.name);
+  return `/tool/${slug || tool.id}`;
+}
+
 export async function getTool(
   supabaseClient: SupabaseClient,
   id: string

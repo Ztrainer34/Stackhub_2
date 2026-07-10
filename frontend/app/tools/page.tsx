@@ -18,6 +18,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Search, Wrench, Calendar, ExternalLink, Filter } from "lucide-react";
 import { ToolLogo } from "@/components/tool-logo";
+import { toolHref } from "@/lib/tool";
 
 // Mock data structure - will be replaced with real API calls
 interface ToolItem {
@@ -70,8 +71,8 @@ function ToolCard({ tool }: { tool: ToolItem }) {
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between">
                 <div>
-                  <Link 
-                    href={`/tool/${tool.id}`}
+                  <Link
+                    href={toolHref(tool)}
                     className="font-semibold text-primary hover:underline"
                   >
                     {tool.name}

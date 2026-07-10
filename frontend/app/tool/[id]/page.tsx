@@ -73,6 +73,10 @@ export default async function ToolPage({
     notFound();
   }
 
+  // `id` here is the slug, but ToolActions (and the stack/watchlist/follow
+  // mutations) key off the tool's UUID. Seed that key so they hydrate too.
+  queryClient.setQueryData(["tool", tool.id], tool);
+
   const sections = tool.description ? parseDescription(tool.description) : [];
 
 

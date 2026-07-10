@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/select";
 import CategoryFilter from "@/components/category-filter";
 import Link from "next/link";
-import { Tool } from "@/lib/tool";
+import { Tool, toolHref } from "@/lib/tool";
 import { Layers, Eye, Search } from "lucide-react";
 import { useUserStack, useUserWatchlist } from "@/lib/queries/use-user-tools";
 import {
@@ -47,7 +47,7 @@ function ToolCard({
       : tool.description || "No description available";
 
   return (
-    <Link href={`/tool/${tool.id}`}>
+    <Link href={toolHref(tool)}>
       <Card className="h-full hover:shadow-lg transition-shadow duration-200 cursor-pointer flex flex-col">
         <CardContent className="p-5 flex flex-col flex-1">
           <div className="flex items-start gap-3 mb-3">

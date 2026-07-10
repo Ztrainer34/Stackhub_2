@@ -1245,11 +1245,16 @@ func (app *App) autocompleteCategory(w http.ResponseWriter, r *http.Request) {
 func (app *App) getTool(w http.ResponseWriter, r *http.Request) {
 	idUnparsed := chi.URLParam(r, "id")
 
+	// The URL segment is normally a slug (e.g. "brevo-marketing-platform"), but
+	// links created before slugs used the raw UUID — keep supporting both.
 	id, err := uuid.Parse(idUnparsed)
 
 	if err != nil {
-		http.Error(w, "Invalid ID", http.StatusBadRequest)
-		return
+		id, err = app.queries.GetToolIDBySlug(r.Context(), strings.ToLower(idUnparsed))
+		if err != nil {
+			http.Error(w, "Tool not found", http.StatusNotFound)
+			return
+		}
 	}
 
 	// Check if user is authenticated

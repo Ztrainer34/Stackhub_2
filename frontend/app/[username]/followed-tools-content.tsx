@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ToolLogo } from "@/components/tool-logo";
 import { Wrench } from "lucide-react";
-import { Tool } from "@/lib/tool";
+import { Tool, toolHref } from "@/lib/tool";
 import { useUserFollowedTools } from "@/lib/queries/use-user-tools";
 import { useAuth } from "@/lib/queries/use-auth";
 import { ProfileToolActions } from "@/components/profile-tool-actions";
@@ -80,7 +80,7 @@ function FollowedToolCard({
       : tool.description || "No description available";
 
   return (
-    <Link href={`/tool/${tool.id}`}>
+    <Link href={toolHref(tool)}>
       <Card className="h-full hover:shadow-lg transition-shadow duration-200 cursor-pointer flex flex-col">
         <CardContent className="p-5 flex flex-col flex-1">
           <div className="flex items-start gap-3 mb-3">

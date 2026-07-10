@@ -2336,6 +2336,19 @@ func (q *Queries) ListUserPostsByApprovalStatus(ctx context.Context, arg ListUse
 	return items, nil
 }
 
+const getToolIDBySlug = `-- name: GetToolIDBySlug :one
+SELECT id FROM tools
+WHERE btrim(lower(regexp_replace(name, '[^a-zA-Z0-9]+', '-', 'g')), '-') = $1
+LIMIT 1
+`
+
+func (q *Queries) GetToolIDBySlug(ctx context.Context, slug string) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getToolIDBySlug, slug)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getUserPostCounts = `-- name: GetUserPostCounts :one
 SELECT
   COUNT(*) FILTER (WHERE NOT sub.has_pending AND NOT sub.has_rejected AND sub.is_published)::int AS published,

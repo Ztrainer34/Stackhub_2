@@ -312,6 +312,14 @@ INSERT INTO tool_categories (
   $1, $2
 );
 
+-- name: GetToolIDBySlug :one
+-- Resolves a URL slug back to a tool id. The slug is the tool name lowercased
+-- with every run of non-alphanumeric characters collapsed to '-'. Must stay in
+-- sync with toolSlug() on the frontend.
+SELECT id FROM tools
+WHERE btrim(lower(regexp_replace(name, '[^a-zA-Z0-9]+', '-', 'g')), '-') = $1
+LIMIT 1;
+
 -- name: AutocompleteTool :many
 SELECT id, name, description, logo_url, similarity(name, $1) AS sml
 FROM tools

@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { ExternalLink } from "lucide-react";
 import { ToolLogo } from "@/components/tool-logo";
 import { useEffect, useMemo } from "react";
-import { Tool } from "@/lib/tool";
+import { Tool, toolHref } from "@/lib/tool";
 import { Post } from "@/lib/post";
 import { SearchableCategory, searchableCategoryValues } from "@/lib/search";
 import Link from "next/link";
@@ -51,7 +51,7 @@ interface ToolCardProps {
 
 function ToolCard({ tool }: ToolCardProps) {
   const handleCardClick = () => {
-    window.location.href = `/tool/${tool.id}`;
+    window.location.href = toolHref(tool);
   };
 
   return (
@@ -330,7 +330,7 @@ export default function SearchPage() {
       {category === "tool" &&
         (results as Tool[]).map((tool) => (
           <div key={tool.id}>
-            <Link href={`/tool/${tool.id}`}>
+            <Link href={toolHref(tool)}>
               <ToolCard tool={tool} />
             </Link>
           </div>
