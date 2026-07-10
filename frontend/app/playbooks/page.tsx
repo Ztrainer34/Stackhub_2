@@ -18,30 +18,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { Search, BookOpen, Calendar, User, Filter } from "lucide-react";
 import { ToolLogo } from "@/components/tool-logo";
-
-// Mock data structure - will be replaced with real API calls
-interface PlaybookItem {
-  id: string;
-  name: string;
-  slug: string;
-  description: string;
-  author_username: string;
-  updated_at: string;
-  tools: Array<{
-    id: string;
-    name: string;
-    logo_url: string;
-  }>;
-  type: string;
-}
-
-// GitHub-style filter tabs
-const PLAYBOOK_TYPES = [
-  { key: 'all', label: 'All', count: 1247 },
-  { key: 'playbook', label: 'Playbooks', count: 892 },
-  { key: 'combo', label: 'Combos', count: 245 },
-  { key: 'comparison', label: 'Comparisons', count: 110 },
-];
+import { Post } from "@/lib/post";
+import { useBrowsePosts } from "@/lib/queries/use-browse-posts";
 
 const SORT_OPTIONS = [
   { value: 'updated', label: 'Recently updated' },
@@ -50,7 +28,7 @@ const SORT_OPTIONS = [
   { value: 'stars', label: 'Most starred' },
 ];
 
-function PlaybookCard({ playbook }: { playbook: PlaybookItem }) {
+function PlaybookCard({ playbook }: { playbook: Post }) {
   return (
     <Card className="hover:bg-muted/50 transition-colors border-l-4 border-l-transparent hover:border-l-primary">
       <CardContent className="p-4">
@@ -75,15 +53,15 @@ function PlaybookCard({ playbook }: { playbook: PlaybookItem }) {
 
           {/* Tools */}
           <div className="flex items-center gap-2 flex-wrap">
-            {playbook.tools.slice(0, 3).map((tool) => (
+            {(playbook.tools ?? []).slice(0, 3).map((tool) => (
               <div key={tool.id} className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <ToolLogo name={tool.name} logoUrl={tool.logo_url} size="sm" />
                 <span>{tool.name}</span>
               </div>
             ))}
-            {playbook.tools.length > 3 && (
+            {(playbook.tools ?? []).length > 3 && (
               <span className="text-xs text-muted-foreground">
-                +{playbook.tools.length - 3} more
+                +{(playbook.tools ?? []).length - 3} more
               </span>
             )}
           </div>
@@ -143,12 +121,25 @@ export default function PlaybooksPage() {
   const currentType = searchParams.get('type') || 'all';
   const currentSort = searchParams.get('sort') || 'updated';
   const currentPage = parseInt(searchParams.get('page') || '1');
+  const currentSearch = searchParams.get('q') || '';
 
-  // Mock data - replace with real API call
-  const isLoading = false;
-  const playbooks: PlaybookItem[] = []; // Will be populated by API
-  const totalCount = 1247;
-  const totalPages = Math.ceil(totalCount / 20);
+  const { data, isLoading } = useBrowsePosts({
+    type: currentType,
+    q: currentSearch,
+    sort: currentSort,
+    page: currentPage,
+  });
+
+  const playbooks = data?.posts ?? [];
+  const totalCount = data?.total_count ?? 0;
+  const totalPages = data?.total_pages ?? 0;
+
+  const playbookTypes = [
+    { key: 'all', label: 'All', count: data?.counts.all_count ?? 0 },
+    { key: 'playbook', label: 'Playbooks', count: data?.counts.playbook_count ?? 0 },
+    { key: 'combo', label: 'Combos', count: data?.counts.combo_count ?? 0 },
+    { key: 'comparison', label: 'Comparisons', count: data?.counts.comparison_count ?? 0 },
+  ];
 
   const updateUrl = (params: Record<string, string>) => {
     const newParams = new URLSearchParams(searchParams.toString());
@@ -209,7 +200,7 @@ export default function PlaybooksPage() {
       {/* Filters - GitHub style tabs */}
       <div className="border-b mb-6">
         <div className="flex flex-wrap gap-6">
-          {PLAYBOOK_TYPES.map((type) => (
+          {playbookTypes.map((type) => (
             <button
               key={type.key}
               onClick={() => updateUrl({ type: type.key === 'all' ? '' : type.key })}

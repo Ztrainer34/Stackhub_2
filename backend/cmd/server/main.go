@@ -1019,6 +1019,89 @@ func (app *App) getUserPostCounts(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(counts)
 }
 
+// listPublishedPosts powers the public /playbooks browse page: paginated
+// published posts with a type filter, search and sort, plus per-type counts for
+// the filter tabs.
+func (app *App) listPublishedPosts(w http.ResponseWriter, r *http.Request) {
+	page := 1
+	limit := 20
+	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p >= 1 {
+			page = p
+		}
+	}
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
+			limit = l
+		}
+	}
+
+	offset := (page - 1) * limit
+
+	sort := r.URL.Query().Get("sort")
+	switch sort {
+	case "name", "created", "stars", "updated":
+	default:
+		sort = "updated"
+	}
+
+	params := db.ListPublishedPostsParams{
+		Limit:  int32(limit),
+		Offset: int32(offset),
+		Search: r.URL.Query().Get("q"),
+		Sort:   sort,
+	}
+
+	if typeStr := r.URL.Query().Get("type"); typeStr != "" && typeStr != "all" {
+		params.UseTypeFilter = true
+		params.TypeFilter = typeStr
+	}
+
+	res, err := app.queries.ListPublishedPosts(r.Context(), params)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to list posts", http.StatusInternalServerError)
+		return
+	}
+
+	if res == nil {
+		res = []db.ListPublishedPostsRow{}
+	}
+
+	counts, err := app.queries.GetPublishedPostTypeCounts(r.Context())
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to get post counts", http.StatusInternalServerError)
+		return
+	}
+
+	totalCount := int32(0)
+	if len(res) > 0 {
+		totalCount = int32(res[0].TotalCount)
+	}
+
+	totalPages := (totalCount + int32(limit) - 1) / int32(limit)
+
+	response := struct {
+		Posts      []db.ListPublishedPostsRow          `json:"posts"`
+		Page       int                                 `json:"page"`
+		Limit      int                                 `json:"limit"`
+		TotalCount int32                               `json:"total_count"`
+		TotalPages int32                               `json:"total_pages"`
+		Counts     db.GetPublishedPostTypeCountsRow    `json:"counts"`
+	}{
+		Posts:      res,
+		Page:       page,
+		Limit:      limit,
+		TotalCount: totalCount,
+		TotalPages: totalPages,
+		Counts:     counts,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 func (app *App) listUserStarredPosts(w http.ResponseWriter, r *http.Request) {
 	username := chi.URLParam(r, "slug")
 
@@ -3396,6 +3479,9 @@ func main() {
 		r.Get("/user/{slug}/key-playbooks", app.listUserKeyPlaybooks)
 		r.Get("/user/{slug}/followed-tools", app.listUserFollowedTools)
 		r.Get("/user/{slug}/stats", app.getUserStats)
+
+		// Public browse listing for /playbooks
+		r.Get("/posts", app.listPublishedPosts)
 
 		// Homepage routes
 		r.Get("/homepage/top-categories", app.getTopCategories)

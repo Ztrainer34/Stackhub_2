@@ -36,6 +36,38 @@ export interface PaginatedPostsResponse {
   total_pages: number;
 }
 
+export interface PostTypeCounts {
+  all_count: number;
+  playbook_count: number;
+  combo_count: number;
+  comparison_count: number;
+}
+
+export interface BrowsePostsResponse extends PaginatedPostsResponse {
+  counts: PostTypeCounts;
+}
+
+export async function listPublishedPosts(params: {
+  type?: string;
+  q?: string;
+  sort?: string;
+  page?: number;
+  limit?: number;
+}): Promise<BrowsePostsResponse> {
+  const search = new URLSearchParams();
+  if (params.type && params.type !== "all") search.set("type", params.type);
+  if (params.q) search.set("q", params.q);
+  if (params.sort) search.set("sort", params.sort);
+  search.set("page", String(params.page ?? 1));
+  search.set("limit", String(params.limit ?? 20));
+
+  const resp = await fetchApi(`/posts?${search.toString()}`);
+
+  if (!resp.ok) throw new Error("Failed to list posts");
+
+  return (await resp.json()) as BrowsePostsResponse;
+}
+
 export interface PostComment {
   id: string;
   post_id: string;

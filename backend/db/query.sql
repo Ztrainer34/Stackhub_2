@@ -409,6 +409,46 @@ WHERE is_published
 ORDER BY updated_at DESC
 LIMIT $1;
 
+-- name: ListPublishedPosts :many
+-- Public browse listing: published posts, optionally filtered by type and a
+-- name/description search, with a selectable sort. Posts whose tool is still
+-- pending (or was rejected) stay hidden, same as the profile listings.
+SELECT
+  pwt.*,
+  COUNT(*) OVER() AS total_count
+FROM posts_with_tools pwt
+WHERE pwt.is_published
+  AND (sqlc.arg(use_type_filter)::boolean = false OR pwt.type = sqlc.arg(type_filter))
+  AND (
+    sqlc.arg(search)::text = ''
+    OR pwt.name ILIKE '%' || sqlc.arg(search)::text || '%'
+    OR pwt.description ILIKE '%' || sqlc.arg(search)::text || '%'
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM tool_tickets tt
+    WHERE tt.post_id = pwt.id AND tt.status IN ('pending', 'rejected')
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(sort)::text = 'name' THEN pwt.name END ASC,
+  CASE WHEN sqlc.arg(sort)::text = 'created' THEN pwt.created_at END DESC,
+  CASE WHEN sqlc.arg(sort)::text = 'stars'
+    THEN (SELECT COUNT(*) FROM post_stars ps WHERE ps.post_id = pwt.id) END DESC,
+  pwt.updated_at DESC
+LIMIT $1 OFFSET $2;
+
+-- name: GetPublishedPostTypeCounts :one
+SELECT
+  COUNT(*)::int AS all_count,
+  COUNT(*) FILTER (WHERE p.type = 'playbook')::int AS playbook_count,
+  COUNT(*) FILTER (WHERE p.type = 'combo')::int AS combo_count,
+  COUNT(*) FILTER (WHERE p.type = 'comparison')::int AS comparison_count
+FROM posts p
+WHERE p.is_published
+  AND NOT EXISTS (
+    SELECT 1 FROM tool_tickets tt
+    WHERE tt.post_id = p.id AND tt.status IN ('pending', 'rejected')
+  );
+
 -- name: GetTopCategories :many
 SELECT 
   c.id,

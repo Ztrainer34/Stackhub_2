@@ -2391,6 +2391,132 @@ func (q *Queries) GetUserPostCounts(ctx context.Context, arg GetUserPostCountsPa
 	return i, err
 }
 
+const getPublishedPostTypeCounts = `-- name: GetPublishedPostTypeCounts :one
+SELECT
+  COUNT(*)::int AS all_count,
+  COUNT(*) FILTER (WHERE p.type = 'playbook')::int AS playbook_count,
+  COUNT(*) FILTER (WHERE p.type = 'combo')::int AS combo_count,
+  COUNT(*) FILTER (WHERE p.type = 'comparison')::int AS comparison_count
+FROM posts p
+WHERE p.is_published
+  AND NOT EXISTS (
+    SELECT 1 FROM tool_tickets tt
+    WHERE tt.post_id = p.id AND tt.status IN ('pending', 'rejected')
+  )
+`
+
+type GetPublishedPostTypeCountsRow struct {
+	AllCount        int32 `json:"all_count"`
+	PlaybookCount   int32 `json:"playbook_count"`
+	ComboCount      int32 `json:"combo_count"`
+	ComparisonCount int32 `json:"comparison_count"`
+}
+
+func (q *Queries) GetPublishedPostTypeCounts(ctx context.Context) (GetPublishedPostTypeCountsRow, error) {
+	row := q.db.QueryRow(ctx, getPublishedPostTypeCounts)
+	var i GetPublishedPostTypeCountsRow
+	err := row.Scan(
+		&i.AllCount,
+		&i.PlaybookCount,
+		&i.ComboCount,
+		&i.ComparisonCount,
+	)
+	return i, err
+}
+
+const listPublishedPosts = `-- name: ListPublishedPosts :many
+SELECT
+  pwt.id, pwt.type, pwt.name, pwt.slug, pwt.description, pwt.updated_at, pwt.created_at, pwt.last_draft_update, pwt.last_publish, pwt.author_id, pwt.is_published, pwt.author_username, pwt.tools,
+  COUNT(*) OVER() AS total_count
+FROM posts_with_tools pwt
+WHERE pwt.is_published
+  AND ($3::boolean = false OR pwt.type = $4)
+  AND (
+    $5::text = ''
+    OR pwt.name ILIKE '%' || $5::text || '%'
+    OR pwt.description ILIKE '%' || $5::text || '%'
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM tool_tickets tt
+    WHERE tt.post_id = pwt.id AND tt.status IN ('pending', 'rejected')
+  )
+ORDER BY
+  CASE WHEN $6::text = 'name' THEN pwt.name END ASC,
+  CASE WHEN $6::text = 'created' THEN pwt.created_at END DESC,
+  CASE WHEN $6::text = 'stars'
+    THEN (SELECT COUNT(*) FROM post_stars ps WHERE ps.post_id = pwt.id) END DESC,
+  pwt.updated_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListPublishedPostsParams struct {
+	Limit         int32  `json:"limit"`
+	Offset        int32  `json:"offset"`
+	UseTypeFilter bool   `json:"use_type_filter"`
+	TypeFilter    string `json:"type_filter"`
+	Search        string `json:"search"`
+	Sort          string `json:"sort"`
+}
+
+type ListPublishedPostsRow struct {
+	ID              uuid.UUID          `json:"id"`
+	Type            string             `json:"type"`
+	Name            string             `json:"name"`
+	Slug            string             `json:"slug"`
+	Description     string             `json:"description"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	LastDraftUpdate pgtype.Timestamptz `json:"last_draft_update"`
+	LastPublish     pgtype.Timestamptz `json:"last_publish"`
+	AuthorID        uuid.UUID          `json:"author_id"`
+	IsPublished     pgtype.Bool        `json:"is_published"`
+	AuthorUsername  string             `json:"author_username"`
+	Tools           json.RawMessage    `json:"tools"`
+	TotalCount      int64              `json:"total_count"`
+}
+
+func (q *Queries) ListPublishedPosts(ctx context.Context, arg ListPublishedPostsParams) ([]ListPublishedPostsRow, error) {
+	rows, err := q.db.Query(ctx, listPublishedPosts,
+		arg.Limit,
+		arg.Offset,
+		arg.UseTypeFilter,
+		arg.TypeFilter,
+		arg.Search,
+		arg.Sort,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPublishedPostsRow
+	for rows.Next() {
+		var i ListPublishedPostsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Type,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.UpdatedAt,
+			&i.CreatedAt,
+			&i.LastDraftUpdate,
+			&i.LastPublish,
+			&i.AuthorID,
+			&i.IsPublished,
+			&i.AuthorUsername,
+			&i.Tools,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserPosts = `-- name: ListUserPosts :many
 SELECT
   id, type, name, slug, description, updated_at, created_at, last_draft_update, last_publish, author_id, is_published, author_username, tools,
