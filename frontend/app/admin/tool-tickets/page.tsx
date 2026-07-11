@@ -184,7 +184,11 @@ export default function ToolTicketsPage() {
                   <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-sm text-muted-foreground">
                     <span>Requested by <strong>{ticket.requester_username}</strong></span>
                     <span className="hidden sm:inline">•</span>
-                    <span>for post: <Link href={`/${ticket.requester_username}/${ticket.post_slug}`} className="text-blue-600 hover:underline">{ticket.post_name}</Link></span>
+                    {ticket.post_slug ? (
+                      <span>for post: <Link href={`/${ticket.requester_username}/${ticket.post_slug}`} className="text-blue-600 hover:underline">{ticket.post_name}</Link></span>
+                    ) : (
+                      <span>standalone suggestion</span>
+                    )}
                     <span className="hidden sm:inline">•</span>
                     <span>{formatDate(ticket.created_at)}</span>
                     {ticket.resolved_at && (

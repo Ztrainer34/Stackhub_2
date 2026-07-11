@@ -7,9 +7,10 @@ export interface ToolTicket {
   tool_description: string;
   tool_website: string;
   status: "pending" | "resolved" | "rejected";
-  post_id: string;
-  post_name: string;
-  post_slug: string;
+  // Null for standalone suggestions submitted from the /tools "Add tool" flow.
+  post_id: string | null;
+  post_name: string | null;
+  post_slug: string | null;
   requested_by: string;
   requester_username: string;
   resolved_by?: string;

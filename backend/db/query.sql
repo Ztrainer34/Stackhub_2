@@ -524,6 +524,15 @@ INSERT INTO tool_tickets (
 )
 RETURNING id;
 
+-- name: CreateStandaloneToolTicket :one
+-- A tool suggestion not tied to any playbook (from the /tools "Add tool" flow).
+INSERT INTO tool_tickets (
+  post_id, requested_by, tool_name, tool_description, tool_website
+) VALUES (
+  NULL, $1, $2, $3, $4
+)
+RETURNING id;
+
 -- name: AddToolTicketCategories :copyfrom
 INSERT INTO tool_ticket_categories (ticket_id, category_id)
 VALUES ($1, $2);
@@ -558,7 +567,7 @@ SELECT
   COUNT(*) OVER() AS total_count
 FROM
   tool_tickets tt
-JOIN
+LEFT JOIN
   posts p ON tt.post_id = p.id
 JOIN
   profiles requester ON tt.requested_by = requester.id
@@ -605,7 +614,7 @@ SELECT
   ) AS categories
 FROM
   tool_tickets tt
-JOIN
+LEFT JOIN
   posts p ON tt.post_id = p.id
 JOIN
   profiles requester ON tt.requested_by = requester.id

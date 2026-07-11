@@ -202,12 +202,18 @@ export default function ToolTicketDetailPage({ params }: ToolTicketDetailPagePro
                 <FileText className="h-4 w-4 text-muted-foreground" />
                 <div>
                   <p className="font-medium">Associated Post</p>
-                  <Link 
-                    href={`/${ticket.requester_username}/${ticket.post_slug}`}
-                    className="text-blue-600 hover:underline text-sm"
-                  >
-                    {ticket.post_name}
-                  </Link>
+                  {ticket.post_slug ? (
+                    <Link
+                      href={`/${ticket.requester_username}/${ticket.post_slug}`}
+                      className="text-blue-600 hover:underline text-sm"
+                    >
+                      {ticket.post_name}
+                    </Link>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Standalone suggestion (no post)
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -234,27 +240,29 @@ export default function ToolTicketDetailPage({ params }: ToolTicketDetailPagePro
           </Card>
 
           {/* Post Preview */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Related Post</CardTitle>
-              <CardDescription>The post this tool was requested for</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Link 
-                href={`/${ticket.requester_username}/${ticket.post_slug}`}
-                className="block p-4 border rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                <h4 className="font-semibold text-sm">{ticket.post_name}</h4>
-                <p className="text-xs text-muted-foreground mt-1">
-                  by {ticket.requester_username}
-                </p>
-                <div className="flex items-center gap-1 mt-2 text-xs text-blue-600">
-                  <ExternalLink className="h-3 w-3" />
-                  View Post
-                </div>
-              </Link>
-            </CardContent>
-          </Card>
+          {ticket.post_slug && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Related Post</CardTitle>
+                <CardDescription>The post this tool was requested for</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Link
+                  href={`/${ticket.requester_username}/${ticket.post_slug}`}
+                  className="block p-4 border rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  <h4 className="font-semibold text-sm">{ticket.post_name}</h4>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    by {ticket.requester_username}
+                  </p>
+                  <div className="flex items-center gap-1 mt-2 text-xs text-blue-600">
+                    <ExternalLink className="h-3 w-3" />
+                    View Post
+                  </div>
+                </Link>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>

@@ -438,8 +438,36 @@ func (q *Queries) CreateToolTicket(ctx context.Context, arg CreateToolTicketPara
 	return id, err
 }
 
+const createStandaloneToolTicket = `-- name: CreateStandaloneToolTicket :one
+INSERT INTO tool_tickets (
+  post_id, requested_by, tool_name, tool_description, tool_website
+) VALUES (
+  NULL, $1, $2, $3, $4
+)
+RETURNING id
+`
+
+type CreateStandaloneToolTicketParams struct {
+	RequestedBy     uuid.UUID   `json:"requested_by"`
+	ToolName        string      `json:"tool_name"`
+	ToolDescription pgtype.Text `json:"tool_description"`
+	ToolWebsite     pgtype.Text `json:"tool_website"`
+}
+
+func (q *Queries) CreateStandaloneToolTicket(ctx context.Context, arg CreateStandaloneToolTicketParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createStandaloneToolTicket,
+		arg.RequestedBy,
+		arg.ToolName,
+		arg.ToolDescription,
+		arg.ToolWebsite,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const deleteNotification = `-- name: DeleteNotification :exec
-DELETE FROM notifications 
+DELETE FROM notifications
 WHERE id = $1 AND recipient_id = $2
 `
 
@@ -890,7 +918,7 @@ SELECT
   ) AS categories
 FROM
   tool_tickets tt
-JOIN
+LEFT JOIN
   posts p ON tt.post_id = p.id
 JOIN
   profiles requester ON tt.requested_by = requester.id
@@ -908,7 +936,7 @@ GROUP BY
 
 type GetToolTicketRow struct {
 	ID                uuid.UUID          `json:"id"`
-	PostID            uuid.UUID          `json:"post_id"`
+	PostID            pgtype.UUID        `json:"post_id"`
 	RequestedBy       uuid.UUID          `json:"requested_by"`
 	ToolName          string             `json:"tool_name"`
 	ToolDescription   pgtype.Text        `json:"tool_description"`
@@ -919,8 +947,8 @@ type GetToolTicketRow struct {
 	ResolvedAt        pgtype.Timestamptz `json:"resolved_at"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
-	PostName          string             `json:"post_name"`
-	PostSlug          string             `json:"post_slug"`
+	PostName          pgtype.Text        `json:"post_name"`
+	PostSlug          pgtype.Text        `json:"post_slug"`
 	RequesterUsername string             `json:"requester_username"`
 	ResolverUsername  pgtype.Text        `json:"resolver_username"`
 	Categories        interface{}        `json:"categories"`
@@ -2158,7 +2186,7 @@ SELECT
   COUNT(*) OVER() AS total_count
 FROM
   tool_tickets tt
-JOIN
+LEFT JOIN
   posts p ON tt.post_id = p.id
 JOIN
   profiles requester ON tt.requested_by = requester.id
@@ -2185,7 +2213,7 @@ type ListToolTicketsParams struct {
 
 type ListToolTicketsRow struct {
 	ID                uuid.UUID          `json:"id"`
-	PostID            uuid.UUID          `json:"post_id"`
+	PostID            pgtype.UUID        `json:"post_id"`
 	RequestedBy       uuid.UUID          `json:"requested_by"`
 	ToolName          string             `json:"tool_name"`
 	ToolDescription   pgtype.Text        `json:"tool_description"`
@@ -2196,8 +2224,8 @@ type ListToolTicketsRow struct {
 	ResolvedAt        pgtype.Timestamptz `json:"resolved_at"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
-	PostName          string             `json:"post_name"`
-	PostSlug          string             `json:"post_slug"`
+	PostName          pgtype.Text        `json:"post_name"`
+	PostSlug          pgtype.Text        `json:"post_slug"`
 	RequesterUsername string             `json:"requester_username"`
 	ResolverUsername  pgtype.Text        `json:"resolver_username"`
 	Categories        interface{}        `json:"categories"`

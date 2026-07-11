@@ -1368,6 +1368,78 @@ func (app *App) getTool(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+type SuggestToolRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Website     string `json:"website"`
+	Categories  []int  `json:"categories"`
+}
+
+// suggestTool creates a standalone tool suggestion (a tool ticket with no
+// associated playbook) from the /tools "Add tool" flow. Admins resolve it the
+// same way as playbook-originated tickets.
+func (app *App) suggestTool(w http.ResponseWriter, r *http.Request) {
+	userID := extractUserIDFromRequest(r)
+	defer r.Body.Close()
+
+	var req SuggestToolRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Println(err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if strings.TrimSpace(req.Name) == "" {
+		http.Error(w, "Tool name is required", http.StatusBadRequest)
+		return
+	}
+
+	tx, err := app.db.Begin(r.Context())
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to start transaction", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback(r.Context())
+
+	qtx := app.queries.WithTx(tx)
+
+	ticketID, err := qtx.CreateStandaloneToolTicket(r.Context(), db.CreateStandaloneToolTicketParams{
+		RequestedBy:     userID,
+		ToolName:        strings.TrimSpace(req.Name),
+		ToolDescription: pgtype.Text{String: req.Description, Valid: true},
+		ToolWebsite:     pgtype.Text{String: req.Website, Valid: true},
+	})
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to create tool suggestion", http.StatusInternalServerError)
+		return
+	}
+
+	if len(req.Categories) > 0 {
+		var categoryLinks []db.AddToolTicketCategoriesParams
+		for _, categoryID := range req.Categories {
+			categoryLinks = append(categoryLinks, db.AddToolTicketCategoriesParams{
+				TicketID:   ticketID,
+				CategoryID: int32(categoryID),
+			})
+		}
+		if _, err := qtx.AddToolTicketCategories(r.Context(), categoryLinks); err != nil {
+			log.Println(err)
+			http.Error(w, "Failed to assign categories", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	if err := tx.Commit(r.Context()); err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to commit transaction", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+}
+
 func (app *App) getToolsByCategory(w http.ResponseWriter, r *http.Request) {
 	categorySlug := chi.URLParam(r, "categorySlug")
 	if categorySlug == "" {
@@ -2001,17 +2073,20 @@ func (app *App) resolveTicketWithExisting(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Add the tool to the post (if not already there)
-	addPostToolParams := db.AddPostToolSafeParams{
-		PostID: ticket.PostID,
-		ToolID: req.ToolID,
-	}
+	// Add the tool to the post (if not already there). Standalone suggestions
+	// have no post, so this step is skipped for them.
+	if ticket.PostID.Valid {
+		addPostToolParams := db.AddPostToolSafeParams{
+			PostID: uuid.UUID(ticket.PostID.Bytes),
+			ToolID: req.ToolID,
+		}
 
-	err = qtx.AddPostToolSafe(r.Context(), addPostToolParams)
-	if err != nil {
-		log.Println(err)
-		http.Error(w, "Could add tool to post", http.StatusInternalServerError)
-		return
+		err = qtx.AddPostToolSafe(r.Context(), addPostToolParams)
+		if err != nil {
+			log.Println(err)
+			http.Error(w, "Could add tool to post", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	err = tx.Commit(r.Context())
@@ -2114,17 +2189,19 @@ func (app *App) resolveTicketWithNew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Add the new tool to the post
-	addPostToolParams := db.AddPostToolSafeParams{
-		PostID: ticket.PostID,
-		ToolID: tool.ID,
-	}
+	// Add the new tool to the post. Standalone suggestions have no post.
+	if ticket.PostID.Valid {
+		addPostToolParams := db.AddPostToolSafeParams{
+			PostID: uuid.UUID(ticket.PostID.Bytes),
+			ToolID: tool.ID,
+		}
 
-	err = qtx.AddPostToolSafe(r.Context(), addPostToolParams)
-	if err != nil {
-		log.Println(err)
-		http.Error(w, "Could add tool to post", http.StatusInternalServerError)
-		return
+		err = qtx.AddPostToolSafe(r.Context(), addPostToolParams)
+		if err != nil {
+			log.Println(err)
+			http.Error(w, "Could add tool to post", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	err = tx.Commit(r.Context())
@@ -3393,6 +3470,9 @@ func main() {
 		// Post routes
 		// r.Get("/post", app.listPosts)
 		r.Post("/post/create", app.createPost)
+
+		// Standalone tool suggestion from the /tools "Add tool" flow.
+		r.Post("/tool/suggest", app.suggestTool)
 		r.Post("/post/{id}/save", app.savePost)
 		r.Post("/post/{id}/publish", app.publishPost)
 		r.Get("/post/{id}/unpublish", app.unpublishPost)

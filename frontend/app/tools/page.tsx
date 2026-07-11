@@ -19,6 +19,7 @@ import Link from "next/link";
 import { Search, Wrench, Calendar, ExternalLink, Filter } from "lucide-react";
 import { ToolLogo } from "@/components/tool-logo";
 import { toolHref } from "@/lib/tool";
+import { AddToolDialog } from "@/components/add-tool-dialog";
 
 // Mock data structure - will be replaced with real API calls
 interface ToolItem {
@@ -202,9 +203,9 @@ export default function ToolsPage() {
         </div>
       </div>
 
-      {/* Search */}
-      <div className="mb-6">
-        <form onSubmit={handleSearch}>
+      {/* Search + Add tool */}
+      <div className="mb-6 flex flex-col sm:flex-row gap-3">
+        <form onSubmit={handleSearch} className="flex-1">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -215,6 +216,7 @@ export default function ToolsPage() {
             />
           </div>
         </form>
+        <AddToolDialog />
       </div>
 
       {/* Filters - GitHub style tabs */}

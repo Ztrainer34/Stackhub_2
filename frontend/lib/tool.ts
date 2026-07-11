@@ -51,6 +51,29 @@ export function toolHref(tool: { name: string; id: string }): string {
   return `/tool/${slug || tool.id}`;
 }
 
+export interface SuggestToolData {
+  name: string;
+  description?: string;
+  website?: string;
+  categories: number[];
+}
+
+export async function suggestTool(
+  supabaseClient: SupabaseClient,
+  data: SuggestToolData
+): Promise<void> {
+  const response = await fetchApiAuthenticated(supabaseClient, `/tool/suggest`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const msg = await response.text();
+    throw new Error(msg || "Failed to submit tool");
+  }
+}
+
 export async function getTool(
   supabaseClient: SupabaseClient,
   id: string
