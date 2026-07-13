@@ -60,7 +60,6 @@ export function useAuth() {
 
 export interface OnboardingData {
   username: string;
-  display_name: string;
 }
 
 export function useOnboarding() {

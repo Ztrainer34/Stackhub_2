@@ -845,7 +845,7 @@ func (app *App) deletePost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *App) listUserPosts(w http.ResponseWriter, r *http.Request) {
-	slug := chi.URLParam(r, "slug")
+	slug := strings.ToLower(chi.URLParam(r, "slug"))
 
 	// Parse pagination parameters
 	page := 1
@@ -923,7 +923,7 @@ func (app *App) listUserPosts(w http.ResponseWriter, r *http.Request) {
 // filters on author_id = the authenticated user, so requesting another user's
 // slug yields no results.
 func (app *App) listUserPostsByApprovalStatus(w http.ResponseWriter, r *http.Request) {
-	slug := chi.URLParam(r, "slug")
+	slug := strings.ToLower(chi.URLParam(r, "slug"))
 
 	status := r.URL.Query().Get("status")
 	if status != "waiting" && status != "rejected" && status != "all" {
@@ -1103,7 +1103,7 @@ func (app *App) listPublishedPosts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *App) listUserStarredPosts(w http.ResponseWriter, r *http.Request) {
-	username := chi.URLParam(r, "slug")
+	username := strings.ToLower(chi.URLParam(r, "slug"))
 
 	if username == "" {
 		http.Error(w, "Username cannot be empty", http.StatusBadRequest)
@@ -1178,7 +1178,7 @@ func (app *App) listUserStarredPosts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *App) getUserPost(w http.ResponseWriter, r *http.Request) {
-	slug := chi.URLParam(r, "slug")
+	slug := strings.ToLower(chi.URLParam(r, "slug"))
 	post_slug := chi.URLParam(r, "post_slug")
 
 	// Avoid spamming db if request contains empty slugs
@@ -1574,7 +1574,11 @@ func (app *App) updateProfile(w http.ResponseWriter, r *http.Request) {
 
 	// Validate username if provided
 	if form.Username != nil {
-		username := *form.Username
+		// Usernames are case-insensitive: normalize before validating/storing.
+		normalized := strings.ToLower(strings.TrimSpace(*form.Username))
+		form.Username = &normalized
+
+		username := normalized
 		if len(username) < 3 {
 			http.Error(w, "Username must be at least 3 characters long", http.StatusBadRequest)
 			return
@@ -1677,7 +1681,7 @@ func (app *App) getTopRecommendedUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *App) getUser(w http.ResponseWriter, r *http.Request) {
-	slug := chi.URLParam(r, "slug")
+	slug := strings.ToLower(chi.URLParam(r, "slug"))
 
 	if slug == "" {
 		http.Error(w, "User cannot be empty", http.StatusBadRequest)
@@ -2562,7 +2566,7 @@ func (app *App) unfollowTool(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *App) listUserFollowedTools(w http.ResponseWriter, r *http.Request) {
-	username := chi.URLParam(r, "slug")
+	username := strings.ToLower(chi.URLParam(r, "slug"))
 
 	if username == "" {
 		http.Error(w, "Username cannot be empty", http.StatusBadRequest)
@@ -2591,7 +2595,7 @@ func (app *App) listUserFollowedTools(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *App) listUserStack(w http.ResponseWriter, r *http.Request) {
-	username := chi.URLParam(r, "slug")
+	username := strings.ToLower(chi.URLParam(r, "slug"))
 
 	if username == "" {
 		http.Error(w, "Username cannot be empty", http.StatusBadRequest)
@@ -2620,7 +2624,7 @@ func (app *App) listUserStack(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *App) listUserWatchlist(w http.ResponseWriter, r *http.Request) {
-	username := chi.URLParam(r, "slug")
+	username := strings.ToLower(chi.URLParam(r, "slug"))
 
 	if username == "" {
 		http.Error(w, "Username cannot be empty", http.StatusBadRequest)
@@ -2649,7 +2653,7 @@ func (app *App) listUserWatchlist(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *App) listUserKeyTools(w http.ResponseWriter, r *http.Request) {
-	username := chi.URLParam(r, "slug")
+	username := strings.ToLower(chi.URLParam(r, "slug"))
 
 	if username == "" {
 		http.Error(w, "Username cannot be empty", http.StatusBadRequest)
@@ -2749,7 +2753,7 @@ func (app *App) setKeyTools(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *App) listUserKeyPlaybooks(w http.ResponseWriter, r *http.Request) {
-	username := chi.URLParam(r, "slug")
+	username := strings.ToLower(chi.URLParam(r, "slug"))
 
 	if username == "" {
 		http.Error(w, "Username cannot be empty", http.StatusBadRequest)
@@ -2778,7 +2782,7 @@ func (app *App) listUserKeyPlaybooks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *App) getUserStats(w http.ResponseWriter, r *http.Request) {
-	username := chi.URLParam(r, "slug")
+	username := strings.ToLower(chi.URLParam(r, "slug"))
 	if username == "" {
 		http.Error(w, "Username cannot be empty", http.StatusBadRequest)
 		return
@@ -2845,7 +2849,7 @@ func writeFollowList(w http.ResponseWriter, users []db.FollowUserRow, limit int)
 }
 
 func (app *App) listFollowers(w http.ResponseWriter, r *http.Request) {
-	username := chi.URLParam(r, "slug")
+	username := strings.ToLower(chi.URLParam(r, "slug"))
 	if username == "" {
 		http.Error(w, "Username cannot be empty", http.StatusBadRequest)
 		return
@@ -2877,7 +2881,7 @@ func (app *App) listFollowers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *App) listFollowing(w http.ResponseWriter, r *http.Request) {
-	username := chi.URLParam(r, "slug")
+	username := strings.ToLower(chi.URLParam(r, "slug"))
 	if username == "" {
 		http.Error(w, "Username cannot be empty", http.StatusBadRequest)
 		return
@@ -3118,6 +3122,10 @@ func (app *App) completeOnboarding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Usernames are case-insensitive: normalize to lowercase so "Max" and "max"
+	// are the same account.
+	req.Username = strings.ToLower(strings.TrimSpace(req.Username))
+
 	// Validate username
 	if req.Username == "" {
 		http.Error(w, "Username is required", http.StatusBadRequest)
@@ -3178,7 +3186,8 @@ func (app *App) completeOnboarding(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *App) checkUsernameAvailable(w http.ResponseWriter, r *http.Request) {
-	username := r.URL.Query().Get("username")
+	// Usernames are case-insensitive.
+	username := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("username")))
 
 	if username == "" {
 		http.Error(w, "Username parameter is required", http.StatusBadRequest)
