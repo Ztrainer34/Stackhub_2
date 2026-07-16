@@ -14,7 +14,10 @@ interface ProfileLayoutWrapperProps {
 }
 
 export default async function ProfileLayoutWrapper({ username, children }: ProfileLayoutWrapperProps) {
-  const user = await getUserFromUsername(username);
+  // getUserFromUsername throws when the profile doesn't exist (404 from the
+  // API). Treat any failure as "not found" so we render the 404 page instead of
+  // a server-side exception.
+  const user = await getUserFromUsername(username).catch(() => null);
 
   if (!user) {
     notFound();
