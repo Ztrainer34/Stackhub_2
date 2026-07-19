@@ -16,10 +16,9 @@ import { Pagination } from "@/components/pagination";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
-import { Search, BookOpen, Calendar, User, Filter } from "lucide-react";
-import { ToolLogo } from "@/components/tool-logo";
-import { Post } from "@/lib/post";
+import { Search, BookOpen, Filter } from "lucide-react";
 import { useBrowsePosts } from "@/lib/queries/use-browse-posts";
+import PostCard from "@/components/post-card";
 
 const SORT_OPTIONS = [
   { value: 'updated', label: 'Recently updated' },
@@ -27,66 +26,6 @@ const SORT_OPTIONS = [
   { value: 'name', label: 'Name' },
   { value: 'stars', label: 'Most starred' },
 ];
-
-function PlaybookCard({ playbook }: { playbook: Post }) {
-  return (
-    <Card className="hover:bg-muted/50 transition-colors border-l-4 border-l-transparent hover:border-l-primary">
-      <CardContent className="p-4">
-        <div className="space-y-3">
-          {/* Header */}
-          <div className="flex items-start justify-between">
-            <div className="flex-1 min-w-0">
-              <Link 
-                href={`/${playbook.author_username}/${playbook.slug}`}
-                className="font-semibold text-primary hover:underline"
-              >
-                {playbook.name}
-              </Link>
-              <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                {playbook.description}
-              </p>
-            </div>
-            <Badge variant="secondary" className="ml-2 flex-shrink-0">
-              {playbook.type}
-            </Badge>
-          </div>
-
-          {/* Tools */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {(playbook.tools ?? []).slice(0, 3).map((tool) => (
-              <div key={tool.id} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <ToolLogo name={tool.name} logoUrl={tool.logo_url} size="sm" />
-                <span>{tool.name}</span>
-              </div>
-            ))}
-            {(playbook.tools ?? []).length > 3 && (
-              <span className="text-xs text-muted-foreground">
-                +{(playbook.tools ?? []).length - 3} more
-              </span>
-            )}
-          </div>
-
-          {/* Meta info */}
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <div className="flex items-center gap-1">
-              <User className="w-3 h-3" />
-              <Link 
-                href={`/${playbook.author_username}`}
-                className="hover:text-primary"
-              >
-                {playbook.author_username}
-              </Link>
-            </div>
-            <div className="flex items-center gap-1">
-              <Calendar className="w-3 h-3" />
-              <span>Updated {new Date(playbook.updated_at).toLocaleDateString()}</span>
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
 
 function LoadingSkeleton() {
   return (
@@ -250,9 +189,14 @@ export default function PlaybooksPage() {
         <LoadingSkeleton />
       ) : playbooks.length > 0 ? (
         <>
-          <div className="space-y-4 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
             {playbooks.map((playbook) => (
-              <PlaybookCard key={playbook.id} playbook={playbook} />
+              <Link
+                key={playbook.id}
+                href={`/${playbook.author_username}/${playbook.slug}`}
+              >
+                <PostCard post={playbook} className="h-full" />
+              </Link>
             ))}
           </div>
 

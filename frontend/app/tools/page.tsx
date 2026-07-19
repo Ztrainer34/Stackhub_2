@@ -1,8 +1,13 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { 
   Select,
@@ -16,7 +21,7 @@ import { Pagination } from "@/components/pagination";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
-import { Search, Wrench, Calendar, ExternalLink, Filter } from "lucide-react";
+import { Search, Wrench, Calendar, Filter } from "lucide-react";
 import { ToolLogo } from "@/components/tool-logo";
 import { toolHref, BrowseTool } from "@/lib/tool";
 import { AddToolDialog } from "@/components/add-tool-dialog";
@@ -30,94 +35,53 @@ const SORT_OPTIONS = [
 
 function ToolCard({ tool }: { tool: BrowseTool }) {
   return (
-    <Card className="hover:bg-muted/50 transition-colors border-l-4 border-l-transparent hover:border-l-primary">
-      <CardContent className="p-4">
-        <div className="space-y-3">
-          {/* Header */}
-          <div className="flex items-start gap-3">
-            <div className="flex-shrink-0">
-              <div className="w-10 h-10 bg-white rounded-lg border shadow-sm flex items-center justify-center p-1">
-                <ToolLogo
-                  name={tool.name}
-                  logoUrl={tool.logo_url}
-                  size="sm"
-                />
-              </div>
+    <Link href={toolHref(tool)}>
+      <Card className="group hover:shadow-md transition-shadow cursor-pointer h-full">
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2 flex-wrap min-h-6">
+              {tool.categories.slice(0, 1).map((category) => (
+                <Badge key={category.id} variant="secondary" className="text-xs">
+                  {category.name}
+                </Badge>
+              ))}
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between">
-                <div>
-                  <Link
-                    href={toolHref(tool)}
-                    className="font-semibold text-primary hover:underline"
-                  >
-                    {tool.name}
-                  </Link>
-                  <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                    {tool.description}
-                  </p>
-                </div>
-                {tool.vendor?.website && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 px-2 flex-shrink-0"
-                    onClick={() => window.open(tool.vendor!.website!, '_blank')}
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                  </Button>
-                )}
-              </div>
+            <div className="w-10 h-10 bg-white rounded-lg border shadow-sm flex items-center justify-center p-1 flex-shrink-0">
+              <ToolLogo name={tool.name} logoUrl={tool.logo_url} size="sm" />
             </div>
           </div>
+          <CardTitle className="text-base font-semibold line-clamp-2 group-hover:text-primary transition-colors mt-2">
+            {tool.name}
+          </CardTitle>
+          <CardDescription className="text-sm line-clamp-2 mt-1">
+            {tool.description}
+          </CardDescription>
+        </CardHeader>
 
-          {/* Categories */}
-          <div className="flex items-center gap-2 flex-wrap ml-13">
-            {tool.categories.slice(0, 3).map((category) => (
-              <Badge key={category.id} variant="secondary" className="text-xs">
-                {category.name}
-              </Badge>
-            ))}
-            {tool.categories.length > 3 && (
-              <Badge variant="outline" className="text-xs">
-                +{tool.categories.length - 3} more
-              </Badge>
-            )}
+        <CardContent className="pt-0">
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Calendar className="w-3 h-3" />
+            <span>Updated {new Date(tool.updated_at).toLocaleDateString()}</span>
           </div>
-
-          {/* Meta info */}
-          <div className="flex items-center gap-4 text-xs text-muted-foreground ml-13">
-            <div className="flex items-center gap-1">
-              <Calendar className="w-3 h-3" />
-              <span>Updated {new Date(tool.updated_at).toLocaleDateString()}</span>
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </Link>
   );
 }
 
 function LoadingSkeleton() {
   return (
-    <div className="space-y-4">
-      {Array.from({ length: 8 }).map((_, i) => (
-        <Card key={i}>
-          <CardContent className="p-4">
-            <div className="space-y-3">
-              <div className="flex gap-3">
-                <Skeleton className="w-10 h-10 rounded-lg" />
-                <div className="flex-1 space-y-2">
-                  <Skeleton className="h-5 w-48" />
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-3/4" />
-                </div>
-              </div>
-              <div className="flex gap-2 ml-13">
-                <Skeleton className="h-5 w-16" />
-                <Skeleton className="h-5 w-20" />
-              </div>
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {Array.from({ length: 9 }).map((_, i) => (
+        <Card key={i} className="h-full">
+          <CardContent className="p-6 space-y-3">
+            <div className="flex justify-between">
+              <Skeleton className="h-5 w-20" />
+              <Skeleton className="w-10 h-10 rounded-lg" />
             </div>
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-2/3" />
           </CardContent>
         </Card>
       ))}
@@ -265,7 +229,7 @@ export default function ToolsPage() {
         <LoadingSkeleton />
       ) : tools.length > 0 ? (
         <>
-          <div className="space-y-4 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
             {tools.map((tool) => (
               <ToolCard key={tool.id} tool={tool} />
             ))}
