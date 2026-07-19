@@ -467,6 +467,32 @@ ORDER BY
   tool_count DESC, c.name ASC
 LIMIT $1;
 
+-- name: ListTools :many
+-- Public browse listing for /tools: all tools, optional name/description search
+-- and category (slug) filter, with a selectable sort.
+SELECT
+  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor,
+  COUNT(*) OVER() AS total_count
+FROM tools_with_details twd
+WHERE (
+    sqlc.arg(search)::text = ''
+    OR twd.name ILIKE '%' || sqlc.arg(search)::text || '%'
+    OR twd.description ILIKE '%' || sqlc.arg(search)::text || '%'
+  )
+  AND (
+    sqlc.arg(category_slug)::text = ''
+    OR EXISTS (
+      SELECT 1 FROM tool_categories tc
+      JOIN categories c ON tc.category_id = c.id
+      WHERE tc.tool_id = twd.id AND c.slug = sqlc.arg(category_slug)::text
+    )
+  )
+ORDER BY
+  CASE WHEN sqlc.arg(sort)::text = 'newest' THEN twd.created_at END DESC,
+  CASE WHEN sqlc.arg(sort)::text = 'updated' THEN twd.updated_at END DESC,
+  twd.name ASC
+LIMIT $1 OFFSET $2;
+
 -- name: GetToolsByCategory :many
 SELECT
   *,

@@ -51,6 +51,47 @@ export function toolHref(tool: { name: string; id: string }): string {
   return `/tool/${slug || tool.id}`;
 }
 
+export interface BrowseTool {
+  id: string;
+  name: string;
+  description: string | null;
+  logo_url: string | null;
+  created_at: string;
+  updated_at: string;
+  categories: Category[];
+  vendor: { website?: string | null } | null;
+}
+
+export interface BrowseToolsResponse {
+  tools: BrowseTool[];
+  page: number;
+  limit: number;
+  total_count: number;
+  total_pages: number;
+}
+
+export async function listTools(params: {
+  q?: string;
+  category?: string;
+  sort?: string;
+  page?: number;
+  limit?: number;
+}): Promise<BrowseToolsResponse> {
+  const search = new URLSearchParams();
+  if (params.q) search.set("q", params.q);
+  if (params.category && params.category !== "all")
+    search.set("category", params.category);
+  if (params.sort) search.set("sort", params.sort);
+  search.set("page", String(params.page ?? 1));
+  search.set("limit", String(params.limit ?? 24));
+
+  const resp = await fetchApi(`/tools?${search.toString()}`);
+
+  if (!resp.ok) throw new Error("Failed to list tools");
+
+  return (await resp.json()) as BrowseToolsResponse;
+}
+
 export interface SuggestToolData {
   name: string;
   description?: string;

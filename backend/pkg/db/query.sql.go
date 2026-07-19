@@ -784,6 +784,87 @@ func (q *Queries) GetTool(ctx context.Context, id uuid.UUID) (ToolsWithDetail, e
 	return i, err
 }
 
+const listTools = `-- name: ListTools :many
+SELECT
+  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor,
+  COUNT(*) OVER() AS total_count
+FROM tools_with_details twd
+WHERE (
+    $3::text = ''
+    OR twd.name ILIKE '%' || $3::text || '%'
+    OR twd.description ILIKE '%' || $3::text || '%'
+  )
+  AND (
+    $4::text = ''
+    OR EXISTS (
+      SELECT 1 FROM tool_categories tc
+      JOIN categories c ON tc.category_id = c.id
+      WHERE tc.tool_id = twd.id AND c.slug = $4::text
+    )
+  )
+ORDER BY
+  CASE WHEN $5::text = 'newest' THEN twd.created_at END DESC,
+  CASE WHEN $5::text = 'updated' THEN twd.updated_at END DESC,
+  twd.name ASC
+LIMIT $1 OFFSET $2
+`
+
+type ListToolsParams struct {
+	Limit        int32  `json:"limit"`
+	Offset       int32  `json:"offset"`
+	Search       string `json:"search"`
+	CategorySlug string `json:"category_slug"`
+	Sort         string `json:"sort"`
+}
+
+type ListToolsRow struct {
+	ID          uuid.UUID          `json:"id"`
+	Name        string             `json:"name"`
+	Description pgtype.Text        `json:"description"`
+	LogoUrl     pgtype.Text        `json:"logo_url"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	Categories  interface{}        `json:"categories"`
+	Vendor      json.RawMessage    `json:"vendor"`
+	TotalCount  int64              `json:"total_count"`
+}
+
+func (q *Queries) ListTools(ctx context.Context, arg ListToolsParams) ([]ListToolsRow, error) {
+	rows, err := q.db.Query(ctx, listTools,
+		arg.Limit,
+		arg.Offset,
+		arg.Search,
+		arg.CategorySlug,
+		arg.Sort,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListToolsRow
+	for rows.Next() {
+		var i ListToolsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.LogoUrl,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Categories,
+			&i.Vendor,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getToolAuthenticated = `-- name: GetToolAuthenticated :one
 SELECT
   id, name, description, logo_url, created_at, updated_at, categories, vendor,

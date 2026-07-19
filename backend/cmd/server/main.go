@@ -1440,6 +1440,78 @@ func (app *App) suggestTool(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 }
 
+// listTools powers the public /tools browse page: paginated tools with an
+// optional name/description search, a category (slug) filter and a sort.
+func (app *App) listTools(w http.ResponseWriter, r *http.Request) {
+	page := 1
+	limit := 24
+	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p >= 1 {
+			page = p
+		}
+	}
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
+			limit = l
+		}
+	}
+
+	offset := (page - 1) * limit
+
+	sort := r.URL.Query().Get("sort")
+	switch sort {
+	case "name", "updated", "newest":
+	default:
+		sort = "name"
+	}
+
+	category := r.URL.Query().Get("category")
+	if category == "all" {
+		category = ""
+	}
+
+	res, err := app.queries.ListTools(r.Context(), db.ListToolsParams{
+		Limit:        int32(limit),
+		Offset:       int32(offset),
+		Search:       r.URL.Query().Get("q"),
+		CategorySlug: category,
+		Sort:         sort,
+	})
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to list tools", http.StatusInternalServerError)
+		return
+	}
+
+	if res == nil {
+		res = []db.ListToolsRow{}
+	}
+
+	totalCount := int32(0)
+	if len(res) > 0 {
+		totalCount = int32(res[0].TotalCount)
+	}
+
+	totalPages := (totalCount + int32(limit) - 1) / int32(limit)
+
+	response := struct {
+		Tools      []db.ListToolsRow `json:"tools"`
+		Page       int               `json:"page"`
+		Limit      int               `json:"limit"`
+		TotalCount int32             `json:"total_count"`
+		TotalPages int32             `json:"total_pages"`
+	}{
+		Tools:      res,
+		Page:       page,
+		Limit:      limit,
+		TotalCount: totalCount,
+		TotalPages: totalPages,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 func (app *App) getToolsByCategory(w http.ResponseWriter, r *http.Request) {
 	categorySlug := chi.URLParam(r, "categorySlug")
 	if categorySlug == "" {
@@ -3555,6 +3627,7 @@ func main() {
 	r.Group(func(r chi.Router) {
 
 		// Tool routes
+		r.Get("/tools", app.listTools)
 		r.Get("/tool/autocomplete", app.autocompleteTool)
 		r.Get("/tools/category/{categorySlug}", app.getToolsByCategory)
 		r.Get("/category/{categorySlug}", app.getCategoryBySlug)

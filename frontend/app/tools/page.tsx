@@ -18,42 +18,17 @@ import { useState } from "react";
 import Link from "next/link";
 import { Search, Wrench, Calendar, ExternalLink, Filter } from "lucide-react";
 import { ToolLogo } from "@/components/tool-logo";
-import { toolHref } from "@/lib/tool";
+import { toolHref, BrowseTool } from "@/lib/tool";
 import { AddToolDialog } from "@/components/add-tool-dialog";
-
-// Mock data structure - will be replaced with real API calls
-interface ToolItem {
-  id: string;
-  name: string;
-  description: string;
-  logo_url: string;
-  updated_at: string;
-  categories: Array<{
-    id: number;
-    name: string;
-  }>;
-  vendor: {
-    website?: string;
-  };
-}
-
-// GitHub-style filter tabs
-const TOOL_CATEGORIES = [
-  { key: 'all', label: 'All', count: 2847 },
-  { key: 'ai-tools', label: 'AI Tools', count: 542 },
-  { key: 'design', label: 'Design', count: 387 },
-  { key: 'marketing', label: 'Marketing', count: 298 },
-  { key: 'development', label: 'Development', count: 445 },
-];
+import { useBrowseTools, useToolCategories } from "@/lib/queries/use-browse-tools";
 
 const SORT_OPTIONS = [
   { value: 'name', label: 'Name' },
   { value: 'updated', label: 'Recently updated' },
-  { value: 'popular', label: 'Most popular' },
   { value: 'newest', label: 'Newest first' },
 ];
 
-function ToolCard({ tool }: { tool: ToolItem }) {
+function ToolCard({ tool }: { tool: BrowseTool }) {
   return (
     <Card className="hover:bg-muted/50 transition-colors border-l-4 border-l-transparent hover:border-l-primary">
       <CardContent className="p-4">
@@ -82,12 +57,12 @@ function ToolCard({ tool }: { tool: ToolItem }) {
                     {tool.description}
                   </p>
                 </div>
-                {tool.vendor.website && (
+                {tool.vendor?.website && (
                   <Button
                     variant="ghost"
                     size="sm"
                     className="h-8 px-2 flex-shrink-0"
-                    onClick={() => window.open(tool.vendor.website, '_blank')}
+                    onClick={() => window.open(tool.vendor!.website!, '_blank')}
                   >
                     <ExternalLink className="w-3 h-3" />
                   </Button>
@@ -158,12 +133,28 @@ export default function ToolsPage() {
   const currentCategory = searchParams.get('category') || 'all';
   const currentSort = searchParams.get('sort') || 'name';
   const currentPage = parseInt(searchParams.get('page') || '1');
+  const currentSearch = searchParams.get('q') || '';
 
-  // Mock data - replace with real API call
-  const isLoading = false;
-  const tools: ToolItem[] = []; // Will be populated by API
-  const totalCount = 2847;
-  const totalPages = Math.ceil(totalCount / 24);
+  const { data, isLoading } = useBrowseTools({
+    q: currentSearch,
+    category: currentCategory,
+    sort: currentSort,
+    page: currentPage,
+  });
+  const { data: categories } = useToolCategories(6);
+
+  const tools = data?.tools ?? [];
+  const totalCount = data?.total_count ?? 0;
+  const totalPages = data?.total_pages ?? 0;
+
+  const toolCategories = [
+    { key: 'all', label: 'All', count: undefined as number | undefined },
+    ...(categories ?? []).map((c) => ({
+      key: c.slug,
+      label: c.name,
+      count: c.tool_count,
+    })),
+  ];
 
   const updateUrl = (params: Record<string, string>) => {
     const newParams = new URLSearchParams(searchParams.toString());
@@ -222,20 +213,22 @@ export default function ToolsPage() {
       {/* Filters - GitHub style tabs */}
       <div className="border-b mb-6">
         <div className="flex flex-wrap gap-6">
-          {TOOL_CATEGORIES.map((category) => (
+          {toolCategories.map((category) => (
             <button
               key={category.key}
               onClick={() => updateUrl({ category: category.key === 'all' ? '' : category.key })}
-              className={`pb-3 px-1 border-b-2 transition-colors ${
+              className={`pb-3 px-1 border-b-2 transition-colors whitespace-nowrap ${
                 currentCategory === category.key
                   ? 'border-primary text-primary font-medium'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
               {category.label}
-              <Badge variant="secondary" className="ml-2 text-xs">
-                {category.count}
-              </Badge>
+              {category.count !== undefined && (
+                <Badge variant="secondary" className="ml-2 text-xs">
+                  {category.count}
+                </Badge>
+              )}
             </button>
           ))}
         </div>
