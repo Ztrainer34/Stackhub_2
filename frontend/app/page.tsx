@@ -37,13 +37,13 @@ async function LandingPage() {
             <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md">
               <Link href="/new" className="flex-1">
                 <Button size="lg" className="w-full">
-                  Start Writing
+                  Add your toolstack
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </Link>
               <Link href="/playbooks" className="flex-1">
                 <Button size="lg" variant="outline" className="w-full">
-                  Explore Articles
+                  Explore Playbooks
                 </Button>
               </Link>
             </div>
