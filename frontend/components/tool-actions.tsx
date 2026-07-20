@@ -13,6 +13,8 @@ import {
 } from "@/lib/queries/use-tool-actions";
 import { toast } from "sonner";
 import { Tool } from "@/lib/tool";
+import { useAuth } from "@/lib/queries/use-auth";
+import { useLoginPrompt } from "@/components/login-prompt-provider";
 
 interface ToolActionsProps {
   tool: Tool;
@@ -20,11 +22,14 @@ interface ToolActionsProps {
 }
 
 export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
-  
+  const auth = useAuth();
+  const isAuthenticated = auth.data?.status === "authenticated";
+  const { promptLogin } = useLoginPrompt();
+
   // Use React Query to get the latest tool data (subscribes to cache updates)
   // Cache is already populated by HydrationBoundary
   const { data: currentTool } = useTool(tool.id);
-  
+
   const addToStackMutation = useAddToStack();
   const removeFromStackMutation = useRemoveFromStack();
   const addToWatchlistMutation = useAddToWatchlist();
@@ -41,7 +46,12 @@ export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
       e.preventDefault();
       e.stopPropagation();
     }
-    
+
+    if (!isAuthenticated) {
+      promptLogin("Sign in to add tools to your stack.");
+      return;
+    }
+
     if (isInStack) {
       removeFromStackMutation.mutate(tool.id, {
         onError: () => {
@@ -66,7 +76,12 @@ export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
       e.preventDefault();
       e.stopPropagation();
     }
-    
+
+    if (!isAuthenticated) {
+      promptLogin("Sign in to add tools to your watchlist.");
+      return;
+    }
+
     if (isInWatchlist) {
       removeFromWatchlistMutation.mutate(tool.id, {
         onError: () => {
@@ -92,6 +107,11 @@ export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
       e.stopPropagation();
     }
 
+    if (!isAuthenticated) {
+      promptLogin("Sign in to follow tools and get updates.");
+      return;
+    }
+
     if (isFollowed) {
       unfollowToolMutation.mutate(tool.id, {
         onError: () => {
@@ -115,8 +135,14 @@ export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
   const isWatchlistPending = addToWatchlistMutation.isPending || removeFromWatchlistMutation.isPending;
   const isFollowPending = followToolMutation.isPending || unfollowToolMutation.isPending;
 
-  // Don't show buttons if status is unknown (not authenticated)
-  if (currentTool?.is_in_stack === undefined && currentTool?.is_in_watchlist === undefined) {
+  // Show the buttons to everyone. Guests get a login prompt on click; for
+  // authenticated users we wait until their tool status has loaded so the
+  // buttons reflect reality.
+  if (
+    isAuthenticated &&
+    currentTool?.is_in_stack === undefined &&
+    currentTool?.is_in_watchlist === undefined
+  ) {
     return null;
   }
 

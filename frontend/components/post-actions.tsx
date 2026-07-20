@@ -9,7 +9,7 @@ import {
 } from "@/lib/queries/use-post-actions";
 import { toast } from "sonner";
 import { Post } from "@/lib/post";
-import { useRouter } from "next/navigation";
+import { useLoginPrompt } from "@/components/login-prompt-provider";
 
 interface PostActionsProps {
   post: Post;
@@ -18,28 +18,29 @@ interface PostActionsProps {
 }
 
 export function PostActions({ post, variant = "full", isAuthenticated = false }: PostActionsProps) {
-  const router = useRouter();
-  
+  const { promptLogin } = useLoginPrompt();
+
   // Use React Query to get the latest post data (subscribes to cache updates)
   const { data: currentPost } = usePost(post.author_username, post.slug);
-  
+
   const starPostMutation = useStarPost();
   const unstarPostMutation = useUnstarPost();
-  
-  // Use currentPost if available, otherwise fall back to initial post data
-  const isStarred = currentPost?.is_starred ?? post.is_starred;
+
+  // Use currentPost if available, otherwise fall back to initial post data.
+  // Guests have no star status, so default to unstarred.
+  const isStarred = currentPost?.is_starred ?? post.is_starred ?? false;
 
   const handleStarToggle = (e?: React.MouseEvent) => {
     if (e && variant === "mini") {
       e.preventDefault();
       e.stopPropagation();
     }
-    
+
     if (!isAuthenticated) {
-      router.push('/login');
+      promptLogin("Sign in to star this playbook and save it to your profile.");
       return;
     }
-    
+
     if (isStarred) {
       unstarPostMutation.mutate(post.id, {
         onSuccess: () => {
@@ -71,10 +72,11 @@ export function PostActions({ post, variant = "full", isAuthenticated = false }:
 
   const isStarPending = starPostMutation.isPending || unstarPostMutation.isPending;
 
-  // Don't show button if star status is unknown (not authenticated)
-  // Use currentPost if available, otherwise fall back to initial post data
+  // Show the button to everyone. Guests get a login prompt on click; for
+  // authenticated users we wait until the star status has loaded so the icon
+  // reflects reality.
   const postData = currentPost || post;
-  if (!isAuthenticated || postData.is_starred === undefined) {
+  if (isAuthenticated && postData.is_starred === undefined) {
     return null;
   }
 

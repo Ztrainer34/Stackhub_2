@@ -14,6 +14,7 @@ import {
   useUnfollowTool,
 } from "@/lib/queries/use-tool-actions";
 import { useAuth } from "@/lib/queries/use-auth";
+import { useLoginPrompt } from "@/components/login-prompt-provider";
 import { toast } from "sonner";
 import { Tool } from "@/lib/tool";
 import {
@@ -43,6 +44,7 @@ export function ProfileToolActions({
   const queryClient = useQueryClient();
   const auth = useAuth();
   const isAuthenticated = auth.data?.status === "authenticated";
+  const { promptLogin } = useLoginPrompt();
 
   const { data: currentTool } = useTool(tool.id);
 
@@ -75,6 +77,10 @@ export function ProfileToolActions({
 
   const onStack = (e: React.MouseEvent) => {
     stop(e);
+    if (!isAuthenticated) {
+      promptLogin("Sign in to add tools to your stack.");
+      return;
+    }
     const mutation = isInStack ? removeFromStack : addToStack;
     mutation.mutate(tool.id, {
       onSuccess: refreshOwnerLists,
@@ -85,6 +91,10 @@ export function ProfileToolActions({
 
   const onWatchlist = (e: React.MouseEvent) => {
     stop(e);
+    if (!isAuthenticated) {
+      promptLogin("Sign in to add tools to your watchlist.");
+      return;
+    }
     const mutation = isInWatchlist ? removeFromWatchlist : addToWatchlist;
     mutation.mutate(tool.id, {
       onSuccess: refreshOwnerLists,
@@ -95,6 +105,10 @@ export function ProfileToolActions({
 
   const onFollow = (e: React.MouseEvent) => {
     stop(e);
+    if (!isAuthenticated) {
+      promptLogin("Sign in to follow tools and get updates.");
+      return;
+    }
     const mutation = isFollowed ? unfollow : follow;
     mutation.mutate(tool.id, {
       onError: () =>
@@ -121,9 +135,9 @@ export function ProfileToolActions({
     });
   };
 
-  // Don't render actions for logged-out visitors.
-  if (!isAuthenticated) return null;
-
+  // Guests still see the visitor actions (stack / watchlist / follow) and get a
+  // login prompt on click. Owner-only controls never render for them because
+  // isOwner is false when unauthenticated.
   const iconBtn = "h-7 w-7 p-0";
 
   return (

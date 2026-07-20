@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 import { NavbarTabsProvider } from "@/components/navbar-tabs-context";
+import { LoginPromptProvider } from "@/components/login-prompt-provider";
 import type { AuthState } from "@/lib/queries/use-auth";
 
 interface ProvidersProps {
@@ -35,7 +36,9 @@ export default function Providers({
   return (
     <QueryClientProvider client={queryClient}>
       <NavbarTabsProvider>
-        {children}
+        <LoginPromptProvider>
+          {children}
+        </LoginPromptProvider>
       </NavbarTabsProvider>
     </QueryClientProvider>
   );

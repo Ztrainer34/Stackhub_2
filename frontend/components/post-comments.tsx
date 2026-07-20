@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import { PostComment } from "@/lib/post";
+import { useLoginPrompt } from "@/components/login-prompt-provider";
 
 function CommentCard({ comment } : { comment: PostComment }) {
   const [isLiked, ] = useState(false);
@@ -126,6 +127,7 @@ export default function PostComments({
 }) {
   const postComments = usePostComments(postId);
   const createPostComment = useCreatePostComment(postId);
+  const { promptLogin } = useLoginPrompt();
 
   return (
     <div className="space-y-4 mt-6">
@@ -151,7 +153,13 @@ export default function PostComments({
       {!isAuthenticated && (
         <div className="py-4 text-center">
           <p className="text-sm text-gray-500 mb-2">Sign in to leave a comment</p>
-          <Button variant="outline" size="sm">Sign In</Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => promptLogin("Sign in to join the conversation.")}
+          >
+            Sign In
+          </Button>
         </div>
       )}
       
