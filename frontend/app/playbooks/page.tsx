@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { 
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -16,35 +16,35 @@ import { Pagination } from "@/components/pagination";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
-import { Search, BookOpen, Filter } from "lucide-react";
-import { useBrowsePosts } from "@/lib/queries/use-browse-posts";
+import { Search, BookOpen, Filter, Wrench, X } from "lucide-react";
+import {
+  useBrowsePosts,
+  usePostToolFacets,
+} from "@/lib/queries/use-browse-posts";
 import PostCard from "@/components/post-card";
+import { ToolLogo } from "@/components/tool-logo";
+import { cn } from "@/lib/utils";
 
 const SORT_OPTIONS = [
-  { value: 'updated', label: 'Recently updated' },
-  { value: 'created', label: 'Recently created' },
-  { value: 'name', label: 'Name' },
-  { value: 'stars', label: 'Most starred' },
+  { value: "updated", label: "Recently updated" },
+  { value: "created", label: "Recently created" },
+  { value: "name", label: "Name" },
+  { value: "stars", label: "Most starred" },
 ];
 
 function LoadingSkeleton() {
   return (
-    <div className="space-y-4">
-      {Array.from({ length: 8 }).map((_, i) => (
-        <Card key={i}>
-          <CardContent className="p-4">
-            <div className="space-y-3">
-              <div className="flex justify-between">
-                <Skeleton className="h-5 w-64" />
-                <Skeleton className="h-5 w-16" />
-              </div>
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-3/4" />
-              <div className="flex gap-2">
-                <Skeleton className="h-4 w-20" />
-                <Skeleton className="h-4 w-20" />
-              </div>
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <Card key={i} className="h-full">
+          <CardContent className="p-6 space-y-3">
+            <div className="flex justify-between">
+              <Skeleton className="h-5 w-20" />
+              <Skeleton className="w-8 h-8 rounded" />
             </div>
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-2/3" />
           </CardContent>
         </Card>
       ))}
@@ -55,30 +55,39 @@ function LoadingSkeleton() {
 export default function PlaybooksPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  
-  const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '');
-  const currentType = searchParams.get('type') || 'all';
-  const currentSort = searchParams.get('sort') || 'updated';
-  const currentPage = parseInt(searchParams.get('page') || '1');
-  const currentSearch = searchParams.get('q') || '';
+
+  const [searchQuery, setSearchQuery] = useState(searchParams.get("q") || "");
+  const [toolSearch, setToolSearch] = useState("");
+  const currentType = searchParams.get("type") || "all";
+  const currentSort = searchParams.get("sort") || "updated";
+  const currentTool = searchParams.get("tool") || "";
+  const currentPage = parseInt(searchParams.get("page") || "1");
+  const currentSearch = searchParams.get("q") || "";
 
   const { data, isLoading } = useBrowsePosts({
     type: currentType,
     q: currentSearch,
     sort: currentSort,
+    tool: currentTool,
     page: currentPage,
   });
+  const { data: toolFacets } = usePostToolFacets(30);
 
   const playbooks = data?.posts ?? [];
   const totalCount = data?.total_count ?? 0;
   const totalPages = data?.total_pages ?? 0;
 
   const playbookTypes = [
-    { key: 'all', label: 'All', count: data?.counts.all_count ?? 0 },
-    { key: 'playbook', label: 'Playbooks', count: data?.counts.playbook_count ?? 0 },
-    { key: 'combo', label: 'Combos', count: data?.counts.combo_count ?? 0 },
-    { key: 'comparison', label: 'Comparisons', count: data?.counts.comparison_count ?? 0 },
+    { key: "all", label: "All", count: data?.counts.all_count ?? 0 },
+    { key: "playbook", label: "Playbooks", count: data?.counts.playbook_count ?? 0 },
+    { key: "combo", label: "Combos", count: data?.counts.combo_count ?? 0 },
+    { key: "comparison", label: "Comparisons", count: data?.counts.comparison_count ?? 0 },
   ];
+
+  const filteredTools = (toolFacets ?? []).filter((t) =>
+    t.name.toLowerCase().includes(toolSearch.toLowerCase())
+  );
+  const activeTool = (toolFacets ?? []).find((t) => t.id === currentTool);
 
   const updateUrl = (params: Record<string, string>) => {
     const newParams = new URLSearchParams(searchParams.toString());
@@ -89,9 +98,9 @@ export default function PlaybooksPage() {
         newParams.delete(key);
       }
     });
-    // Reset page when changing filters
-    if ('type' in params || 'sort' in params || 'q' in params) {
-      newParams.delete('page');
+    // Reset page when changing any filter.
+    if ("type" in params || "sort" in params || "q" in params || "tool" in params) {
+      newParams.delete("page");
     }
     router.push(`?${newParams.toString()}`);
   };
@@ -106,123 +115,203 @@ export default function PlaybooksPage() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-5xl">
+    <div className="container mx-auto px-4 py-6 max-w-6xl">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
-        <BookOpen className="w-8 h-8 text-primary" />
+        <BookOpen className="w-7 h-7 text-primary" />
         <div>
-          <h1 className="text-2xl font-bold">Playbooks</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl font-bold">Explore Playbooks</h1>
+          <p className="text-sm text-muted-foreground">
             Step-by-step guides for using tools effectively
           </p>
         </div>
       </div>
 
-      {/* Search and Create */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-6">
-        <form onSubmit={handleSearch} className="flex-1">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search playbooks..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-        </form>
-        <Link href="/new">
-          <Button>New playbook</Button>
-        </Link>
-      </div>
+      <div className="flex flex-col md:flex-row gap-6">
+        {/* Left sidebar — Filter by */}
+        <aside className="w-full md:w-64 md:flex-shrink-0">
+          <div className="md:sticky md:top-20 space-y-6">
+            {/* Content type */}
+            <div>
+              <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                <Filter className="w-4 h-4" />
+                Filter by
+              </h3>
+              <div className="border rounded-lg overflow-hidden divide-y">
+                {playbookTypes.map((type) => {
+                  const active = currentType === type.key;
+                  return (
+                    <button
+                      key={type.key}
+                      onClick={() =>
+                        updateUrl({ type: type.key === "all" ? "" : type.key })
+                      }
+                      className={cn(
+                        "w-full flex items-center justify-between px-3 py-2 text-sm transition-colors",
+                        active
+                          ? "bg-muted font-medium text-foreground"
+                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                      )}
+                    >
+                      <span>{type.label}</span>
+                      <Badge variant="secondary" className="text-xs">
+                        {type.count}
+                      </Badge>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
-      {/* Filters - GitHub style tabs */}
-      <div className="border-b mb-6">
-        <div className="flex flex-wrap gap-6">
-          {playbookTypes.map((type) => (
-            <button
-              key={type.key}
-              onClick={() => updateUrl({ type: type.key === 'all' ? '' : type.key })}
-              className={`pb-3 px-1 border-b-2 transition-colors ${
-                currentType === type.key
-                  ? 'border-primary text-primary font-medium'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
+            {/* Tools */}
+            <div>
+              <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                <Wrench className="w-4 h-4" />
+                Tools
+              </h3>
+              <div className="border rounded-lg overflow-hidden">
+                <div className="p-2 border-b">
+                  <div className="relative">
+                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                    <Input
+                      placeholder="Filter tools..."
+                      value={toolSearch}
+                      onChange={(e) => setToolSearch(e.target.value)}
+                      className="pl-7 h-8 text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="max-h-[320px] overflow-y-auto divide-y">
+                  {filteredTools.length === 0 ? (
+                    <p className="px-3 py-3 text-xs text-muted-foreground">
+                      No tools found
+                    </p>
+                  ) : (
+                    filteredTools.map((tool) => {
+                      const active = currentTool === tool.id;
+                      return (
+                        <button
+                          key={tool.id}
+                          onClick={() =>
+                            updateUrl({ tool: active ? "" : tool.id })
+                          }
+                          className={cn(
+                            "w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors",
+                            active
+                              ? "bg-muted font-medium text-foreground"
+                              : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                          )}
+                        >
+                          <ToolLogo
+                            name={tool.name}
+                            logoUrl={tool.logo_url}
+                            size="sm"
+                          />
+                          <span className="flex-1 text-left truncate">
+                            {tool.name}
+                          </span>
+                          <Badge variant="secondary" className="text-xs">
+                            {tool.post_count}
+                          </Badge>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        {/* Right — results */}
+        <div className="flex-1 min-w-0">
+          {/* Search + sort */}
+          <div className="flex flex-col sm:flex-row gap-3 mb-4">
+            <form onSubmit={handleSearch} className="flex-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search playbooks..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </form>
+            <Select
+              value={currentSort}
+              onValueChange={(value) => updateUrl({ sort: value })}
             >
-              {type.label}
-              <Badge variant="secondary" className="ml-2 text-xs">
-                {type.count}
-              </Badge>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Sort and Stats */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <div className="text-sm text-muted-foreground">
-          {totalCount.toLocaleString()} playbooks
-        </div>
-        
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Sort:</span>
+              <SelectTrigger className="w-full sm:w-48">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SORT_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-          <Select value={currentSort} onValueChange={(value) => updateUrl({ sort: value })}>
-            <SelectTrigger className="w-48">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {SORT_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
 
-      {/* Results */}
-      {isLoading ? (
-        <LoadingSkeleton />
-      ) : playbooks.length > 0 ? (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-            {playbooks.map((playbook) => (
-              <Link
-                key={playbook.id}
-                href={`/${playbook.author_username}/${playbook.slug}`}
+          {/* Result count + active tool chip */}
+          <div className="flex items-center gap-2 flex-wrap mb-4">
+            <span className="text-sm text-muted-foreground">
+              {totalCount.toLocaleString()} results
+            </span>
+            {activeTool && (
+              <Badge
+                variant="outline"
+                className="gap-1 cursor-pointer"
+                onClick={() => updateUrl({ tool: "" })}
               >
-                <PostCard post={playbook} className="h-full" />
-              </Link>
-            ))}
+                Tool: {activeTool.name}
+                <X className="w-3 h-3" />
+              </Badge>
+            )}
           </div>
 
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            totalCount={totalCount}
-            onPageChange={handlePageChange}
-            itemName="playbooks"
-          />
-        </>
-      ) : (
-        <div className="text-center py-12">
-          <BookOpen className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-lg font-semibold mb-2">No playbooks found</h3>
-          <p className="text-muted-foreground mb-4">
-            {searchQuery 
-              ? `No playbooks match "${searchQuery}"`
-              : "There are no playbooks in this category yet"
-            }
-          </p>
-          <Link href="/new">
-            <Button>Create my first playbook</Button>
-          </Link>
+          {/* Results */}
+          {isLoading ? (
+            <LoadingSkeleton />
+          ) : playbooks.length > 0 ? (
+            <>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+                {playbooks.map((playbook) => (
+                  <Link
+                    key={playbook.id}
+                    href={`/${playbook.author_username}/${playbook.slug}`}
+                  >
+                    <PostCard post={playbook} className="h-full" />
+                  </Link>
+                ))}
+              </div>
+
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                totalCount={totalCount}
+                onPageChange={handlePageChange}
+                itemName="playbooks"
+              />
+            </>
+          ) : (
+            <div className="text-center py-12 border border-dashed rounded-lg">
+              <BookOpen className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold mb-2">No playbooks found</h3>
+              <p className="text-muted-foreground mb-4">
+                {currentSearch
+                  ? `No playbooks match "${currentSearch}"`
+                  : "Try adjusting your filters."}
+              </p>
+              <Link href="/new">
+                <Button>Create my first playbook</Button>
+              </Link>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

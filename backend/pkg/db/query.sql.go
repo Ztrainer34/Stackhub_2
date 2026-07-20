@@ -2500,6 +2500,57 @@ func (q *Queries) GetUserPostCounts(ctx context.Context, arg GetUserPostCountsPa
 	return i, err
 }
 
+const getPublishedPostToolFacets = `-- name: GetPublishedPostToolFacets :many
+SELECT
+  t.id,
+  t.name,
+  COALESCE(t.logo_url, '') AS logo_url,
+  COUNT(DISTINCT pt.post_id)::int AS post_count
+FROM tools t
+JOIN post_tools pt ON pt.tool_id = t.id
+JOIN posts p ON p.id = pt.post_id
+WHERE p.is_published
+  AND NOT EXISTS (
+    SELECT 1 FROM tool_tickets tt
+    WHERE tt.post_id = p.id AND tt.status IN ('pending', 'rejected')
+  )
+GROUP BY t.id, t.name, t.logo_url
+ORDER BY post_count DESC, t.name ASC
+LIMIT $1
+`
+
+type GetPublishedPostToolFacetsRow struct {
+	ID        uuid.UUID `json:"id"`
+	Name      string    `json:"name"`
+	LogoUrl   string    `json:"logo_url"`
+	PostCount int32     `json:"post_count"`
+}
+
+func (q *Queries) GetPublishedPostToolFacets(ctx context.Context, limit int32) ([]GetPublishedPostToolFacetsRow, error) {
+	rows, err := q.db.Query(ctx, getPublishedPostToolFacets, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetPublishedPostToolFacetsRow
+	for rows.Next() {
+		var i GetPublishedPostToolFacetsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.LogoUrl,
+			&i.PostCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getPublishedPostTypeCounts = `-- name: GetPublishedPostTypeCounts :one
 SELECT
   COUNT(*)::int AS all_count,
@@ -2545,6 +2596,13 @@ WHERE pwt.is_published
     OR pwt.name ILIKE '%' || $5::text || '%'
     OR pwt.description ILIKE '%' || $5::text || '%'
   )
+  AND (
+    $7::boolean = false
+    OR EXISTS (
+      SELECT 1 FROM post_tools pt
+      WHERE pt.post_id = pwt.id AND pt.tool_id = $8
+    )
+  )
   AND NOT EXISTS (
     SELECT 1 FROM tool_tickets tt
     WHERE tt.post_id = pwt.id AND tt.status IN ('pending', 'rejected')
@@ -2559,12 +2617,14 @@ LIMIT $1 OFFSET $2
 `
 
 type ListPublishedPostsParams struct {
-	Limit         int32  `json:"limit"`
-	Offset        int32  `json:"offset"`
-	UseTypeFilter bool   `json:"use_type_filter"`
-	TypeFilter    string `json:"type_filter"`
-	Search        string `json:"search"`
-	Sort          string `json:"sort"`
+	Limit         int32     `json:"limit"`
+	Offset        int32     `json:"offset"`
+	UseTypeFilter bool      `json:"use_type_filter"`
+	TypeFilter    string    `json:"type_filter"`
+	Search        string    `json:"search"`
+	Sort          string    `json:"sort"`
+	UseToolFilter bool      `json:"use_tool_filter"`
+	ToolFilter    uuid.UUID `json:"tool_filter"`
 }
 
 type ListPublishedPostsRow struct {
@@ -2592,6 +2652,8 @@ func (q *Queries) ListPublishedPosts(ctx context.Context, arg ListPublishedPosts
 		arg.TypeFilter,
 		arg.Search,
 		arg.Sort,
+		arg.UseToolFilter,
+		arg.ToolFilter,
 	)
 	if err != nil {
 		return nil, err

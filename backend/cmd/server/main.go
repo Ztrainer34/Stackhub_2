@@ -1057,6 +1057,13 @@ func (app *App) listPublishedPosts(w http.ResponseWriter, r *http.Request) {
 		params.TypeFilter = typeStr
 	}
 
+	if toolStr := r.URL.Query().Get("tool"); toolStr != "" {
+		if toolID, err := uuid.Parse(toolStr); err == nil {
+			params.UseToolFilter = true
+			params.ToolFilter = toolID
+		}
+	}
+
 	res, err := app.queries.ListPublishedPosts(r.Context(), params)
 	if err != nil {
 		log.Println(err)
@@ -1100,6 +1107,31 @@ func (app *App) listPublishedPosts(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+// getPublishedPostToolFacets returns the tools used across published posts with
+// per-tool post counts — the "Tools" facet on the /playbooks browse page.
+func (app *App) getPublishedPostToolFacets(w http.ResponseWriter, r *http.Request) {
+	limit := 20
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
+			limit = l
+		}
+	}
+
+	facets, err := app.queries.GetPublishedPostToolFacets(r.Context(), int32(limit))
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to get tool facets", http.StatusInternalServerError)
+		return
+	}
+
+	if facets == nil {
+		facets = []db.GetPublishedPostToolFacetsRow{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(facets)
 }
 
 func (app *App) listUserStarredPosts(w http.ResponseWriter, r *http.Request) {
@@ -3644,6 +3676,7 @@ func main() {
 
 		// Public browse listing for /playbooks
 		r.Get("/posts", app.listPublishedPosts)
+		r.Get("/posts/tool-facets", app.getPublishedPostToolFacets)
 
 		// Homepage routes
 		r.Get("/homepage/top-categories", app.getTopCategories)

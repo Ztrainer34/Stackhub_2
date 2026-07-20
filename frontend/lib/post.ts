@@ -51,6 +51,7 @@ export async function listPublishedPosts(params: {
   type?: string;
   q?: string;
   sort?: string;
+  tool?: string;
   page?: number;
   limit?: number;
 }): Promise<BrowsePostsResponse> {
@@ -58,6 +59,7 @@ export async function listPublishedPosts(params: {
   if (params.type && params.type !== "all") search.set("type", params.type);
   if (params.q) search.set("q", params.q);
   if (params.sort) search.set("sort", params.sort);
+  if (params.tool) search.set("tool", params.tool);
   search.set("page", String(params.page ?? 1));
   search.set("limit", String(params.limit ?? 20));
 
@@ -66,6 +68,21 @@ export async function listPublishedPosts(params: {
   if (!resp.ok) throw new Error("Failed to list posts");
 
   return (await resp.json()) as BrowsePostsResponse;
+}
+
+export interface ToolFacet {
+  id: string;
+  name: string;
+  logo_url: string;
+  post_count: number;
+}
+
+export async function getPostToolFacets(limit: number = 20): Promise<ToolFacet[]> {
+  const resp = await fetchApi(`/posts/tool-facets?limit=${limit}`);
+
+  if (!resp.ok) throw new Error("Failed to get tool facets");
+
+  return (await resp.json()) as ToolFacet[];
 }
 
 export interface PostComment {

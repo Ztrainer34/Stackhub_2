@@ -424,6 +424,13 @@ WHERE pwt.is_published
     OR pwt.name ILIKE '%' || sqlc.arg(search)::text || '%'
     OR pwt.description ILIKE '%' || sqlc.arg(search)::text || '%'
   )
+  AND (
+    sqlc.arg(use_tool_filter)::boolean = false
+    OR EXISTS (
+      SELECT 1 FROM post_tools pt
+      WHERE pt.post_id = pwt.id AND pt.tool_id = sqlc.arg(tool_filter)
+    )
+  )
   AND NOT EXISTS (
     SELECT 1 FROM tool_tickets tt
     WHERE tt.post_id = pwt.id AND tt.status IN ('pending', 'rejected')
@@ -435,6 +442,26 @@ ORDER BY
     THEN (SELECT COUNT(*) FROM post_stars ps WHERE ps.post_id = pwt.id) END DESC,
   pwt.updated_at DESC
 LIMIT $1 OFFSET $2;
+
+-- name: GetPublishedPostToolFacets :many
+-- Tools used across published posts, with how many posts use each — the "Tools"
+-- facet on the /playbooks browse page.
+SELECT
+  t.id,
+  t.name,
+  COALESCE(t.logo_url, '') AS logo_url,
+  COUNT(DISTINCT pt.post_id)::int AS post_count
+FROM tools t
+JOIN post_tools pt ON pt.tool_id = t.id
+JOIN posts p ON p.id = pt.post_id
+WHERE p.is_published
+  AND NOT EXISTS (
+    SELECT 1 FROM tool_tickets tt
+    WHERE tt.post_id = p.id AND tt.status IN ('pending', 'rejected')
+  )
+GROUP BY t.id, t.name, t.logo_url
+ORDER BY post_count DESC, t.name ASC
+LIMIT $1;
 
 -- name: GetPublishedPostTypeCounts :one
 SELECT
