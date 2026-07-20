@@ -41,7 +41,7 @@ async function LandingPage() {
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </Link>
-              <Link href="/search?q=&t=post" className="flex-1">
+              <Link href="/playbooks" className="flex-1">
                 <Button size="lg" variant="outline" className="w-full">
                   Explore Articles
                 </Button>
@@ -129,7 +129,7 @@ async function LandingPage() {
           </div>
 
           <div className="text-center mt-12">
-            <Link href="/search?q=&t=post">
+            <Link href="/playbooks">
               <Button variant="outline" size="lg">
                 View All Articles
                 <ArrowRight className="ml-2 h-4 w-4" />
@@ -246,7 +246,7 @@ async function LandingPage() {
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </Link>
-              <Link href="/search?q=&t=post" className="flex-1">
+              <Link href="/playbooks" className="flex-1">
                 <Button size="lg" variant="outline" className="w-full">
                   Browse Content
                 </Button>
