@@ -1,0 +1,65 @@
+{
+  "users": [
+    {
+      "email": "alice@example.com",
+      "password": "Password123!",
+      "username": "alice",
+      "display_name": "Alice Martin",
+      "bio": "Growth marketer sharing her stack.",
+      "company": "Acme Inc.",
+      "location": "Paris, France",
+      "website": "https://alice.example.com",
+      "linkedin": "alice-martin",
+      "twitter": "alice"
+    },
+    {
+      "email": "bob@example.com",
+      "username": "bob",
+      "display_name": "Bob Chen"
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "HubSpot",
+      "description": "All-in-one CRM and marketing platform.",
+      "website": "https://hubspot.com",
+      "logo_url": "",
+      "categories": ["CRM", "Marketing"]
+    },
+    {
+      "name": "Lemlist",
+      "description": "Cold email outreach and automation.",
+      "categories": ["Email", "Sales"]
+    }
+  ],
+
+  "playbooks": [
+    {
+      "author": "alice",
+      "type": "playbook",
+      "title": "Identify companies visiting your website with HubSpot",
+      "description": "Turn anonymous traffic into named accounts.",
+      "tools": ["HubSpot"],
+      "published": true,
+      "body": [
+        "HubSpot can reveal which companies visit your site.",
+        "Enable the tracking code, then check Reports → Traffic Analytics.",
+        "Use the data to prioritise outbound."
+      ]
+    },
+    {
+      "author": "bob@example.com",
+      "type": "combo",
+      "title": "Capture visitors in HubSpot and cold email them with Lemlist",
+      "description": "A two-tool outbound loop.",
+      "tools": ["HubSpot", "Lemlist"],
+      "published": true,
+      "body": [
+        "Sync identified companies from HubSpot.",
+        "Push contacts into a Lemlist campaign.",
+        "Personalise with company data and send."
+      ]
+    }
+  ]
+}

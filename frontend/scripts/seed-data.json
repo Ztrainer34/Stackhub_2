@@ -1,0 +1,57 @@
+{
+  "//": "Tools are looked up by name in the existing catalog (never created). Names must match real tools.",
+
+  "users": [
+    {
+      "email": "ziagulzar142005@hotmail.com",
+      "username": "bob",
+      "bio": "Indie hacker & automation nerd.",
+      "location": "Berlin, Germany",
+      "stack": ["HubSpot Marketing Hub", "Notion"],
+      "watchlist": ["Figma"],
+      "followed_tools": ["Lemlist"]
+    }
+  ],
+
+  "playbooks": [
+    {
+      "author": "bob",
+      "type": "playbook",
+      "title": "Identify companies visiting your website with HubSpot",
+      "description": "Turn anonymous traffic into named accounts you can act on.",
+      "tools": ["HubSpot Marketing Hub"],
+      "published": true,
+      "body": [
+        "HubSpot can reveal which companies visit your site, even before they fill in a form.",
+        "Install the HubSpot tracking code, then open Reports → Traffic Analytics → Sources.",
+        "Filter by company and export the list to prioritise your outbound efforts."
+      ]
+    },
+    {
+      "author": "bob",
+      "type": "combo",
+      "title": "Capture visitors in HubSpot and cold email them with Lemlist",
+      "description": "A simple two-tool outbound loop that runs itself.",
+      "tools": ["HubSpot Marketing Hub", "Lemlist"],
+      "published": true,
+      "body": [
+        "Sync the companies HubSpot identifies into a list.",
+        "Push the matching contacts into a Lemlist campaign via the integration.",
+        "Personalise each email with company data and let the sequence run."
+      ]
+    },
+    {
+      "author": "bob",
+      "type": "comparison",
+      "title": "Notion vs HubSpot for a lightweight CRM",
+      "description": "Which one fits a small team that's just getting started?",
+      "tools": ["Notion", "HubSpot Marketing Hub"],
+      "published": true,
+      "body": [
+        "Notion is flexible and cheap, great for a manual, low-volume pipeline.",
+        "HubSpot adds automation, email tracking and reporting as you scale.",
+        "Start in Notion, move to HubSpot once deal volume outgrows manual work."
+      ]
+    }
+  ]
+}
