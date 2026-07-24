@@ -6,6 +6,7 @@ import NavBar from "@/components/navbar";
 import { OnboardingModal } from "@/components/onboarding-modal";
 import { getServerAuthState } from "@/lib/auth-server";
 import { Toaster } from "@/components/ui/sonner";
+import { SiteFooter } from "@/components/site-footer";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -37,6 +38,7 @@ export default async function RootLayout({
         <Providers initialAuthState={authState}>
           <NavBar user={authState.status === 'authenticated' ? authState.user : null} />
           <main className="flex-1 min-h-0">{children}</main>
+          <SiteFooter />
           <OnboardingModal />
           <Toaster />
         </Providers>
