@@ -6,6 +6,7 @@ import {
   Bell,
   Palette,
   Key,
+  Cookie,
 } from "lucide-react"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { ProfileTab } from "./profile-tab";
+import { CookieSettings } from "./cookie-settings";
 
 function AccountTab() {
   return (
@@ -174,7 +176,7 @@ export default function SettingsPage() {
         </div>
 
         <Tabs defaultValue="profile" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 h-auto">
             <TabsTrigger value="profile" className="flex items-center gap-2">
               <User className="w-4 h-4" />
               Profile
@@ -190,6 +192,10 @@ export default function SettingsPage() {
             <TabsTrigger value="appearance" className="flex items-center gap-2">
               <Palette className="w-4 h-4" />
               Appearance
+            </TabsTrigger>
+            <TabsTrigger value="privacy" className="flex items-center gap-2">
+              <Cookie className="w-4 h-4" />
+              Privacy
             </TabsTrigger>
           </TabsList>
 
@@ -207,6 +213,10 @@ export default function SettingsPage() {
 
           <TabsContent value="appearance">
             <AppearanceTab />
+          </TabsContent>
+
+          <TabsContent value="privacy">
+            <CookieSettings />
           </TabsContent>
         </Tabs>
       </div>
