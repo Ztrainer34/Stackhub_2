@@ -46,6 +46,8 @@ export default function NotificationsList() {
         return "⭐";
       case "post_comment":
         return "💬";
+      case "tool_approved":
+        return "🔧";
       default:
         return "🔔";
     }

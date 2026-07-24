@@ -64,6 +64,32 @@ func ToPgUUID(u uuid.UUID) pgtype.UUID {
 	return pgtype.UUID{Bytes: u, Valid: true}
 }
 
+// notifyToolApproved creates an in-app notification telling the ticket
+// requester their suggested tool was approved. Returns whether a new
+// notification was created (so the caller can also send an email). No-op when
+// the admin resolved their own ticket.
+func (app *App) notifyToolApproved(ctx context.Context, qtx *db.Queries, ticket db.GetToolTicketRow, resolverID uuid.UUID) bool {
+	if ticket.RequestedBy == resolverID {
+		return false
+	}
+
+	entityType := "tool"
+	rows, err := qtx.CreateNotification(ctx, db.CreateNotificationParams{
+		RecipientID: ticket.RequestedBy,
+		ActorID:     ToPgUUID(resolverID),
+		Type:        "tool_approved",
+		EntityID:    ticket.PostID, // may be null for standalone suggestions
+		EntityType:  ToPgText(&entityType),
+		Title:       "Tool approved",
+		Message:     fmt.Sprintf("Your suggested tool “%s” was approved and added to StackHub.", ticket.ToolName),
+	})
+	if err != nil {
+		log.Println(err)
+		return false
+	}
+	return rows > 0
+}
+
 // actorDisplayName returns a friendly name for the acting user (display name,
 // falling back to username, then a generic label) for use in notifications and
 // emails.
@@ -2197,11 +2223,27 @@ func (app *App) resolveTicketWithExisting(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	// Notify the requester that their suggested tool was approved.
+	shouldEmail := app.notifyToolApproved(r.Context(), qtx, ticket, userID)
+
 	err = tx.Commit(r.Context())
 	if err != nil {
 		log.Println(err)
 		http.Error(w, "Could not commit transaction", http.StatusInternalServerError)
 		return
+	}
+
+	if shouldEmail && app.mailer != nil {
+		go func(rid uuid.UUID, toolName string) {
+			email, eerr := app.queries.GetUserEmail(context.Background(), rid)
+			if eerr != nil || email == "" {
+				log.Println("tool approved email: could not resolve recipient email:", eerr)
+				return
+			}
+			if err := app.mailer.SendToolApproved(context.Background(), email, toolName); err != nil {
+				log.Println("tool approved email:", err)
+			}
+		}(ticket.RequestedBy, ticket.ToolName)
 	}
 
 	w.WriteHeader(http.StatusNoContent)
@@ -2312,11 +2354,27 @@ func (app *App) resolveTicketWithNew(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Notify the requester that their suggested tool was approved.
+	shouldEmail := app.notifyToolApproved(r.Context(), qtx, ticket, userID)
+
 	err = tx.Commit(r.Context())
 	if err != nil {
 		log.Println(err)
 		http.Error(w, "Could not commit transaction", http.StatusInternalServerError)
 		return
+	}
+
+	if shouldEmail && app.mailer != nil {
+		go func(rid uuid.UUID, toolName string) {
+			email, eerr := app.queries.GetUserEmail(context.Background(), rid)
+			if eerr != nil || email == "" {
+				log.Println("tool approved email: could not resolve recipient email:", eerr)
+				return
+			}
+			if err := app.mailer.SendToolApproved(context.Background(), email, toolName); err != nil {
+				log.Println("tool approved email:", err)
+			}
+		}(ticket.RequestedBy, ticket.ToolName)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

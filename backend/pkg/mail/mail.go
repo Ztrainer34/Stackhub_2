@@ -67,6 +67,26 @@ func (m *Mailer) SendPlaybookStarred(ctx context.Context, to, actorName, playboo
 	return err
 }
 
+// SendToolApproved notifies a user that a tool they suggested was approved.
+func (m *Mailer) SendToolApproved(ctx context.Context, to, toolName string) error {
+	body := fmt.Sprintf(
+		`<p style="font-size:18px;color:#2d3748;margin:0 0 16px">Good news!</p>`+
+			`<p style="margin:0 0 24px">The tool you suggested, <strong>%s</strong>, has been reviewed and added to StackHub. Any playbook that was waiting on it is now live.</p>`+
+			`<p style="margin:0">Thanks for helping the catalog grow,<br/><strong style="color:#2d3748">The StackHub Team</strong></p>`,
+		template.HTMLEscapeString(toolName),
+	)
+
+	params := &resend.SendEmailRequest{
+		From:    fmt.Sprintf("StackHub <notifications@%s>", m.domain),
+		To:      []string{to},
+		Subject: "✅ Your suggested tool was approved",
+		Html:    emailShell(body),
+	}
+
+	_, err := m.client.Emails.SendWithContext(ctx, params)
+	return err
+}
+
 // SendNewFollower notifies a user that someone started following them.
 func (m *Mailer) SendNewFollower(ctx context.Context, to, actorName string) error {
 	body := fmt.Sprintf(
