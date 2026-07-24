@@ -26,7 +26,14 @@ export default function HomepageContent({
       {/* Header Section */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">
-          Welcome back, {user.username}!
+          Welcome back,{" "}
+          <Link
+            href={`/${user.username}`}
+            className="hover:underline hover:text-primary transition-colors"
+          >
+            {user.username}
+          </Link>
+          !
         </h1>
         <p className="text-muted-foreground">
           Discover the latest playbooks and explore trending tool categories
