@@ -33,11 +33,11 @@ export default async function RootLayout({
   return (
     <html lang="en" className="h-full">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased h-full flex flex-col`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}
       >
         <Providers initialAuthState={authState}>
           <NavBar user={authState.status === 'authenticated' ? authState.user : null} />
-          <main className="flex-1 min-h-0">{children}</main>
+          <main className="flex-1">{children}</main>
           <SiteFooter />
           <OnboardingModal />
           <Toaster />
