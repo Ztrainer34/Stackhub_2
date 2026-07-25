@@ -90,21 +90,32 @@ func (app *App) notifyToolApproved(ctx context.Context, qtx *db.Queries, ticket 
 	return rows > 0
 }
 
+// siteURL is the public site origin, used to build links inside emails.
+const siteURL = "https://stackhub.me"
+
 // actorDisplayName returns a friendly name for the acting user (display name,
 // falling back to username, then a generic label) for use in notifications and
 // emails.
 func actorDisplayName(q *db.Queries, ctx context.Context, userID uuid.UUID) string {
+	name, _ := actorNameAndUsername(q, ctx, userID)
+	return name
+}
+
+// actorNameAndUsername returns both a friendly display name and the username
+// (for building a profile link) for the acting user.
+func actorNameAndUsername(q *db.Queries, ctx context.Context, userID uuid.UUID) (string, string) {
 	profile, err := q.GetProfile(ctx, userID)
 	if err != nil {
-		return "Someone"
+		return "Someone", ""
 	}
-	if profile.DisplayName != "" {
-		return profile.DisplayName
+	name := profile.DisplayName
+	if name == "" {
+		name = profile.Username
 	}
-	if profile.Username != "" {
-		return profile.Username
+	if name == "" {
+		name = "Someone"
 	}
-	return "Someone"
+	return name, profile.Username
 }
 
 func (app *App) createPost(w http.ResponseWriter, r *http.Request) {
@@ -532,17 +543,19 @@ func (app *App) starPost(w http.ResponseWriter, r *http.Request) {
 
 	// Get post info for notification
 	var (
-		emailNotify  bool
-		recipientID  uuid.UUID
-		actorName    string
-		playbookName string
+		emailNotify   bool
+		recipientID   uuid.UUID
+		actorName     string
+		actorUsername string
+		playbookName  string
+		playbookURL   string
 	)
 	post, err := qtx.GetPost(r.Context(), id)
 	if err != nil {
 		log.Println(err)
 		// Continue even if we can't get post info
 	} else if post.AuthorID != userID { // Don't notify if starring own post
-		actorName = actorDisplayName(qtx, r.Context(), userID)
+		actorName, actorUsername = actorNameAndUsername(qtx, r.Context(), userID)
 
 		// Create notification (with spam protection built-in)
 		entityType := "post"
@@ -565,6 +578,7 @@ func (app *App) starPost(w http.ResponseWriter, r *http.Request) {
 			emailNotify = true
 			recipientID = post.AuthorID
 			playbookName = post.Name
+			playbookURL = fmt.Sprintf("%s/%s/%s", siteURL, post.AuthorUsername, post.Slug)
 		}
 	}
 
@@ -576,16 +590,16 @@ func (app *App) starPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if emailNotify && app.mailer != nil {
-		go func(rid uuid.UUID, actor, playbook string) {
+		go func(rid uuid.UUID, actor, username, playbook, playbookLink string) {
 			email, eerr := app.queries.GetUserEmail(context.Background(), rid)
 			if eerr != nil || email == "" {
 				log.Println("star email: could not resolve recipient email:", eerr)
 				return
 			}
-			if err := app.mailer.SendPlaybookStarred(context.Background(), email, actor, playbook); err != nil {
+			if err := app.mailer.SendPlaybookStarred(context.Background(), email, actor, username, playbook, playbookLink); err != nil {
 				log.Println("star email:", err)
 			}
-		}(recipientID, actorName, playbookName)
+		}(recipientID, actorName, actorUsername, playbookName, playbookURL)
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -3188,7 +3202,7 @@ func (app *App) followUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create notification (with spam protection built-in)
-	actorName := actorDisplayName(qtx, r.Context(), userID)
+	actorName, actorUsername := actorNameAndUsername(qtx, r.Context(), userID)
 	notificationParams := db.CreateNotificationParams{
 		RecipientID: followeeID,
 		ActorID:     ToPgUUID(userID),
@@ -3216,16 +3230,16 @@ func (app *App) followUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if emailNotify && app.mailer != nil {
-		go func(rid uuid.UUID, actor string) {
+		go func(rid uuid.UUID, actor, username string) {
 			email, eerr := app.queries.GetUserEmail(context.Background(), rid)
 			if eerr != nil || email == "" {
 				log.Println("follow email: could not resolve recipient email:", eerr)
 				return
 			}
-			if err := app.mailer.SendNewFollower(context.Background(), email, actor); err != nil {
+			if err := app.mailer.SendNewFollower(context.Background(), email, actor, username); err != nil {
 				log.Println("follow email:", err)
 			}
-		}(followeeID, actorName)
+		}(followeeID, actorName, actorUsername)
 	}
 
 	w.WriteHeader(http.StatusOK)

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +12,21 @@ import {
   useMarkNotificationAsRead,
   useMarkAllNotificationsAsRead,
 } from "@/lib/hooks/useNotifications";
+import type { Notification } from "@/lib/notifications";
+
+// Where a notification links to when clicked. Actor-based notifications
+// (star, comment, follow, and later fork) link to the actor's profile.
+function notificationHref(n: Notification): string | null {
+  switch (n.type) {
+    case "post_star":
+    case "post_comment":
+    case "follow":
+    case "post_fork":
+      return n.actor_username ? `/${n.actor_username}` : null;
+    default:
+      return null;
+  }
+}
 
 export default function NotificationsList() {
   const [page, setPage] = useState(1);
@@ -108,46 +124,56 @@ export default function NotificationsList() {
       ) : (
         <>
           <div className="space-y-3">
-            {notifications.map((notification) => (
-              <Card
-                key={notification.id}
-                className={`cursor-pointer transition-colors hover:bg-gray-50 ${
-                  !notification.is_read ? "border-blue-200 bg-blue-50/30" : ""
-                }`}
-                onClick={() => !notification.is_read && markAsRead(notification.id)}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-start space-x-3">
-                    <div className="text-2xl">{getNotificationIcon(notification.type)}</div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-gray-900">
-                            {notification.title}
-                          </p>
-                          <p className="text-sm text-gray-600 mt-1">
-                            {notification.message}
-                          </p>
-                          <p className="text-xs text-gray-500 mt-2">
-                            {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
-                          </p>
-                        </div>
-                        <div className="flex items-center space-x-2 ml-4">
-                          {!notification.is_read && (
-                            <Badge variant="secondary" className="bg-blue-100 text-blue-800">
-                              New
-                            </Badge>
-                          )}
-                          {notification.is_read && (
-                            <Check className="h-4 w-4 text-green-600" />
-                          )}
+            {notifications.map((notification) => {
+              const href = notificationHref(notification);
+              const card = (
+                <Card
+                  className={`cursor-pointer transition-colors hover:bg-gray-50 ${
+                    !notification.is_read ? "border-blue-200 bg-blue-50/30" : ""
+                  }`}
+                  onClick={() => !notification.is_read && markAsRead(notification.id)}
+                >
+                  <CardContent className="p-4">
+                    <div className="flex items-start space-x-3">
+                      <div className="text-2xl">{getNotificationIcon(notification.type)}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-900">
+                              {notification.title}
+                            </p>
+                            <p className="text-sm text-gray-600 mt-1">
+                              {notification.message}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-2">
+                              {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
+                            </p>
+                          </div>
+                          <div className="flex items-center space-x-2 ml-4">
+                            {!notification.is_read && (
+                              <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                                New
+                              </Badge>
+                            )}
+                            {notification.is_read && (
+                              <Check className="h-4 w-4 text-green-600" />
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              );
+
+              return href ? (
+                <Link key={notification.id} href={href} className="block">
+                  {card}
+                </Link>
+              ) : (
+                <div key={notification.id}>{card}</div>
+              );
+            })}
           </div>
 
           {hasMore && (
