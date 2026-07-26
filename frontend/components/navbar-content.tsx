@@ -18,7 +18,19 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { LogOut, Plus, Settings, User as UserIcon, Shield } from "lucide-react";
+import {
+  LogOut,
+  Plus,
+  Settings,
+  User as UserIcon,
+  Shield,
+  Layers,
+  BookOpen,
+  Blocks,
+  GitCompare,
+  Star,
+  Wrench,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SearchForm } from "./search-form";
 import { MobileNavbar } from "./mobile-navbar";
@@ -85,6 +97,38 @@ export default function NavBarContent({ user }: NavBarContentProps) {
                       <UserIcon /> Profile
                     </DropdownMenuItem>
                   </Link>
+                  <DropdownMenuSeparator />
+                  <Link href={`/${user.username}?tab=stack`}>
+                    <DropdownMenuItem>
+                      <Layers /> Stack
+                    </DropdownMenuItem>
+                  </Link>
+                  <Link href={`/${user.username}?tab=playbooks`}>
+                    <DropdownMenuItem>
+                      <BookOpen /> Playbooks
+                    </DropdownMenuItem>
+                  </Link>
+                  <Link href={`/${user.username}?tab=combos`}>
+                    <DropdownMenuItem>
+                      <Blocks /> Combos
+                    </DropdownMenuItem>
+                  </Link>
+                  <Link href={`/${user.username}?tab=comparisons`}>
+                    <DropdownMenuItem>
+                      <GitCompare /> Comparisons
+                    </DropdownMenuItem>
+                  </Link>
+                  <Link href={`/${user.username}?tab=starred`}>
+                    <DropdownMenuItem>
+                      <Star /> Starred
+                    </DropdownMenuItem>
+                  </Link>
+                  <Link href={`/${user.username}/tools-followed`}>
+                    <DropdownMenuItem>
+                      <Wrench /> Tools followed
+                    </DropdownMenuItem>
+                  </Link>
+                  <DropdownMenuSeparator />
                   <Link href={"/settings"}>
                     <DropdownMenuItem>
                       <Settings /> Settings

@@ -5,7 +5,19 @@ import Link from "next/link";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Menu, Plus, UserIcon, Settings, LogOut } from "lucide-react";
+import {
+  Menu,
+  Plus,
+  UserIcon,
+  Settings,
+  LogOut,
+  Layers,
+  BookOpen,
+  Blocks,
+  GitCompare,
+  Star,
+  Wrench,
+} from "lucide-react";
 import { SearchForm } from "./search-form";
 import { User } from "@/lib/user";
 
@@ -70,6 +82,54 @@ export function MobileNavbar({ user }: MobileNavbarProps) {
                   >
                     <UserIcon className="h-4 w-4" />
                     <span>Profile</span>
+                  </Link>
+                  <Link
+                    href={`/${user.username}?tab=stack`}
+                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent transition-colors"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    <Layers className="h-4 w-4" />
+                    <span>Stack</span>
+                  </Link>
+                  <Link
+                    href={`/${user.username}?tab=playbooks`}
+                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent transition-colors"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    <BookOpen className="h-4 w-4" />
+                    <span>Playbooks</span>
+                  </Link>
+                  <Link
+                    href={`/${user.username}?tab=combos`}
+                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent transition-colors"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    <Blocks className="h-4 w-4" />
+                    <span>Combos</span>
+                  </Link>
+                  <Link
+                    href={`/${user.username}?tab=comparisons`}
+                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent transition-colors"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    <GitCompare className="h-4 w-4" />
+                    <span>Comparisons</span>
+                  </Link>
+                  <Link
+                    href={`/${user.username}?tab=starred`}
+                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent transition-colors"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    <Star className="h-4 w-4" />
+                    <span>Starred</span>
+                  </Link>
+                  <Link
+                    href={`/${user.username}/tools-followed`}
+                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent transition-colors"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    <Wrench className="h-4 w-4" />
+                    <span>Tools followed</span>
                   </Link>
                   <Link
                     href="/settings"
