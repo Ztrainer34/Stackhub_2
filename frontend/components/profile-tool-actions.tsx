@@ -169,6 +169,18 @@ export function ProfileToolActions({
                 <Bookmark className="w-3 h-3" />
               </Button>
             )}
+            {/* Follow — only when the owner doesn't already follow this tool. */}
+            {!isFollowed && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className={iconBtn}
+                onClick={onFollow}
+                title="Follow tool"
+              >
+                <Plus className="w-3 h-3" />
+              </Button>
+            )}
             <Button
               size="sm"
               variant="ghost"

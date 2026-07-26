@@ -16,7 +16,7 @@ import {
 import CategoryFilter from "@/components/category-filter";
 import Link from "next/link";
 import { Tool, toolHref } from "@/lib/tool";
-import { Layers, Eye, Search } from "lucide-react";
+import { Layers, Bookmark, Search } from "lucide-react";
 import { useUserStack, useUserWatchlist } from "@/lib/queries/use-user-tools";
 import {
   ProfileToolActions,
@@ -143,6 +143,8 @@ function applyFilters(
 interface ToolSectionProps {
   title: string;
   icon: React.ReactNode;
+  subtitle?: string;
+  note?: string;
   tools: Tool[];
   isLoading: boolean;
   isError: boolean;
@@ -155,6 +157,8 @@ interface ToolSectionProps {
 function ToolSection({
   title,
   icon,
+  subtitle,
+  note,
   tools,
   isLoading,
   isError,
@@ -189,13 +193,25 @@ function ToolSection({
 
   return (
     <section className="mb-10">
-      <div className="flex items-center gap-2 mb-4">
-        {icon}
-        <h2 className="text-xl font-semibold">{title}</h2>
-        {!isLoading && !isError && (
-          <span className="text-sm text-muted-foreground">
-            ({visibleTools.length})
-          </span>
+      <div className="mb-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2">
+            {icon}
+            <h2 className="text-xl font-semibold">{title}</h2>
+            {!isLoading && !isError && (
+              <span className="text-sm text-muted-foreground">
+                ({visibleTools.length})
+              </span>
+            )}
+          </div>
+          {isOwner && note && (
+            <span className="text-xs text-muted-foreground text-right max-w-[220px]">
+              {note}
+            </span>
+          )}
+        </div>
+        {subtitle && (
+          <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
         )}
       </div>
 
@@ -288,17 +304,22 @@ export default function StackContent({
         username={username}
       />
 
-      <ToolSection
-        title="Watchlist"
-        icon={<Eye className="w-5 h-5 text-foreground" />}
-        tools={watchlistQuery.data?.tools || []}
-        isLoading={watchlistQuery.isLoading}
-        isError={!!watchlistQuery.error}
-        emptyMessage="No tools in the watchlist yet."
-        isOwner={isOwnProfile}
-        listType="watchlist"
-        username={username}
-      />
+      {/* Saved for later is private to the account owner. */}
+      {isOwnProfile && (
+        <ToolSection
+          title="Saved for later"
+          icon={<Bookmark className="w-5 h-5 text-foreground" />}
+          subtitle="Tools you consider adding to your Stack"
+          note="This section is only visible to you, the account user."
+          tools={watchlistQuery.data?.tools || []}
+          isLoading={watchlistQuery.isLoading}
+          isError={!!watchlistQuery.error}
+          emptyMessage="No tools saved for later yet."
+          isOwner={isOwnProfile}
+          listType="watchlist"
+          username={username}
+        />
+      )}
     </div>
   );
 }
