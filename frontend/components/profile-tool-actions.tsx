@@ -1,9 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Layers, Bookmark, Trash2, Plus, Check, Archive } from "lucide-react";
+import { Layers, Archive, Bookmark, Plus, Check } from "lucide-react";
 import {
   useTool,
   useAddToStack,
@@ -19,14 +18,6 @@ import { useAuth } from "@/lib/queries/use-auth";
 import { useLoginPrompt } from "@/components/login-prompt-provider";
 import { toast } from "sonner";
 import { Tool } from "@/lib/tool";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 
 export type ToolListType = "stack" | "watchlist" | "old-stack" | "followed";
 
@@ -59,8 +50,6 @@ export function ProfileToolActions({
   const follow = useFollowTool();
   const unfollow = useUnfollowTool();
 
-  const [confirmOpen, setConfirmOpen] = useState(false);
-
   const isInStack = currentTool?.is_in_stack ?? false;
   const isInWatchlist = currentTool?.is_in_watchlist ?? false;
   const isInOldStack = currentTool?.is_in_old_stack ?? false;
@@ -81,225 +70,115 @@ export function ProfileToolActions({
     e.stopPropagation();
   };
 
-  const onStack = (e: React.MouseEvent) => {
+  // Each list is a toggle: clicking an icon the tool already belongs to removes
+  // it. Adding to one list moves it out of the others (enforced server-side).
+  const toggle = (
+    e: React.MouseEvent,
+    isActive: boolean,
+    add: { mutate: typeof addToStack.mutate },
+    remove: { mutate: typeof removeFromStack.mutate },
+    prompt: string,
+    errorMessage: string
+  ) => {
     stop(e);
     if (!isAuthenticated) {
-      promptLogin("Sign in to add tools to your stack.");
+      promptLogin(prompt);
       return;
     }
-    const mutation = isInStack ? removeFromStack : addToStack;
+    const mutation = isActive ? remove : add;
     mutation.mutate(tool.id, {
       onSuccess: refreshOwnerLists,
-      onError: () =>
-        toast.error("Error", { description: "Failed to update stack." }),
+      onError: () => toast.error("Error", { description: errorMessage }),
     });
   };
 
-  const onWatchlist = (e: React.MouseEvent) => {
-    stop(e);
-    if (!isAuthenticated) {
-      promptLogin("Sign in to add tools to your watchlist.");
-      return;
-    }
-    const mutation = isInWatchlist ? removeFromWatchlist : addToWatchlist;
-    mutation.mutate(tool.id, {
-      onSuccess: refreshOwnerLists,
-      onError: () =>
-        toast.error("Error", { description: "Failed to update watchlist." }),
-    });
-  };
-
-  const onOldStack = (e: React.MouseEvent) => {
-    stop(e);
-    if (!isAuthenticated) {
-      promptLogin("Sign in to archive tools you no longer use.");
-      return;
-    }
-    const mutation = isInOldStack ? removeFromOldStack : addToOldStack;
-    mutation.mutate(tool.id, {
-      onSuccess: refreshOwnerLists,
-      onError: () =>
-        toast.error("Error", { description: "Failed to update old stack." }),
-    });
-  };
-
-  const onFollow = (e: React.MouseEvent) => {
-    stop(e);
-    if (!isAuthenticated) {
-      promptLogin("Sign in to follow tools and get updates.");
-      return;
-    }
-    const mutation = isFollowed ? unfollow : follow;
-    mutation.mutate(tool.id, {
-      onError: () =>
-        toast.error("Error", { description: "Failed to update follow." }),
-    });
-  };
-
-  const onConfirmDelete = () => {
-    const mutation =
-      listType === "stack"
-        ? removeFromStack
-        : listType === "watchlist"
-        ? removeFromWatchlist
-        : listType === "old-stack"
-        ? removeFromOldStack
-        : unfollow;
-
-    mutation.mutate(tool.id, {
-      onSuccess: () => {
-        refreshOwnerLists();
-        setConfirmOpen(false);
-        toast.success("Removed from your profile");
-      },
-      onError: () =>
-        toast.error("Error", { description: "Failed to remove tool." }),
-    });
-  };
-
-  // Guests still see the visitor actions (stack / watchlist / follow) and get a
-  // login prompt on click. Owner-only controls never render for them because
-  // isOwner is false when unauthenticated.
   const iconBtn = "h-7 w-7 p-0";
 
   return (
-    <>
-      <div className="flex items-center gap-1" onClick={stop}>
-        {isOwner ? (
-          <>
-            {/* Owner: move between lists, then delete. The "move" buttons shown
-                depend on which list the card belongs to. */}
-            {listType !== "stack" && (
-              <Button
-                size="sm"
-                variant={isInStack ? "default" : "ghost"}
-                className={iconBtn}
-                onClick={onStack}
-                title="Add to Stack"
-              >
-                <Layers className="w-3 h-3" />
-              </Button>
-            )}
-            {listType !== "watchlist" && (
-              <Button
-                size="sm"
-                variant={isInWatchlist ? "default" : "ghost"}
-                className={iconBtn}
-                onClick={onWatchlist}
-                title="Save for later"
-              >
-                <Bookmark className="w-3 h-3" />
-              </Button>
-            )}
-            {listType !== "old-stack" && (
-              <Button
-                size="sm"
-                variant={isInOldStack ? "default" : "ghost"}
-                className={iconBtn}
-                onClick={onOldStack}
-                title="Move to Old Stack"
-              >
-                <Archive className="w-3 h-3" />
-              </Button>
-            )}
-            {/* Follow — only when the owner doesn't already follow this tool. */}
-            {!isFollowed && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className={iconBtn}
-                onClick={onFollow}
-                title="Follow tool"
-              >
-                <Plus className="w-3 h-3" />
-              </Button>
-            )}
-            <Button
-              size="sm"
-              variant="ghost"
-              className={`${iconBtn} text-red-600 hover:text-red-700 hover:bg-red-50`}
-              onClick={(e) => {
-                stop(e);
-                setConfirmOpen(true);
-              }}
-              title="Remove from profile"
-            >
-              <Trash2 className="w-3 h-3" />
-            </Button>
-          </>
-        ) : (
-          <>
-            {/* Visitor: add to my stack / watchlist / follow. */}
-            <Button
-              size="sm"
-              variant={isInStack ? "default" : "ghost"}
-              className={iconBtn}
-              onClick={onStack}
-              title={isInStack ? "In your Stack" : "Add to Stack"}
-            >
-              <Layers className="w-3 h-3" />
-            </Button>
-            <Button
-              size="sm"
-              variant={isInWatchlist ? "default" : "ghost"}
-              className={iconBtn}
-              onClick={onWatchlist}
-              title={isInWatchlist ? "Saved for later" : "Save for later"}
-            >
-              <Bookmark className="w-3 h-3" />
-            </Button>
-            <Button
-              size="sm"
-              variant={isInOldStack ? "default" : "ghost"}
-              className={iconBtn}
-              onClick={onOldStack}
-              title={isInOldStack ? "In your Old Stack" : "Move to Old Stack"}
-            >
-              <Archive className="w-3 h-3" />
-            </Button>
-            <Button
-              size="sm"
-              variant={isFollowed ? "default" : "ghost"}
-              className={iconBtn}
-              onClick={onFollow}
-              title={isFollowed ? "Following" : "Follow tool"}
-            >
-              {isFollowed ? (
-                <Check className="w-3 h-3" />
-              ) : (
-                <Plus className="w-3 h-3" />
-              )}
-            </Button>
-          </>
-        )}
-      </div>
+    <div className="flex items-center gap-1" onClick={stop}>
+      <Button
+        size="sm"
+        variant={isInStack ? "default" : "ghost"}
+        className={iconBtn}
+        onClick={(e) =>
+          toggle(
+            e,
+            isInStack,
+            addToStack,
+            removeFromStack,
+            "Sign in to add tools to your stack.",
+            "Failed to update stack."
+          )
+        }
+        title={isInStack ? "In your Stack" : "Add to Stack"}
+      >
+        <Layers className="w-3 h-3" />
+      </Button>
 
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent className="max-w-sm" onClick={stop}>
-          <DialogHeader>
-            <DialogTitle>Are you sure you want to delete it?</DialogTitle>
-            <DialogDescription>
-              This will remove <span className="font-medium">{tool.name}</span>{" "}
-              from your profile.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setConfirmOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={onConfirmDelete}
-            >
-              <Trash2 className="w-4 h-4 mr-1" />
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+      <Button
+        size="sm"
+        variant={isInOldStack ? "default" : "ghost"}
+        className={iconBtn}
+        onClick={(e) =>
+          toggle(
+            e,
+            isInOldStack,
+            addToOldStack,
+            removeFromOldStack,
+            "Sign in to archive tools you no longer use.",
+            "Failed to update old stack."
+          )
+        }
+        title={isInOldStack ? "In your Old Stack" : "Move to Old Stack"}
+      >
+        <Archive className="w-3 h-3" />
+      </Button>
+
+      <Button
+        size="sm"
+        variant={isInWatchlist ? "default" : "ghost"}
+        className={iconBtn}
+        onClick={(e) =>
+          toggle(
+            e,
+            isInWatchlist,
+            addToWatchlist,
+            removeFromWatchlist,
+            "Sign in to save tools for later.",
+            "Failed to update saved tools."
+          )
+        }
+        title={isInWatchlist ? "Saved for later" : "Save for later"}
+      >
+        <Bookmark className="w-3 h-3" />
+      </Button>
+
+      {/* Follow stays on the "Tools followed" list so it can still be undone
+          there. Elsewhere it moves to the card's bottom-right corner later. */}
+      {listType === "followed" && (
+        <Button
+          size="sm"
+          variant={isFollowed ? "default" : "ghost"}
+          className={iconBtn}
+          onClick={(e) =>
+            toggle(
+              e,
+              isFollowed,
+              follow,
+              unfollow,
+              "Sign in to follow tools and get updates.",
+              "Failed to update follow."
+            )
+          }
+          title={isFollowed ? "Following" : "Follow tool"}
+        >
+          {isFollowed ? (
+            <Check className="w-3 h-3" />
+          ) : (
+            <Plus className="w-3 h-3" />
+          )}
+        </Button>
+      )}
+    </div>
   );
 }

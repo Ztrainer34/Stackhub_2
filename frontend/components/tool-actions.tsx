@@ -197,16 +197,6 @@ export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
         </Button>
         <Button
           size="sm"
-          onClick={handleWatchlistToggle}
-          disabled={isWatchlistPending}
-          variant={isInWatchlist ? "default" : "ghost"}
-          className="h-7 w-7 p-0"
-          title={isInWatchlist ? "Remove from Saved for later" : "Save for later"}
-        >
-          <Bookmark className="w-3 h-3" />
-        </Button>
-        <Button
-          size="sm"
           onClick={handleOldStackToggle}
           disabled={isOldStackPending}
           variant={isInOldStack ? "default" : "ghost"}
@@ -217,13 +207,13 @@ export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
         </Button>
         <Button
           size="sm"
-          onClick={handleFollowToggle}
-          disabled={isFollowPending}
-          variant={isFollowed ? "default" : "ghost"}
+          onClick={handleWatchlistToggle}
+          disabled={isWatchlistPending}
+          variant={isInWatchlist ? "default" : "ghost"}
           className="h-7 w-7 p-0"
-          title={isFollowed ? "Following" : "Follow tool"}
+          title={isInWatchlist ? "Remove from Saved for later" : "Save for later"}
         >
-          {isFollowed ? <Check className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
+          <Bookmark className="w-3 h-3" />
         </Button>
       </div>
     );
@@ -247,6 +237,18 @@ export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
       </Button>
       <Button
         size="default"
+        onClick={handleOldStackToggle}
+        disabled={isOldStackPending}
+        variant={isInOldStack ? "default" : "outline"}
+        className="w-full justify-start"
+      >
+        <div className="flex items-center gap-2 w-full">
+          {isInOldStack ? <Check className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
+          <span>{isInOldStack ? "In Old Stack" : "Move to Old Stack"}</span>
+        </div>
+      </Button>
+      <Button
+        size="default"
         onClick={handleWatchlistToggle}
         disabled={isWatchlistPending}
         variant={isInWatchlist ? "default" : "outline"}
@@ -257,18 +259,6 @@ export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
           <span>
             {isInWatchlist ? "Saved for later" : "Save for later"}
           </span>
-        </div>
-      </Button>
-      <Button
-        size="default"
-        onClick={handleOldStackToggle}
-        disabled={isOldStackPending}
-        variant={isInOldStack ? "default" : "outline"}
-        className="w-full justify-start"
-      >
-        <div className="flex items-center gap-2 w-full">
-          {isInOldStack ? <Check className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
-          <span>{isInOldStack ? "In Old Stack" : "Move to Old Stack"}</span>
         </div>
       </Button>
       <Button
