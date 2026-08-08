@@ -19,6 +19,7 @@ export type Tool = {
   is_published: boolean;
   is_in_stack: boolean;
   is_in_watchlist: boolean;
+  is_in_old_stack?: boolean;
   is_followed?: boolean;
   added_at?: string;
 };
@@ -188,6 +189,32 @@ export async function removeFromStack(
   if (!response.ok) throw new Error("Failed to remove from stack");
 }
 
+export async function addToOldStack(
+  supabaseClient: SupabaseClient,
+  toolId: string
+): Promise<void> {
+  const response = await fetchApiAuthenticated(
+    supabaseClient,
+    `/user/old-stack/${toolId}`,
+    { method: "PUT" }
+  );
+
+  if (!response.ok) throw new Error("Failed to add to old stack");
+}
+
+export async function removeFromOldStack(
+  supabaseClient: SupabaseClient,
+  toolId: string
+): Promise<void> {
+  const response = await fetchApiAuthenticated(
+    supabaseClient,
+    `/user/old-stack/${toolId}`,
+    { method: "DELETE" }
+  );
+
+  if (!response.ok) throw new Error("Failed to remove from old stack");
+}
+
 export async function addToWatchlist(
   supabaseClient: SupabaseClient,
   toolId: string
@@ -272,6 +299,17 @@ export async function getUserWatchlist(
   );
 
   if (!response.ok) throw new Error("Failed to fetch watchlist");
+  return response.json();
+}
+
+export async function getUserOldStack(
+  username: string
+): Promise<UserToolsResponse> {
+  const response = await fetchApi(
+    `/user/${encodeURIComponent(username)}/old-stack`
+  );
+
+  if (!response.ok) throw new Error("Failed to fetch old stack");
   return response.json();
 }
 

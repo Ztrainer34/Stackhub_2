@@ -50,6 +50,37 @@ func (q *Queries) AddToStack(ctx context.Context, arg AddToStackParams) error {
 	return err
 }
 
+const addToOldStack = `-- name: AddToOldStack :exec
+INSERT INTO old_stack_items (profile_id, tool_id)
+VALUES ($1, $2)
+ON CONFLICT (profile_id, tool_id) DO NOTHING
+`
+
+type AddToOldStackParams struct {
+	ProfileID uuid.UUID `json:"profile_id"`
+	ToolID    uuid.UUID `json:"tool_id"`
+}
+
+func (q *Queries) AddToOldStack(ctx context.Context, arg AddToOldStackParams) error {
+	_, err := q.db.Exec(ctx, addToOldStack, arg.ProfileID, arg.ToolID)
+	return err
+}
+
+const removeFromOldStack = `-- name: RemoveFromOldStack :exec
+DELETE FROM old_stack_items
+WHERE profile_id = $1 AND tool_id = $2
+`
+
+type RemoveFromOldStackParams struct {
+	ProfileID uuid.UUID `json:"profile_id"`
+	ToolID    uuid.UUID `json:"tool_id"`
+}
+
+func (q *Queries) RemoveFromOldStack(ctx context.Context, arg RemoveFromOldStackParams) error {
+	_, err := q.db.Exec(ctx, removeFromOldStack, arg.ProfileID, arg.ToolID)
+	return err
+}
+
 const addToWatchlist = `-- name: AddToWatchlist :exec
 INSERT INTO watchlist_items (profile_id, tool_id)
 VALUES ($1, $2)
@@ -871,6 +902,7 @@ SELECT
   -- User status
   EXISTS(SELECT 1 FROM stack_items si WHERE si.profile_id = $2 AND si.tool_id = twd.id) AS is_in_stack,
   EXISTS(SELECT 1 FROM watchlist_items wi WHERE wi.profile_id = $2 AND wi.tool_id = twd.id) AS is_in_watchlist,
+  EXISTS(SELECT 1 FROM old_stack_items oi WHERE oi.profile_id = $2 AND oi.tool_id = twd.id) AS is_in_old_stack,
   EXISTS(SELECT 1 FROM tool_follows tf WHERE tf.profile_id = $2 AND tf.tool_id = twd.id) AS is_followed
 FROM tools_with_details twd
 WHERE id = $1
@@ -892,6 +924,7 @@ type GetToolAuthenticatedRow struct {
 	Vendor        json.RawMessage    `json:"vendor"`
 	IsInStack     bool               `json:"is_in_stack"`
 	IsInWatchlist bool               `json:"is_in_watchlist"`
+	IsInOldStack  bool               `json:"is_in_old_stack"`
 	IsFollowed    bool               `json:"is_followed"`
 }
 
@@ -909,6 +942,7 @@ func (q *Queries) GetToolAuthenticated(ctx context.Context, arg GetToolAuthentic
 		&i.Vendor,
 		&i.IsInStack,
 		&i.IsInWatchlist,
+		&i.IsInOldStack,
 		&i.IsFollowed,
 	)
 	return i, err
@@ -1206,6 +1240,58 @@ func (q *Queries) ListUserWatchlist(ctx context.Context, username string) ([]Lis
 	var items []ListUserWatchlistRow
 	for rows.Next() {
 		var i ListUserWatchlistRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.LogoUrl,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Categories,
+			&i.Vendor,
+			&i.AddedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserOldStack = `-- name: ListUserOldStack :many
+SELECT
+  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor, oi.added_at
+FROM tools_with_details twd
+JOIN old_stack_items oi ON oi.tool_id = twd.id
+JOIN profiles p ON p.id = oi.profile_id
+WHERE p.username = $1
+ORDER BY twd.name
+`
+
+type ListUserOldStackRow struct {
+	ID          uuid.UUID          `json:"id"`
+	Name        string             `json:"name"`
+	Description pgtype.Text        `json:"description"`
+	LogoUrl     pgtype.Text        `json:"logo_url"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	Categories  interface{}        `json:"categories"`
+	Vendor      json.RawMessage    `json:"vendor"`
+	AddedAt     pgtype.Timestamptz `json:"added_at"`
+}
+
+func (q *Queries) ListUserOldStack(ctx context.Context, username string) ([]ListUserOldStackRow, error) {
+	rows, err := q.db.Query(ctx, listUserOldStack, username)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserOldStackRow
+	for rows.Next() {
+		var i ListUserOldStackRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,

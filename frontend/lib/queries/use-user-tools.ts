@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getUserStack,
   getUserWatchlist,
+  getUserOldStack,
   getUserKeyTools,
   getUserFollowedTools,
   setKeyTools,
@@ -22,6 +23,14 @@ export function useUserWatchlist(username: string, enabled: boolean = true) {
   return useQuery<UserToolsResponse>({
     queryKey: ["user-watchlist", username],
     queryFn: () => getUserWatchlist(username),
+    enabled: enabled && !!username,
+  });
+}
+
+export function useUserOldStack(username: string, enabled: boolean = true) {
+  return useQuery<UserToolsResponse>({
+    queryKey: ["user-old-stack", username],
+    queryFn: () => getUserOldStack(username),
     enabled: enabled && !!username,
   });
 }

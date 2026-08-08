@@ -1,12 +1,14 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Layers, Bookmark, Check, Plus } from "lucide-react";
+import { Layers, Bookmark, Check, Plus, Archive } from "lucide-react";
 import {
   useAddToStack,
   useAddToWatchlist,
+  useAddToOldStack,
   useRemoveFromStack,
   useRemoveFromWatchlist,
+  useRemoveFromOldStack,
   useFollowTool,
   useUnfollowTool,
   useTool,
@@ -34,11 +36,14 @@ export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
   const removeFromStackMutation = useRemoveFromStack();
   const addToWatchlistMutation = useAddToWatchlist();
   const removeFromWatchlistMutation = useRemoveFromWatchlist();
+  const addToOldStackMutation = useAddToOldStack();
+  const removeFromOldStackMutation = useRemoveFromOldStack();
   const followToolMutation = useFollowTool();
   const unfollowToolMutation = useUnfollowTool();
 
   const isInStack = currentTool?.is_in_stack ?? false;
   const isInWatchlist = currentTool?.is_in_watchlist ?? false;
+  const isInOldStack = currentTool?.is_in_old_stack ?? false;
   const isFollowed = currentTool?.is_followed ?? false;
 
   const handleStackToggle = (e?: React.MouseEvent) => {
@@ -101,6 +106,36 @@ export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
     }
   };
 
+  const handleOldStackToggle = (e?: React.MouseEvent) => {
+    if (e && variant === "mini") {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    if (!isAuthenticated) {
+      promptLogin("Sign in to archive tools you no longer use.");
+      return;
+    }
+
+    if (isInOldStack) {
+      removeFromOldStackMutation.mutate(tool.id, {
+        onError: () => {
+          toast.error("Error", {
+            description: "Failed to remove from old stack. Please try again.",
+          });
+        },
+      });
+    } else {
+      addToOldStackMutation.mutate(tool.id, {
+        onError: () => {
+          toast.error("Error", {
+            description: "Failed to add to old stack. Please try again.",
+          });
+        },
+      });
+    }
+  };
+
   const handleFollowToggle = (e?: React.MouseEvent) => {
     if (e && variant === "mini") {
       e.preventDefault();
@@ -133,6 +168,7 @@ export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
 
   const isStackPending = addToStackMutation.isPending || removeFromStackMutation.isPending;
   const isWatchlistPending = addToWatchlistMutation.isPending || removeFromWatchlistMutation.isPending;
+  const isOldStackPending = addToOldStackMutation.isPending || removeFromOldStackMutation.isPending;
   const isFollowPending = followToolMutation.isPending || unfollowToolMutation.isPending;
 
   // Show the buttons to everyone. Guests get a login prompt on click; for
@@ -165,9 +201,19 @@ export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
           disabled={isWatchlistPending}
           variant={isInWatchlist ? "default" : "ghost"}
           className="h-7 w-7 p-0"
-          title={isInWatchlist ? "Remove from Watchlist" : "Add to Watchlist"}
+          title={isInWatchlist ? "Remove from Saved for later" : "Save for later"}
         >
           <Bookmark className="w-3 h-3" />
+        </Button>
+        <Button
+          size="sm"
+          onClick={handleOldStackToggle}
+          disabled={isOldStackPending}
+          variant={isInOldStack ? "default" : "ghost"}
+          className="h-7 w-7 p-0"
+          title={isInOldStack ? "Remove from Old Stack" : "Move to Old Stack"}
+        >
+          <Archive className="w-3 h-3" />
         </Button>
         <Button
           size="sm"
@@ -209,8 +255,20 @@ export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
         <div className="flex items-center gap-2 w-full">
           {isInWatchlist ? <Check className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}
           <span>
-            {isInWatchlist ? "In Watchlist" : "Add to Watchlist"}
+            {isInWatchlist ? "Saved for later" : "Save for later"}
           </span>
+        </div>
+      </Button>
+      <Button
+        size="default"
+        onClick={handleOldStackToggle}
+        disabled={isOldStackPending}
+        variant={isInOldStack ? "default" : "outline"}
+        className="w-full justify-start"
+      >
+        <div className="flex items-center gap-2 w-full">
+          {isInOldStack ? <Check className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
+          <span>{isInOldStack ? "In Old Stack" : "Move to Old Stack"}</span>
         </div>
       </Button>
       <Button

@@ -2548,8 +2548,8 @@ func (app *App) addToStack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// A tool can be in the stack or the watchlist, but not both. Adding to the
-	// stack removes it from the watchlist.
+	// A tool belongs to at most one list. Adding to the stack removes it from
+	// the watchlist and the old stack.
 	tx, err := app.db.Begin(r.Context())
 	if err != nil {
 		log.Println(err)
@@ -2571,6 +2571,16 @@ func (app *App) addToStack(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = qtx.RemoveFromWatchlist(r.Context(), db.RemoveFromWatchlistParams{
+		ProfileID: userID,
+		ToolID:    toolID,
+	})
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to add to stack", http.StatusInternalServerError)
+		return
+	}
+
+	err = qtx.RemoveFromOldStack(r.Context(), db.RemoveFromOldStackParams{
 		ProfileID: userID,
 		ToolID:    toolID,
 	})
@@ -2626,8 +2636,8 @@ func (app *App) addToWatchlist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// A tool can be in the watchlist or the stack, but not both. Adding to the
-	// watchlist removes it from the stack.
+	// A tool belongs to at most one list. Adding to the watchlist removes it
+	// from the stack and the old stack.
 	tx, err := app.db.Begin(r.Context())
 	if err != nil {
 		log.Println(err)
@@ -2649,6 +2659,16 @@ func (app *App) addToWatchlist(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = qtx.RemoveFromStack(r.Context(), db.RemoveFromStackParams{
+		ProfileID: userID,
+		ToolID:    toolID,
+	})
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to add to watchlist", http.StatusInternalServerError)
+		return
+	}
+
+	err = qtx.RemoveFromOldStack(r.Context(), db.RemoveFromOldStackParams{
 		ProfileID: userID,
 		ToolID:    toolID,
 	})
@@ -2687,6 +2707,94 @@ func (app *App) removeFromWatchlist(w http.ResponseWriter, r *http.Request) {
 	err = app.queries.RemoveFromWatchlist(r.Context(), removeFromWatchlistParams)
 	if err != nil {
 		http.Error(w, "Failed to remove from watchlist", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+// addToOldStack archives a tool: one the user used to run but no longer does.
+func (app *App) addToOldStack(w http.ResponseWriter, r *http.Request) {
+	userID := extractUserIDFromRequest(r)
+
+	toolIDString := chi.URLParam(r, "tool_id")
+	toolID, err := uuid.Parse(toolIDString)
+
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Malformed id", http.StatusBadRequest)
+		return
+	}
+
+	// A tool belongs to at most one list. Archiving removes it from the active
+	// stack and the watchlist.
+	tx, err := app.db.Begin(r.Context())
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to start transaction", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback(r.Context())
+
+	qtx := app.queries.WithTx(tx)
+
+	err = qtx.AddToOldStack(r.Context(), db.AddToOldStackParams{
+		ProfileID: userID,
+		ToolID:    toolID,
+	})
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to add to old stack", http.StatusInternalServerError)
+		return
+	}
+
+	err = qtx.RemoveFromStack(r.Context(), db.RemoveFromStackParams{
+		ProfileID: userID,
+		ToolID:    toolID,
+	})
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to add to old stack", http.StatusInternalServerError)
+		return
+	}
+
+	err = qtx.RemoveFromWatchlist(r.Context(), db.RemoveFromWatchlistParams{
+		ProfileID: userID,
+		ToolID:    toolID,
+	})
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to add to old stack", http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Commit(r.Context()); err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to commit", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func (app *App) removeFromOldStack(w http.ResponseWriter, r *http.Request) {
+	userID := extractUserIDFromRequest(r)
+
+	toolIDString := chi.URLParam(r, "tool_id")
+	toolID, err := uuid.Parse(toolIDString)
+
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Malformed id", http.StatusBadRequest)
+		return
+	}
+
+	err = app.queries.RemoveFromOldStack(r.Context(), db.RemoveFromOldStackParams{
+		ProfileID: userID,
+		ToolID:    toolID,
+	})
+	if err != nil {
+		http.Error(w, "Failed to remove from old stack", http.StatusInternalServerError)
 		return
 	}
 
@@ -2820,6 +2928,35 @@ func (app *App) listUserWatchlist(w http.ResponseWriter, r *http.Request) {
 
 	response := struct {
 		Tools []db.ListUserWatchlistRow `json:"tools"`
+	}{
+		Tools: tools,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func (app *App) listUserOldStack(w http.ResponseWriter, r *http.Request) {
+	username := strings.ToLower(chi.URLParam(r, "slug"))
+
+	if username == "" {
+		http.Error(w, "Username cannot be empty", http.StatusBadRequest)
+		return
+	}
+
+	tools, err := app.queries.ListUserOldStack(r.Context(), username)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to fetch old stack", http.StatusInternalServerError)
+		return
+	}
+
+	if tools == nil {
+		tools = []db.ListUserOldStackRow{}
+	}
+
+	response := struct {
+		Tools []db.ListUserOldStackRow `json:"tools"`
 	}{
 		Tools: tools,
 	}
@@ -3675,6 +3812,8 @@ func main() {
 		r.Delete("/user/stack/{tool_id}", app.removeFromStack)
 		r.Put("/user/watchlist/{tool_id}", app.addToWatchlist)
 		r.Delete("/user/watchlist/{tool_id}", app.removeFromWatchlist)
+		r.Put("/user/old-stack/{tool_id}", app.addToOldStack)
+		r.Delete("/user/old-stack/{tool_id}", app.removeFromOldStack)
 		r.Put("/user/followed-tools/{tool_id}", app.followTool)
 		r.Delete("/user/followed-tools/{tool_id}", app.unfollowTool)
 
@@ -3741,6 +3880,7 @@ func main() {
 		r.Get("/user/{slug}", app.getUser)
 		r.Get("/user/{slug}/stack", app.listUserStack)
 		r.Get("/user/{slug}/watchlist", app.listUserWatchlist)
+		r.Get("/user/{slug}/old-stack", app.listUserOldStack)
 		r.Get("/user/{slug}/key-tools", app.listUserKeyTools)
 		r.Get("/user/{slug}/key-playbooks", app.listUserKeyPlaybooks)
 		r.Get("/user/{slug}/followed-tools", app.listUserFollowedTools)

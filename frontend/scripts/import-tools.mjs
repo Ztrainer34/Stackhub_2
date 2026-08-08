@@ -9,7 +9,7 @@
  *
  *   SUPABASE_URL="..." SUPABASE_SERVICE_ROLE_KEY="..." node scripts/import-tools.mjs
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 
 const APPLY = process.env.APPLY === "1";
@@ -25,13 +25,18 @@ const slugify = (n) => n.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|
 const cleanDesc = (d) =>
   !d ? null : d.replace(/\s*Details on .*?ColdIQ inside\.?\s*$/i, "").trim() || null;
 
-// Fetch ALL rows of a column (paginated past the 1000 cap).
+// Exact name match only (case-insensitive, whitespace-normalized). A tool is
+// skipped only if a tool with the SAME name already exists — no fuzzy guessing,
+// which was wrongly merging distinct tools (e.g. "Jina AI" vs "Jira").
+const normName = (n) => n.toLowerCase().replace(/\s+/g, " ").trim();
+
+// Fetch ALL names of a table (paginated past the 1000 cap).
 async function allNames(table) {
-  const names = new Set();
+  const names = [];
   for (let from = 0; ; from += 1000) {
     const { data, error } = await supabase.from(table).select("name").range(from, from + 999);
     if (error) throw error;
-    data.forEach((r) => names.add(r.name.toLowerCase()));
+    data.forEach((r) => names.push(r.name));
     if (data.length < 1000) break;
   }
   return names;
@@ -41,21 +46,35 @@ const tools = JSON.parse(readFileSync(IN, "utf8"));
 console.log(`Loaded ${tools.length} enriched tools.\n`);
 
 const existingTools = await allNames("tools");
-const existingCats = await allNames("categories");
+const existingCatNames = await allNames("categories");
+const existingCats = new Set(existingCatNames.map((c) => c.toLowerCase()));
 
-const newTools = tools.filter((t) => !existingTools.has(t.name.toLowerCase()));
-const dupeTools = tools.length - newTools.length;
+const seen = new Set(existingTools.map(normName)); // grows to dedup within batch too
+const newTools = [];
+const skippedExact = [];
+
+for (const t of tools) {
+  const key = normName(t.name);
+  if (seen.has(key)) { skippedExact.push(t.name); continue; }
+  newTools.push(t);
+  seen.add(key);
+}
 
 const catSet = new Set();
 newTools.forEach((t) => t.categories.forEach((c) => catSet.add(c)));
 const newCats = [...catSet].filter((c) => !existingCats.has(c.toLowerCase()));
 
 console.log("===== DRY RUN =====");
-console.log(`Tools to insert (new)      : ${newTools.length}`);
-console.log(`Tools skipped (already exist): ${dupeTools}`);
-console.log(`Categories referenced (new) : ${newCats.length} of ${catSet.size} used`);
-console.log(`Sample new tools : ${newTools.slice(0, 8).map((t) => t.name).join(", ")}`);
-console.log(`Sample new cats  : ${newCats.slice(0, 12).join(", ")}`);
+console.log(`Tools to insert (new)           : ${newTools.length}`);
+console.log(`Skipped — exact name in catalog : ${skippedExact.length}`);
+console.log(`Categories referenced (new)     : ${newCats.length} of ${catSet.size} used`);
+
+// Dump the full lists to files for inspection.
+writeFileSync("scripts/import-skipped.txt", skippedExact.sort((a, b) => a.localeCompare(b)).join("\n"));
+writeFileSync("scripts/import-new.txt", newTools.map((t) => t.name).sort((a, b) => a.localeCompare(b)).join("\n"));
+console.log(`\nWrote full lists to scripts/import-skipped.txt and scripts/import-new.txt`);
+console.log(`\nFirst 40 skipped (exact name already in catalog):`);
+console.log(skippedExact.slice(0, 40).map((n) => "  • " + n).join("\n"));
 
 if (!APPLY) {
   console.log("\nDry run only. Re-run with APPLY=1 to insert.");

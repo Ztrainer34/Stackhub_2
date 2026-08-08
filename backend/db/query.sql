@@ -398,6 +398,7 @@ SELECT
   -- User status
   EXISTS(SELECT 1 FROM stack_items si WHERE si.profile_id = $2 AND si.tool_id = twd.id) AS is_in_stack,
   EXISTS(SELECT 1 FROM watchlist_items wi WHERE wi.profile_id = $2 AND wi.tool_id = twd.id) AS is_in_watchlist,
+  EXISTS(SELECT 1 FROM old_stack_items oi WHERE oi.profile_id = $2 AND oi.tool_id = twd.id) AS is_in_old_stack,
   EXISTS(SELECT 1 FROM tool_follows tf WHERE tf.profile_id = $2 AND tf.tool_id = twd.id) AS is_followed
 FROM tools_with_details twd
 WHERE id = $1;
@@ -734,6 +735,15 @@ WHERE profile_id = $1 AND tool_id = $2;
 DELETE FROM stack_items
 WHERE profile_id = $1 AND tool_id = $2;
 
+-- name: AddToOldStack :exec
+INSERT INTO old_stack_items (profile_id, tool_id)
+VALUES ($1, $2)
+ON CONFLICT (profile_id, tool_id) DO NOTHING;
+
+-- name: RemoveFromOldStack :exec
+DELETE FROM old_stack_items
+WHERE profile_id = $1 AND tool_id = $2;
+
 -- name: FollowTool :exec
 INSERT INTO tool_follows (profile_id, tool_id)
 VALUES ($1, $2)
@@ -767,6 +777,15 @@ SELECT
 FROM tools_with_details twd
 JOIN watchlist_items wi ON wi.tool_id = twd.id
 JOIN profiles p ON p.id = wi.profile_id
+WHERE p.username = $1
+ORDER BY twd.name;
+
+-- name: ListUserOldStack :many
+SELECT
+  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor, oi.added_at
+FROM tools_with_details twd
+JOIN old_stack_items oi ON oi.tool_id = twd.id
+JOIN profiles p ON p.id = oi.profile_id
 WHERE p.username = $1
 ORDER BY twd.name;
 

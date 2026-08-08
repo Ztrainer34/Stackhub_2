@@ -136,6 +136,11 @@ type StackItem struct {
 	ToolID    uuid.UUID `json:"tool_id"`
 }
 
+type OldStackItem struct {
+	ProfileID uuid.UUID `json:"profile_id"`
+	ToolID    uuid.UUID `json:"tool_id"`
+}
+
 type Tool struct {
 	ID          uuid.UUID          `json:"id"`
 	Name        string             `json:"name"`

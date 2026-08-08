@@ -1,0 +1,520 @@
+Intercom
+Introhive
+Inventive
+Investory.io
+ItsBot
+Jason AI SDR
+Jeeva
+JIFFY.ai
+Jina AI
+Jinni AI
+Jive
+jobdata
+Journey
+Journy.io
+Julius AI
+Kartra
+Kaspr
+KeepSync
+Kendo AI
+Kenyt.AI
+Kernel
+Keyplay
+Khoros
+Kipplo
+Kitt AI
+Kixie
+Kizen
+Klutch App
+KnowFirst
+Kommo
+Koncert
+Korl
+Kwanzoo
+LaGrowthMachine
+Landbot
+Lantern
+Lately
+Lavareach
+Lavender
+Laxis
+Layerpath
+Lead 411
+Lead Liaison
+Lead Onion
+Lead to Notion
+Leadbay
+Leadbright
+LeadDyno
+LeadEnrich
+LeadFuze
+Leadgenerator.io
+LeadGenius
+LeadGibbon
+LeadMagic
+Leadmatic
+LeadSpot
+LeadSquared
+Leap AI
+Leexi
+LetterFriend
+Levity
+Liftcertain
+LiftPilot
+Lightmeter
+Limadata
+Linkamber
+Linked Helper
+LinkedFusion
+LinkedRadar
+LiProspect
+Llama 4
+Loisa
+LoneScale
+Looti
+Lumin
+Luru
+Lusha
+Lyne
+Lysto AI
+Lyzr
+MadKudu
+Maestra
+MailboxValidator
+Mailbutler
+Mailcheck
+Mailchimp
+MailerCheck
+Mailfloss
+Mailgun
+Mailivery
+Mailjet
+Mailook
+Mailreach
+MailToaster
+Mammoth
+Mantiks
+Manus
+Manyreach
+Master Inbox
+Mattermark
+Maverick Intelligence
+Maxio
+Meera
+Meet Alfred
+Meetz
+Mem
+Mendable
+Mercury
+Merlin AI
+Metadata
+Midbound
+Milk Video
+Mindpal
+Mistral AI
+MixRank
+Modjo
+MokaHR
+Monaco
+Monday
+Murf AI
+Myko
+Natively
+Nayak
+Nektar
+NerdyData
+Nesti
+NetHunt
+NetNut
+Neverbounce
+NextRoll
+no2bounce
+Noty.ai
+Novocall
+nRev
+Numerous.ai
+Nurix AI
+Nurture.ai
+Nymeria
+Ocean.io
+Octave
+Octolane
+Octolens
+Odoo
+Oliv AI
+Omnia
+OneShot
+OneStream
+OpenAdapt.AI
+OpenAI
+OpenLead
+OpenMart
+OpenRouter
+OpportunAI
+Oppwiser
+OptimateAI
+Origami
+ORM
+Otter
+Outbrain Direct Response
+Outlit.ai
+Outlyne
+Outplay
+Outreachly
+OutReachWriter
+Outsell
+Overloop.ai
+Paage
+Pageport
+Paperform
+Paradigm
+Paramark
+Particular Audience
+Partnero
+PastaHR
+PebblePost
+Pega
+Penny
+PerformYard
+Periscope Chat
+Perplexity
+Persana
+Personaliz.ai
+PhantomBuster
+pharosIQ
+Pharow
+Phone Verify
+PhoneBurner
+Pintel
+PipeLaunch
+PitchBreeze
+PitchMonster
+Plai
+Plotch
+Pocus
+Poexis
+Poly AI
+Polymail
+Poplar
+Poseidon
+Post Affiliate Pro
+Postaga
+Postmark
+Postscript
+Potion
+Praiz
+PredictLeads
+PriceEdge
+Pricefy
+Primeforge
+PrimeRole
+Prodoscore
+Product Hunt
+profileAPI
+PrometAI
+PromptLoop
+Promptwatch
+Prosp
+Prospectoo
+Prospeo
+Proton
+Provify
+PublicWWW
+Puretalk
+Pypestream
+Pyramid Analytics
+Qualaroo
+Qualtrics
+Quantcast
+Quantified
+Quantive
+Quickbooks
+QuickEmailVerification
+QuickEnrich
+Quicklizard
+Quickmail
+Quillbot
+Rafiki
+Ralph
+RankIQ
+RapidAPI
+Rattle
+RB2B
+ReachIQ
+Reachout
+ReachStream
+Reachy
+ReactIn
+Read
+Reasonyx
+Recapped.io
+Receiptor
+Refersion
+Regal
+Regie
+RelayThat
+Relevate
+Reltio
+RemoveBounce
+Reo.Dev
+Reoon
+RepliQ
+Repricer
+Resend
+Respell
+Resquared
+Retina
+Revenue
+RevenueBase
+Reverse Contact
+ReviewInc
+ReviewTrackers
+Revotas
+RevRag.AI
+Revscale Sales
+RevSure
+Rewardful
+Rift
+RightBound
+RingCentral
+Ringy
+Rival HR
+RivalFlow
+RocketPhone
+Rollio
+Roshu
+Rows
+rtrvr.ai
+Rulai
+Rwazi
+Rytr
+Sailes
+Salee AI
+Sales Compass
+Sales Cookie
+Sales Stack
+Salesbox
+Salesforce
+Salesgear
+Saleshandy
+SalesHiker
+SalesIntel
+Salesmate
+Salesmotion
+Salesnudge
+ScaledMail
+Scalelist
+Scanlist
+Scheduler
+Scout
+Scrab.in
+Scrap.io
+Scrape Magic
+ScrapeStorm
+Scrubby
+Seam AI
+Seamless
+Second Nature
+Seek AI
+Segment
+Seismic
+Sellestial
+SellMeThisPen
+SellScale
+Selma
+SendGrid
+Sendspark
+Senti AI
+ServiceBell
+seventh sense
+SheetAI
+SheetGPT
+Sherloq
+Shovels
+Show
+SignalHero
+SignalHire
+Signum
+Simpleem
+Skrapp
+Skylead
+Slicey
+Slidebean
+Slidesgo
+SmallSEOTools
+Smart Merch
+SmartBear Software
+SmartflowAI
+SmartWriter
+Smoc.AI
+SnatchBot
+Snov
+Snowplow Analytics
+Socialsonic
+Solidroad
+Sonnet
+Speechify
+Spell
+Spiff
+Spokenly
+Square
+Stack AI
+Stiddle
+Store Leads
+Storydoc
+Strada
+Stripe
+Structurely
+Subframe
+SugarCRM
+Summie
+Super
+Super Send
+Superagent
+SuperAGI
+Superflows
+Superfluid
+Supermeme
+Supernormal
+Superpowered
+Superwhisper
+Surfe
+SwitchPitch
+Swordfish
+Swyft AI
+Sybill
+Symbl.ai
+Symson
+Taalk
+Tabula
+Tact
+Taggstar
+Talentica
+Talkwalker
+Talroo
+Tami AI
+TAMTAM AI
+Tapfiliate
+Taplio
+TaskMagic
+Tavus
+Tawk.to
+Teamfluence
+Telepathic
+Telescope
+Telesqope
+Tempo
+TeqID – Connect
+Terakeet
+Text Conversations
+Textdrip
+TextPie
+TextQL
+Thanos AI
+The Companies API
+TheirStack
+Think ABM
+Thrive
+Throxy
+Tiga
+TigerEye
+Tomba
+Tomi
+Topo
+Tracxn
+Traq.AI
+Treasure Data
+TreeScale
+Trellus
+Trigify
+Triple Session
+TruVoice
+Tubular
+Twain
+Twik
+Type
+Typeless
+Ubico
+Ubique
+Uman
+Unify
+Unique
+UNSCRAMBL
+Upbound
+UpBrains AI
+Upcell
+UpdateAI
+Upscale
+Userflow
+UserGems
+V7 Go
+Vainu
+Valid8
+Valley
+Valuecase
+Vector
+Vectr
+Veloxy
+Vengreso
+Verifalia
+Vertify
+Vibe Prospecting
+Vidnoz
+Vidon.ai
+Vidu
+Viewed
+Visito
+VoiceBase
+Voicenotes
+VoiceOps
+VoilaNorbert
+Voiptime
+Vonage
+Vuleads
+W3Techs
+Waalaxy
+Walego
+Wappalyzer
+Warmbox
+Warmforge
+Wavel AI
+We-Connect
+WebscrapeAI
+Weezly
+WhatCMS
+WhatRuns
+WINN.AI
+Wisecut
+Wiser
+Wizzy
+Wonderflow
+Wonderway
+Woodpecker
+WooSender
+WordAi
+Wordtune
+workstreams.ai
+WotNot
+Writecream
+Xactly
+xdge AI
+Xtensio
+Yellow
+Yepic
+Yess
+Yesware
+Yoast SEO
+Zaplify
+Zapmail
+Zeda.io
+Zeliq
+ZenABM
+Zendesk
+Zep
+ZeroSlip
+Zia
+Zipteams
+Zoho
+ZoomInfo
+Zoovu
+Zymplify

@@ -16,8 +16,12 @@ import {
 import CategoryFilter from "@/components/category-filter";
 import Link from "next/link";
 import { Tool, toolHref } from "@/lib/tool";
-import { Layers, Bookmark, Search } from "lucide-react";
-import { useUserStack, useUserWatchlist } from "@/lib/queries/use-user-tools";
+import { Layers, Bookmark, Archive, Search } from "lucide-react";
+import {
+  useUserStack,
+  useUserWatchlist,
+  useUserOldStack,
+} from "@/lib/queries/use-user-tools";
 import {
   ProfileToolActions,
   ToolListType,
@@ -289,6 +293,7 @@ export default function StackContent({
 }: StackContentProps) {
   const stackQuery = useUserStack(username);
   const watchlistQuery = useUserWatchlist(username);
+  const oldStackQuery = useUserOldStack(username);
 
   return (
     <div>
@@ -301,6 +306,19 @@ export default function StackContent({
         emptyMessage="No tools in the stack yet."
         isOwner={isOwnProfile}
         listType="stack"
+        username={username}
+      />
+
+      <ToolSection
+        title="Old Stack"
+        icon={<Archive className="w-5 h-5 text-foreground" />}
+        subtitle="Tools you used before but no longer actively use"
+        tools={oldStackQuery.data?.tools || []}
+        isLoading={oldStackQuery.isLoading}
+        isError={!!oldStackQuery.error}
+        emptyMessage="No tools in the old stack yet."
+        isOwner={isOwnProfile}
+        listType="old-stack"
         username={username}
       />
 

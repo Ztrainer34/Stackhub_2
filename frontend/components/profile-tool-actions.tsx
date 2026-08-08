@@ -3,13 +3,15 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Layers, Bookmark, Trash2, Plus, Check } from "lucide-react";
+import { Layers, Bookmark, Trash2, Plus, Check, Archive } from "lucide-react";
 import {
   useTool,
   useAddToStack,
   useAddToWatchlist,
+  useAddToOldStack,
   useRemoveFromStack,
   useRemoveFromWatchlist,
+  useRemoveFromOldStack,
   useFollowTool,
   useUnfollowTool,
 } from "@/lib/queries/use-tool-actions";
@@ -26,7 +28,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-export type ToolListType = "stack" | "watchlist" | "followed";
+export type ToolListType = "stack" | "watchlist" | "old-stack" | "followed";
 
 interface ProfileToolActionsProps {
   tool: Tool;
@@ -50,8 +52,10 @@ export function ProfileToolActions({
 
   const addToStack = useAddToStack();
   const addToWatchlist = useAddToWatchlist();
+  const addToOldStack = useAddToOldStack();
   const removeFromStack = useRemoveFromStack();
   const removeFromWatchlist = useRemoveFromWatchlist();
+  const removeFromOldStack = useRemoveFromOldStack();
   const follow = useFollowTool();
   const unfollow = useUnfollowTool();
 
@@ -59,6 +63,7 @@ export function ProfileToolActions({
 
   const isInStack = currentTool?.is_in_stack ?? false;
   const isInWatchlist = currentTool?.is_in_watchlist ?? false;
+  const isInOldStack = currentTool?.is_in_old_stack ?? false;
   const isFollowed = currentTool?.is_followed ?? false;
 
   // Only the profile owner's actions mutate the lists displayed on this profile,
@@ -67,6 +72,7 @@ export function ProfileToolActions({
     if (!isOwner) return;
     queryClient.invalidateQueries({ queryKey: ["user-stack", username] });
     queryClient.invalidateQueries({ queryKey: ["user-watchlist", username] });
+    queryClient.invalidateQueries({ queryKey: ["user-old-stack", username] });
     queryClient.invalidateQueries({ queryKey: ["followed-tools", username] });
   };
 
@@ -103,6 +109,20 @@ export function ProfileToolActions({
     });
   };
 
+  const onOldStack = (e: React.MouseEvent) => {
+    stop(e);
+    if (!isAuthenticated) {
+      promptLogin("Sign in to archive tools you no longer use.");
+      return;
+    }
+    const mutation = isInOldStack ? removeFromOldStack : addToOldStack;
+    mutation.mutate(tool.id, {
+      onSuccess: refreshOwnerLists,
+      onError: () =>
+        toast.error("Error", { description: "Failed to update old stack." }),
+    });
+  };
+
   const onFollow = (e: React.MouseEvent) => {
     stop(e);
     if (!isAuthenticated) {
@@ -122,6 +142,8 @@ export function ProfileToolActions({
         ? removeFromStack
         : listType === "watchlist"
         ? removeFromWatchlist
+        : listType === "old-stack"
+        ? removeFromOldStack
         : unfollow;
 
     mutation.mutate(tool.id, {
@@ -164,9 +186,20 @@ export function ProfileToolActions({
                 variant={isInWatchlist ? "default" : "ghost"}
                 className={iconBtn}
                 onClick={onWatchlist}
-                title="Add to Watchlist"
+                title="Save for later"
               >
                 <Bookmark className="w-3 h-3" />
+              </Button>
+            )}
+            {listType !== "old-stack" && (
+              <Button
+                size="sm"
+                variant={isInOldStack ? "default" : "ghost"}
+                className={iconBtn}
+                onClick={onOldStack}
+                title="Move to Old Stack"
+              >
+                <Archive className="w-3 h-3" />
               </Button>
             )}
             {/* Follow — only when the owner doesn't already follow this tool. */}
@@ -211,9 +244,18 @@ export function ProfileToolActions({
               variant={isInWatchlist ? "default" : "ghost"}
               className={iconBtn}
               onClick={onWatchlist}
-              title={isInWatchlist ? "In your Watchlist" : "Add to Watchlist"}
+              title={isInWatchlist ? "Saved for later" : "Save for later"}
             >
               <Bookmark className="w-3 h-3" />
+            </Button>
+            <Button
+              size="sm"
+              variant={isInOldStack ? "default" : "ghost"}
+              className={iconBtn}
+              onClick={onOldStack}
+              title={isInOldStack ? "In your Old Stack" : "Move to Old Stack"}
+            >
+              <Archive className="w-3 h-3" />
             </Button>
             <Button
               size="sm"
