@@ -2878,6 +2878,61 @@ func (app *App) listUserFollowedTools(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// getFeed returns the viewer's activity feed: playbooks published by the people
+// and about the tools they follow, plus the follow actions of people they
+// follow. Recent playbooks are blended in so a new account still sees content.
+func (app *App) getFeed(w http.ResponseWriter, r *http.Request) {
+	userID := extractUserIDFromRequest(r)
+
+	limit := 20
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 50 {
+			limit = n
+		}
+	}
+	page := 1
+	if v := r.URL.Query().Get("page"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			page = n
+		}
+	}
+
+	items, err := app.queries.GetUserFeed(r.Context(), db.GetUserFeedParams{
+		ViewerID:   userID,
+		PageLimit:  int32(limit),
+		PageOffset: int32((page - 1) * limit),
+	})
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to fetch feed", http.StatusInternalServerError)
+		return
+	}
+
+	if items == nil {
+		items = []db.GetUserFeedRow{}
+	}
+
+	var totalCount int64
+	if len(items) > 0 {
+		totalCount = items[0].TotalCount
+	}
+
+	response := struct {
+		Items      []db.GetUserFeedRow `json:"items"`
+		Page       int                 `json:"page"`
+		Limit      int                 `json:"limit"`
+		TotalCount int64               `json:"total_count"`
+	}{
+		Items:      items,
+		Page:       page,
+		Limit:      limit,
+		TotalCount: totalCount,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 func (app *App) listUserStack(w http.ResponseWriter, r *http.Request) {
 	username := strings.ToLower(chi.URLParam(r, "slug"))
 
@@ -3781,6 +3836,7 @@ func main() {
 
 		// Authenticated user routes
 		r.Get("/me", app.getAuthenticatedUser)
+		r.Get("/feed", app.getFeed)
 		r.Put("/me", app.updateProfile)
 
 		r.Get("/top-recommended-users", app.getTopRecommendedUsers)

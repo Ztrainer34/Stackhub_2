@@ -3620,3 +3620,128 @@ func (q *Queries) UpdateProfile(ctx context.Context, arg UpdateProfileParams) er
 	)
 	return err
 }
+
+const getUserFeed = `-- name: GetUserFeed :many
+WITH followed_users AS (
+  SELECT followee_id FROM user_follows WHERE follower_id = $1
+), followed_tools AS (
+  SELECT tool_id FROM tool_follows WHERE profile_id = $1
+), events AS (
+  SELECT 'post'::text AS kind, 'following_user'::text AS reason, p.last_publish AS occurred_at,
+         p.author_id AS actor_id, p.id AS post_id, NULL::uuid AS tool_id, NULL::uuid AS target_user_id
+  FROM posts p
+  WHERE p.is_published AND p.last_publish IS NOT NULL
+    AND p.author_id IN (SELECT followee_id FROM followed_users)
+
+  UNION ALL
+  SELECT 'post', 'following_tool', p.last_publish, p.author_id, p.id, pt.tool_id, NULL::uuid
+  FROM posts p
+  JOIN post_tools pt ON pt.post_id = p.id
+  WHERE p.is_published AND p.last_publish IS NOT NULL
+    AND pt.tool_id IN (SELECT tool_id FROM followed_tools)
+
+  UNION ALL
+  SELECT 'tool_follow', 'following_user', tf.added_at, tf.profile_id, NULL::uuid, tf.tool_id, NULL::uuid
+  FROM tool_follows tf
+  WHERE tf.profile_id IN (SELECT followee_id FROM followed_users)
+
+  UNION ALL
+  SELECT 'user_follow', 'following_user', uf.created_at, uf.follower_id, NULL::uuid, NULL::uuid, uf.followee_id
+  FROM user_follows uf
+  WHERE uf.follower_id IN (SELECT followee_id FROM followed_users)
+    AND uf.followee_id <> $1
+
+  UNION ALL
+  SELECT 'post', 'latest', p.last_publish, p.author_id, p.id, NULL::uuid, NULL::uuid
+  FROM posts p
+  WHERE p.is_published AND p.last_publish IS NOT NULL
+), ranked AS (
+  SELECT e.kind, e.reason, e.occurred_at, e.actor_id, e.post_id, e.tool_id, e.target_user_id,
+    ROW_NUMBER() OVER (
+      PARTITION BY e.kind,
+        COALESCE(e.post_id::text,
+                 e.actor_id::text || ':' || e.tool_id::text,
+                 e.actor_id::text || ':' || e.target_user_id::text)
+      ORDER BY CASE e.reason WHEN 'following_user' THEN 0 WHEN 'following_tool' THEN 1 ELSE 2 END
+    ) AS rn
+  FROM events e
+)
+SELECT
+  r.kind, r.reason, r.occurred_at,
+  r.actor_id, actor.username AS actor_username,
+  r.post_id, p.name AS post_name, p.slug AS post_slug, p.type AS post_type, p.description AS post_description,
+  r.tool_id, t.name AS tool_name, t.logo_url AS tool_logo_url,
+  r.target_user_id, tu.username AS target_username,
+  COUNT(*) OVER() AS total_count
+FROM ranked r
+JOIN profiles actor ON actor.id = r.actor_id
+LEFT JOIN posts p ON p.id = r.post_id
+LEFT JOIN tools t ON t.id = r.tool_id
+LEFT JOIN profiles tu ON tu.id = r.target_user_id
+WHERE r.rn = 1
+  AND (r.kind = 'post' OR r.actor_id <> $1)
+ORDER BY r.occurred_at DESC
+LIMIT $2 OFFSET $3
+`
+
+type GetUserFeedParams struct {
+	ViewerID   uuid.UUID `json:"viewer_id"`
+	PageLimit  int32     `json:"page_limit"`
+	PageOffset int32     `json:"page_offset"`
+}
+
+type GetUserFeedRow struct {
+	Kind            string             `json:"kind"`
+	Reason          string             `json:"reason"`
+	OccurredAt      pgtype.Timestamptz `json:"occurred_at"`
+	ActorID         uuid.UUID          `json:"actor_id"`
+	ActorUsername   string             `json:"actor_username"`
+	PostID          pgtype.UUID        `json:"post_id"`
+	PostName        pgtype.Text        `json:"post_name"`
+	PostSlug        pgtype.Text        `json:"post_slug"`
+	PostType        pgtype.Text        `json:"post_type"`
+	PostDescription pgtype.Text        `json:"post_description"`
+	ToolID          pgtype.UUID        `json:"tool_id"`
+	ToolName        pgtype.Text        `json:"tool_name"`
+	ToolLogoUrl     pgtype.Text        `json:"tool_logo_url"`
+	TargetUserID    pgtype.UUID        `json:"target_user_id"`
+	TargetUsername  pgtype.Text        `json:"target_username"`
+	TotalCount      int64              `json:"total_count"`
+}
+
+func (q *Queries) GetUserFeed(ctx context.Context, arg GetUserFeedParams) ([]GetUserFeedRow, error) {
+	rows, err := q.db.Query(ctx, getUserFeed, arg.ViewerID, arg.PageLimit, arg.PageOffset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetUserFeedRow
+	for rows.Next() {
+		var i GetUserFeedRow
+		if err := rows.Scan(
+			&i.Kind,
+			&i.Reason,
+			&i.OccurredAt,
+			&i.ActorID,
+			&i.ActorUsername,
+			&i.PostID,
+			&i.PostName,
+			&i.PostSlug,
+			&i.PostType,
+			&i.PostDescription,
+			&i.ToolID,
+			&i.ToolName,
+			&i.ToolLogoUrl,
+			&i.TargetUserID,
+			&i.TargetUsername,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

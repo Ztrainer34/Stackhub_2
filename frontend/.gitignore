@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# G2 scraper debug artifacts / generated lists
+scripts/g2-*.html
+scripts/import-skipped.txt
+scripts/import-new.txt

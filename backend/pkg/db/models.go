@@ -191,8 +191,9 @@ type ToolsWithDetail struct {
 }
 
 type UserFollow struct {
-	FollowerID uuid.UUID `json:"follower_id"`
-	FolloweeID uuid.UUID `json:"followee_id"`
+	FollowerID uuid.UUID          `json:"follower_id"`
+	FolloweeID uuid.UUID          `json:"followee_id"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }
 
 type Vendor struct {

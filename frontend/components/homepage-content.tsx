@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { TrendingUp, Users, BookOpen, ArrowRight, Plus } from "lucide-react";
 import Link from "next/link";
 import PostCard from "./post-card";
+import ActivityFeed from "./activity-feed";
 import { Post } from "@/lib/post";
 
 interface HomepageContentProps {
@@ -95,8 +96,11 @@ export default function HomepageContent({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Top Posts Section */}
         <div className="lg:col-span-2">
+          {/* Activity from the people and tools this user follows. */}
+          <ActivityFeed />
+
+          {/* Top Posts Section */}
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-2xl font-bold flex items-center gap-2">
               <TrendingUp className="h-6 w-6" />

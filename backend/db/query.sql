@@ -1033,3 +1033,72 @@ WHERE recipient_id = $1 AND is_read = false;
 -- name: DeleteNotification :exec
 DELETE FROM notifications 
 WHERE id = $1 AND recipient_id = $2;
+-- name: GetUserFeed :many
+-- Activity feed: playbooks from people and tools you follow, plus the follow
+-- actions of people you follow. "latest" rows keep the feed useful before the
+-- viewer follows anything. Events are deduped so a post that matches several
+-- reasons appears once, keeping the strongest reason.
+WITH followed_users AS (
+  SELECT followee_id FROM user_follows WHERE follower_id = sqlc.arg(viewer_id)
+), followed_tools AS (
+  SELECT tool_id FROM tool_follows WHERE profile_id = sqlc.arg(viewer_id)
+), events AS (
+  -- A playbook published by someone the viewer follows.
+  SELECT 'post'::text AS kind, 'following_user'::text AS reason, p.last_publish AS occurred_at,
+         p.author_id AS actor_id, p.id AS post_id, NULL::uuid AS tool_id, NULL::uuid AS target_user_id
+  FROM posts p
+  WHERE p.is_published AND p.last_publish IS NOT NULL
+    AND p.author_id IN (SELECT followee_id FROM followed_users)
+
+  UNION ALL
+  -- A playbook about a tool the viewer follows.
+  SELECT 'post', 'following_tool', p.last_publish, p.author_id, p.id, pt.tool_id, NULL::uuid
+  FROM posts p
+  JOIN post_tools pt ON pt.post_id = p.id
+  WHERE p.is_published AND p.last_publish IS NOT NULL
+    AND pt.tool_id IN (SELECT tool_id FROM followed_tools)
+
+  UNION ALL
+  -- Someone the viewer follows started following a tool.
+  SELECT 'tool_follow', 'following_user', tf.added_at, tf.profile_id, NULL::uuid, tf.tool_id, NULL::uuid
+  FROM tool_follows tf
+  WHERE tf.profile_id IN (SELECT followee_id FROM followed_users)
+
+  UNION ALL
+  -- Someone the viewer follows started following another user.
+  SELECT 'user_follow', 'following_user', uf.created_at, uf.follower_id, NULL::uuid, NULL::uuid, uf.followee_id
+  FROM user_follows uf
+  WHERE uf.follower_id IN (SELECT followee_id FROM followed_users)
+    AND uf.followee_id <> sqlc.arg(viewer_id)
+
+  UNION ALL
+  -- Recently published playbooks, so a new account still sees a feed.
+  SELECT 'post', 'latest', p.last_publish, p.author_id, p.id, NULL::uuid, NULL::uuid
+  FROM posts p
+  WHERE p.is_published AND p.last_publish IS NOT NULL
+), ranked AS (
+  SELECT e.*, ROW_NUMBER() OVER (
+      PARTITION BY e.kind,
+        COALESCE(e.post_id::text,
+                 e.actor_id::text || ':' || e.tool_id::text,
+                 e.actor_id::text || ':' || e.target_user_id::text)
+      ORDER BY CASE e.reason WHEN 'following_user' THEN 0 WHEN 'following_tool' THEN 1 ELSE 2 END
+    ) AS rn
+  FROM events e
+)
+SELECT
+  r.kind, r.reason, r.occurred_at,
+  r.actor_id, actor.username AS actor_username,
+  r.post_id, p.name AS post_name, p.slug AS post_slug, p.type AS post_type, p.description AS post_description,
+  r.tool_id, t.name AS tool_name, t.logo_url AS tool_logo_url,
+  r.target_user_id, tu.username AS target_username,
+  COUNT(*) OVER() AS total_count
+FROM ranked r
+JOIN profiles actor ON actor.id = r.actor_id
+LEFT JOIN posts p ON p.id = r.post_id
+LEFT JOIN tools t ON t.id = r.tool_id
+LEFT JOIN profiles tu ON tu.id = r.target_user_id
+WHERE r.rn = 1
+  AND (r.kind = 'post' OR r.actor_id <> sqlc.arg(viewer_id))
+ORDER BY r.occurred_at DESC
+LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
