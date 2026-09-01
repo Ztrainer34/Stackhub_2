@@ -27,7 +27,7 @@ export default function HomepageContent({
       {/* Header Section */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">
-          Welcome back,{" "}
+          Welcome,{" "}
           <Link
             href={`/${user.username}`}
             className="hover:underline hover:text-primary transition-colors"
