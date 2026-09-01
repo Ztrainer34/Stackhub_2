@@ -5,6 +5,8 @@ export type User = {
   id: string;
   username: string;
   email_hash?: string;
+  /** Uploaded picture. When absent the UI falls back to Gravatar. */
+  avatar_url?: string | null;
   display_name?: string;
   bio?: string;
   website?: string;
@@ -138,4 +140,30 @@ export async function unfollowUser(
   );
 
   if (!response.ok) throw new Error("Failed to unfollow user");
+}
+
+/** Uploads a new profile picture and returns its public URL. */
+export async function uploadAvatar(
+  supabaseClient: SupabaseClient,
+  file: File
+): Promise<{ avatar_url: string }> {
+  const body = new FormData();
+  body.append("image", file);
+
+  const resp = await fetchApiAuthenticated(supabaseClient, `/user/avatar`, {
+    method: "POST",
+    body,
+  });
+
+  if (!resp.ok) throw new Error((await resp.text()) || "Could not upload the picture");
+  return resp.json();
+}
+
+/** Removes the uploaded picture, falling back to Gravatar. */
+export async function removeAvatar(supabaseClient: SupabaseClient): Promise<void> {
+  const resp = await fetchApiAuthenticated(supabaseClient, `/user/avatar`, {
+    method: "DELETE",
+  });
+
+  if (!resp.ok) throw new Error((await resp.text()) || "Could not remove the picture");
 }

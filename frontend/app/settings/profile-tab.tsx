@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { UserAvatar } from "@/components/user-avatar";
+import { AvatarEditor } from "./avatar-editor";
 import { useAuth } from "@/lib/queries/use-auth";
 import { useUpdateProfile } from "@/lib/queries/use-profile-actions";
 import { createClient } from "@/utils/supabase/client";
@@ -100,33 +100,7 @@ export function ProfileTab() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-6">
-            <UserAvatar user={user} size="lg" />
-            <div className="flex-1">
-              <h3 className="text-lg font-semibold mb-2">Profile picture via Gravatar</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                Your profile picture is managed through{" "}
-                <a
-                  href="https://gravatar.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  Gravatar
-                </a>
-                . Update your avatar there using your email.
-              </p>
-              <a
-                href="https://gravatar.com"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Button variant="outline" size="sm">
-                  Manage on Gravatar
-                </Button>
-              </a>
-            </div>
-          </div>
+          <AvatarEditor user={user} />
         </CardContent>
       </Card>
 

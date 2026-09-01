@@ -10,6 +10,7 @@ SELECT
   linkedin,
   twitter,
   email_hash,
+  avatar_url,
   created_at,
   updated_at
 FROM
@@ -30,6 +31,7 @@ SELECT
   linkedin,
   twitter,
   email_hash,
+  avatar_url,
   created_at,
   updated_at
 FROM
@@ -1102,3 +1104,9 @@ WHERE r.rn = 1
   AND (r.kind = 'post' OR r.actor_id <> sqlc.arg(viewer_id))
 ORDER BY r.occurred_at DESC
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
+
+-- name: SetProfileAvatar :exec
+-- Pass NULL to clear the uploaded picture and fall back to Gravatar.
+UPDATE profiles
+SET avatar_url = sqlc.narg(avatar_url), updated_at = now()
+WHERE id = $1;

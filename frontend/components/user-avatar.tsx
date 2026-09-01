@@ -16,7 +16,11 @@ const gravatarSizes = {
   xl: 256,  // 128px * 2 for retina
 };
 
+// Precedence: an uploaded picture, then Gravatar, then the initial in
+// AvatarFallback (which Radix shows whenever the image fails to load).
 function getUserAvatarUrl(user: User, size: "sm" | "md" | "lg" | "xl"): string {
+  if (user.avatar_url) return user.avatar_url;
+
   const pixelSize = gravatarSizes[size];
 
   // If we have the pre-computed hash from the backend, use it

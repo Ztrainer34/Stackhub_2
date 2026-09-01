@@ -129,6 +129,7 @@ type Profile struct {
 	Bio                 pgtype.Text        `json:"bio"`
 	Website             pgtype.Text        `json:"website"`
 	EmailHash           pgtype.Text        `json:"email_hash"`
+	AvatarUrl           pgtype.Text        `json:"avatar_url"`
 }
 
 type StackItem struct {

@@ -2449,6 +2449,85 @@ func getPublicSupabaseBucketURL(projectRef, bucketName, filePath string) string 
 		projectRef, bucketName, filePath)
 }
 
+// uploadAvatar stores a profile picture in the bucket and points the profile at
+// it. Uploading replaces whatever was there; removing falls back to Gravatar.
+func (app *App) uploadAvatar(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := extractUserIDFromRequest(r)
+
+	if err := r.ParseMultipartForm(5 << 20); err != nil { // 5 MB
+		http.Error(w, "Image must be smaller than 5MB", http.StatusBadRequest)
+		return
+	}
+
+	file, fileHeader, err := r.FormFile("image")
+	if err != nil {
+		http.Error(w, "No image supplied", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	ok, err := isImage(file)
+	if err != nil {
+		http.Error(w, "Could not read the image", http.StatusBadRequest)
+		return
+	}
+	if !ok {
+		http.Error(w, "That file type isn't supported. Use a PNG, JPEG or GIF.", http.StatusBadRequest)
+		return
+	}
+
+	filename := fmt.Sprintf("avatars/%s%s", uuid.NewString(), filepath.Ext(fileHeader.Filename))
+
+	uploader := manager.NewUploader(app.bucket)
+	_, err = uploader.Upload(ctx, &s3.PutObjectInput{
+		Bucket:      app.bucketName,
+		Key:         aws.String(filename),
+		Body:        file,
+		ContentType: aws.String(fileHeader.Header.Get("Content-Type")),
+	})
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to upload the image", http.StatusInternalServerError)
+		return
+	}
+
+	fileURL := getPublicSupabaseBucketURL(*app.supabaseProjectRef, *app.bucketName, filename)
+
+	err = app.queries.SetProfileAvatar(ctx, db.SetProfileAvatarParams{
+		ID:        userID,
+		AvatarUrl: pgtype.Text{String: fileURL, Valid: true},
+	})
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to save the picture", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(struct {
+		AvatarURL string `json:"avatar_url"`
+	}{AvatarURL: fileURL})
+}
+
+// removeAvatar clears the uploaded picture. The stored object is left in the
+// bucket; the profile simply stops pointing at it and falls back to Gravatar.
+func (app *App) removeAvatar(w http.ResponseWriter, r *http.Request) {
+	userID := extractUserIDFromRequest(r)
+
+	err := app.queries.SetProfileAvatar(r.Context(), db.SetProfileAvatarParams{
+		ID:        userID,
+		AvatarUrl: pgtype.Text{Valid: false},
+	})
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to remove the picture", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
 func (app *App) uploadImage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -3837,6 +3916,8 @@ func main() {
 		// Authenticated user routes
 		r.Get("/me", app.getAuthenticatedUser)
 		r.Get("/feed", app.getFeed)
+		r.Post("/user/avatar", app.uploadAvatar)
+		r.Delete("/user/avatar", app.removeAvatar)
 		r.Put("/me", app.updateProfile)
 
 		r.Get("/top-recommended-users", app.getTopRecommendedUsers)

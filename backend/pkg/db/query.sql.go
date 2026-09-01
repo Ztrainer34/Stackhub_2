@@ -695,6 +695,7 @@ SELECT
   linkedin,
   twitter,
   email_hash,
+  avatar_url,
   created_at,
   updated_at
 FROM
@@ -714,6 +715,7 @@ type GetProfileRow struct {
 	Linkedin    pgtype.Text        `json:"linkedin"`
 	Twitter     pgtype.Text        `json:"twitter"`
 	EmailHash   pgtype.Text        `json:"email_hash"`
+	AvatarUrl   pgtype.Text        `json:"avatar_url"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
@@ -732,6 +734,7 @@ func (q *Queries) GetProfile(ctx context.Context, id uuid.UUID) (GetProfileRow, 
 		&i.Linkedin,
 		&i.Twitter,
 		&i.EmailHash,
+		&i.AvatarUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -750,6 +753,7 @@ SELECT
   linkedin,
   twitter,
   email_hash,
+  avatar_url,
   created_at,
   updated_at
 FROM
@@ -769,6 +773,7 @@ type GetProfileWithUsernameRow struct {
 	Linkedin    pgtype.Text        `json:"linkedin"`
 	Twitter     pgtype.Text        `json:"twitter"`
 	EmailHash   pgtype.Text        `json:"email_hash"`
+	AvatarUrl   pgtype.Text        `json:"avatar_url"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
@@ -787,6 +792,7 @@ func (q *Queries) GetProfileWithUsername(ctx context.Context, username string) (
 		&i.Linkedin,
 		&i.Twitter,
 		&i.EmailHash,
+		&i.AvatarUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -3744,4 +3750,20 @@ func (q *Queries) GetUserFeed(ctx context.Context, arg GetUserFeedParams) ([]Get
 		return nil, err
 	}
 	return items, nil
+}
+
+const setProfileAvatar = `-- name: SetProfileAvatar :exec
+UPDATE profiles
+SET avatar_url = $2, updated_at = now()
+WHERE id = $1
+`
+
+type SetProfileAvatarParams struct {
+	ID        uuid.UUID   `json:"id"`
+	AvatarUrl pgtype.Text `json:"avatar_url"`
+}
+
+func (q *Queries) SetProfileAvatar(ctx context.Context, arg SetProfileAvatarParams) error {
+	_, err := q.db.Exec(ctx, setProfileAvatar, arg.ID, arg.AvatarUrl)
+	return err
 }
