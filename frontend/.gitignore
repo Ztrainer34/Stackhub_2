@@ -44,3 +44,4 @@ next-env.d.ts
 scripts/g2-*.html
 scripts/import-skipped.txt
 scripts/import-new.txt
+scripts/g2-done.json

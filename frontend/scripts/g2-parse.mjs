@@ -85,11 +85,12 @@ export function parseProduct(html, slug = "") {
 export const countWords = (s) => (s ? s.trim().split(/\s+/).filter(Boolean).length : 0);
 
 /**
- * Condenses G2's long overview into a card-sized summary by keeping whole
- * leading sentences — G2 opens with the definition ("X is a ... platform that
- * helps ..."), so the first few sentences are the useful part.
+ * Takes G2's product description as written, keeping whole sentences up to a
+ * ceiling. Short descriptions are used in full — there is no minimum, so a
+ * 70-word entry stays 70 words rather than being padded out. Only long copy is
+ * trimmed, and always on a sentence boundary.
  */
-export function summarize(text, minWords = 100, maxWords = 200) {
+export function summarize(text, maxWords = 200) {
   if (!text) return null;
   const sentences = text.match(/[^.!?]+[.!?]+(?:\s|$)/g) || [text];
 
@@ -99,7 +100,6 @@ export function summarize(text, minWords = 100, maxWords = 200) {
     const s = raw.trim();
     if (!s) continue;
     const w = countWords(s);
-    if (words >= minWords) break;          // enough already
     if (words && words + w > maxWords) break; // next sentence would overflow
     kept.push(s);
     words += w;

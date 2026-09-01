@@ -6,12 +6,14 @@ import {
   Section,
   Text,
   Heading,
-  Hr,
   Button,
   Font,
 } from "@react-email/components";
 import * as React from "react";
 
+// Kept deliberately in sync with mail/generated/welcome.html — that generated
+// file is what the Go mailer sends, so any copy change here must be rebuilt
+// (pnpm build in backend/mail) for it to reach users.
 export default function Email() {
   return (
     <Html>
@@ -37,33 +39,19 @@ export default function Email() {
 
           {/* Main Content */}
           <Section style={content}>
-            <Text style={greeting}>
-              Hey <strong>{"{{.FirstName}}"}</strong>,
-            </Text>
+            <Text style={greeting}>Welcome aboard 👋</Text>
 
             <Text style={paragraph}>
-              Welcome to <strong>StackHub</strong>, the knowledge hub for tools.
+              You&apos;re all set to start using <strong>StackHub</strong>.
             </Text>
-
-            <Text style={paragraph}>
-              Up your game with makers' and tinkerers' playbooks (or just
-              scratch that curiosity itch).
-            </Text>
-
-            <Text style={paragraph}>
-              And share your own playbooks to inspire others, grow your
-              visibility.
-            </Text>
-
-            <Hr style={divider} />
 
             <Heading as="h2" style={sectionHeading}>
-              🚀 A couple of ideas to get started:
+              A couple of ideas to get started:
             </Heading>
 
             <Section style={actionList}>
               <Text style={actionItem}>
-                <span style={bullet}>🔍</span> Explore other stacks and
+                <span style={bullet}>🔍</span> Explore people&apos;s stacks and
                 playbooks
               </Text>
               <Text style={actionItem}>
@@ -71,18 +59,16 @@ export default function Email() {
                 watchlist
               </Text>
               <Text style={actionItem}>
-                <span style={bullet}>📝</span> Add your playbooks. Or fork one
-                and add your own twist to it.
+                <span style={bullet}>📝</span> Add your playbooks to grow your
+                visibility
               </Text>
             </Section>
 
             <Section style={ctaSection}>
-              <Button href="https://stackhub.com/explore" style={primaryButton}>
+              <Button href="https://www.stackhub.me/" style={primaryButton}>
                 Start Exploring
               </Button>
             </Section>
-
-            <Hr style={divider} />
 
             <Text style={closing}>
               Enjoy the exploration,
@@ -94,7 +80,7 @@ export default function Email() {
           {/* Footer */}
           <Section style={footer}>
             <Text style={footerText}>
-              <a href="https://stackhub.com" style={footerLink}>
+              <a href="https://www.stackhub.me/" style={footerLink}>
                 Visit StackHub
               </a>
             </Text>
@@ -123,7 +109,7 @@ const container = {
 };
 
 const header = {
-  backgroundColor: "#1a365d",
+  backgroundColor: "#000000",
   borderRadius: "8px 8px 0 0",
   padding: "40px 40px 30px",
   textAlign: "center" as const,
@@ -160,17 +146,13 @@ const paragraph = {
   margin: "0 0 16px 0",
 };
 
-const divider = {
-  border: "none",
-  borderTop: "1px solid #e2e8f0",
-  margin: "30px 0",
-};
-
+// Rendered at body-copy size/weight, not as a visual heading.
 const sectionHeading = {
-  color: "#2d3748",
-  fontSize: "20px",
-  fontWeight: "600",
-  margin: "0 0 20px 0",
+  color: "#4a5568",
+  fontSize: "16px",
+  lineHeight: "1.6",
+  fontWeight: "400",
+  margin: "0 0 16px 0",
 };
 
 const actionList = {
@@ -197,7 +179,7 @@ const ctaSection = {
 };
 
 const primaryButton = {
-  backgroundColor: "#3182ce",
+  backgroundColor: "#000000",
   borderRadius: "6px",
   color: "#ffffff",
   fontSize: "16px",

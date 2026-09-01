@@ -35,23 +35,30 @@ import { parseProduct, parseSeller, summarize, countWords } from "./g2-parse.mjs
 
 const TOKEN = process.env.BRIGHTDATA_TOKEN;
 const ZONE = process.env.BRIGHTDATA_ZONE || "web_unlocker1";
+// G2 localises by exit IP — pin the country so descriptions come back in
+// English rather than whatever the rotating proxy happens to land on.
+const COUNTRY = process.env.BRIGHTDATA_COUNTRY || "us";
 const APPLY = process.env.APPLY === "1";
 const SAMPLE = parseInt(process.env.SAMPLE || "10", 10);
 const LIMIT = parseInt(process.env.LIMIT || "0", 10);
 const OFFSET = parseInt(process.env.OFFSET || "0", 10);
-const CONCURRENCY = parseInt(process.env.CONCURRENCY || "3", 10);
+const CONCURRENCY = parseInt(process.env.CONCURRENCY || "6", 10);
+// Bright Data will sit on a dead URL for 300s before returning 504, so cap it
+// ourselves. Real pages come back in ~20-26s.
+const REQ_TIMEOUT = parseInt(process.env.REQ_TIMEOUT || "60000", 10);
 const INSPECT = process.env.INSPECT || "";
 const PARSE_ONLY = process.env.PARSE === "1";
 // Descriptions shorter than this many WORDS are treated as placeholders worth
 // replacing with a condensed G2 summary; longer ones are left alone.
 const SHORT_DESC_WORDS = parseInt(process.env.SHORT_DESC_WORDS || "15", 10);
-// Target length of the generated summary.
-const SUMMARY_MIN = parseInt(process.env.SUMMARY_MIN || "100", 10);
+// Ceiling only — short G2 descriptions are stored in full, never padded.
 const SUMMARY_MAX = parseInt(process.env.SUMMARY_MAX || "200", 10);
 const isThin = (d) => countWords(d) < SHORT_DESC_WORDS;
 // Descriptions are opt-in for now: DESC=1 enables replacing thin ones with a
 // condensed G2 summary. Off by default so runs only touch vendor/logo fields.
-const WRITE_DESC = process.env.DESC === "1";
+const DESC_MODE = (process.env.DESC || "").toLowerCase(); // "1" = thin only, "all" = every tool
+const WRITE_DESC = DESC_MODE === "1" || DESC_MODE === "all";
+const DESC_ALL = DESC_MODE === "all";
 
 // ---- offline parse mode (no network, no cost) ----------------------------
 if (PARSE_ONLY) {
@@ -77,8 +84,10 @@ if (!TOKEN) {
 
 // ---- Bright Data Web Unlocker -------------------------------------------
 let requestCount = 0;
-async function unlock(url, tries = 2) {
+async function unlock(url, { tries = 2, timeout = REQ_TIMEOUT } = {}) {
   for (let attempt = 1; attempt <= tries; attempt++) {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), timeout);
     try {
       requestCount++;
       const res = await fetch("https://api.brightdata.com/request", {
@@ -87,16 +96,26 @@ async function unlock(url, tries = 2) {
           Authorization: `Bearer ${TOKEN}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ zone: ZONE, url, format: "raw" }),
+        body: JSON.stringify({ zone: ZONE, url, format: "raw", country: COUNTRY }),
+        signal: ctl.signal,
       });
-      if (!res.ok) throw new Error(`unlocker ${res.status}: ${(await res.text()).slice(0, 160)}`);
+      // 4xx/5xx here means the page is genuinely unreachable — retrying a dead
+      // URL just burns another timeout, so give up immediately.
+      if (!res.ok) {
+        const detail = (await res.text()).slice(0, 120);
+        const err = new Error(`unlocker ${res.status}: ${detail}`);
+        err.fatal = res.status === 404 || res.status >= 500;
+        throw err;
+      }
       const body = await res.text();
       // A 200 with an empty/stub body means the page did not really load.
       if (body.length < 1000) throw new Error(`empty response (${body.length} bytes)`);
       return body;
     } catch (e) {
-      if (attempt === tries) throw e;
+      if (e.fatal || attempt === tries) throw e;
       await new Promise((r) => setTimeout(r, 1500 * attempt));
+    } finally {
+      clearTimeout(timer);
     }
   }
 }
@@ -115,18 +134,19 @@ function nameMatches(want, got) {
   return a === b || b.startsWith(a) || a.startsWith(b);
 }
 
-async function fetchProduct(slug, wantName) {
+async function fetchProduct(slug, wantName, opts = {}) {
   const url = `https://www.g2.com/products/${slug}/reviews`;
-  const html = await unlock(url);
+  const html = await unlock(url, opts);
   const parsed = parseProduct(html, slug);
   return nameMatches(wantName, parsed.name) ? { url, parsed, html } : null;
 }
 
 /** Product page via slug guess, else G2 search. Then the seller page. */
-async function findG2(tool) {
+async function findG2(tool, needsVendor = true) {
   let hit = null;
   try {
-    hit = await fetchProduct(g2Slug(tool.name), tool.name);
+    // Speculative: one try, short fuse — a miss falls through to search.
+    hit = await fetchProduct(g2Slug(tool.name), tool.name, { tries: 1, timeout: 45000 });
   } catch {
     /* fall through to search */
   }
@@ -161,9 +181,10 @@ async function findG2(tool) {
     hit.via = "slug";
   }
 
-  // Company details live on the seller page.
+  // Company details live on the seller page — a second ~26s request, so skip it
+  // when this tool's vendor record is already complete (e.g. a DESC-only pass).
   let seller = { hq: null, year: null, website: null, linkedin: null, x: null };
-  if (hit.parsed.sellerSlug) {
+  if (hit.parsed.sellerSlug && needsVendor) {
     try {
       const html = await unlock(`https://www.g2.com/sellers/${hit.parsed.sellerSlug}`);
       seller = parseSeller(html);
@@ -218,6 +239,24 @@ async function allRows(table, cols) {
 }
 
 const norm = (n) => n.toLowerCase().replace(/\s+/g, " ").trim();
+
+// DESC=all targets every tool, so "fill only blanks" no longer makes a re-run
+// resume. Record finished names on disk instead, and skip them next time.
+const DONE_FILE = "scripts/g2-done.json";
+const done = new Set(
+  existsSync(DONE_FILE) ? JSON.parse(readFileSync(DONE_FILE, "utf8")) : []
+);
+const flushDone = () => writeFileSync(DONE_FILE, JSON.stringify([...done]));
+function markDone(name) {
+  done.add(norm(name));
+  flushDone(); // every tool — a few KB, and Ctrl+C must not lose progress
+}
+// Interrupting mid-run is normal here; keep what was finished.
+process.on("SIGINT", () => {
+  flushDone();
+  console.log(`\n\nInterrupted. ${done.size} tools recorded — re-run to resume.`);
+  process.exit(130);
+});
 const imported = new Set(
   JSON.parse(readFileSync("scripts/tools-enriched.json", "utf8")).map((t) => norm(t.name))
 );
@@ -229,6 +268,7 @@ const tools = await allRows(
 );
 
 const incomplete = (t) =>
+  DESC_ALL ||
   (WRITE_DESC && isThin(t.description)) ||
   !t.logo_url ||
   !t.vendor ||
@@ -238,6 +278,7 @@ const incomplete = (t) =>
 
 let targets = tools
   .filter((t) => imported.has(norm(t.name)))
+  .filter((t) => !done.has(norm(t.name)))
   .filter(incomplete)
   .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -250,15 +291,24 @@ console.log(`${APPLY ? "APPLYING to" : "DRY RUN over"} ${targets.length} tools (
 // ---- run -----------------------------------------------------------------
 const stats = { found: 0, missed: 0, logo: 0, desc: 0, hq: 0, year: 0, website: 0, linkedin: 0, x: 0, updated: 0 };
 
-async function handle(tool) {
+const vendorIncomplete = (t) => {
+  const v = t.vendor;
+  return !v || !v.head_office || !v.year_of_foundation || !v.website || !v.linkedin_profile;
+};
+
+// `group` is every catalog row sharing this name. The catalog still contains
+// duplicates, so we scrape G2 once and write the result to all of them.
+async function handle(group) {
+  const tool = group[0];
   let hit = null;
   try {
-    hit = await findG2(tool);
+    hit = await findG2(tool, group.some(vendorIncomplete));
   } catch (e) {
     console.error(`  ! ${tool.name}: ${e.message}`);
   }
   if (!hit) {
     stats.missed++;
+    markDone(tool.name);
     console.log(`  ✗ ${tool.name.padEnd(26)} no confident G2 match`);
     return;
   }
@@ -268,17 +318,22 @@ async function handle(tool) {
   for (const k of ["logo", "description", "hq", "year", "website", "linkedin", "x"])
     if (d[k]) stats[k === "description" ? "desc" : k]++;
   console.log(
-    `  ✓ ${tool.name.padEnd(26)} logo:${d.logo ? "y" : "—"} desc:${!WRITE_DESC ? "off" : d.description ? countWords(summarize(d.description, SUMMARY_MIN, SUMMARY_MAX)) + "w" : "—"} hq:${(d.hq || "—").padEnd(20)}` +
+    `  ✓ ${(tool.name + (group.length > 1 ? ` x${group.length}` : "")).padEnd(26)} logo:${d.logo ? "y" : "—"} desc:${!WRITE_DESC ? "off" : d.description ? countWords(summarize(d.description, SUMMARY_MAX)) + "w" : "—"} hq:${(d.hq || "—").padEnd(20)}` +
       ` yr:${String(d.year || "—").padEnd(5)} li:${d.linkedin ? "y" : "—"} x:${(d.x || "—").padEnd(14)} [${hit.via}]`
   );
   if (!APPLY) return;
 
+  for (const tool of group) await writeTool(tool, d);
+  markDone(tool.name);
+}
+
+async function writeTool(tool, d) {
   const toolPatch = {};
   if (!tool.logo_url && d.logo) toolPatch.logo_url = d.logo;
   // Replace only thin/missing descriptions, with a condensed summary of G2's
   // overview rather than the full page copy.
-  if (WRITE_DESC && d.description && isThin(tool.description)) {
-    const summary = summarize(d.description, SUMMARY_MIN, SUMMARY_MAX);
+  if (WRITE_DESC && d.description && (DESC_ALL || isThin(tool.description))) {
+    const summary = summarize(d.description, SUMMARY_MAX);
     if (summary) toolPatch.description = summary;
   }
   if (Object.keys(toolPatch).length) {
@@ -310,16 +365,27 @@ async function handle(tool) {
   stats.updated++;
 }
 
-const queue = [...targets];
+// Collapse duplicate rows so each distinct tool name costs one G2 lookup.
+const byName = new Map();
+for (const t of targets) {
+  const k = norm(t.name);
+  if (!byName.has(k)) byName.set(k, []);
+  byName.get(k).push(t);
+}
+const queue = [...byName.values()];
+console.log(`${targets.length} rows -> ${queue.length} distinct names to look up
+`);
 await Promise.all(
   Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
     while (queue.length) await handle(queue.shift());
   })
 );
 
+flushDone();
+
 const pct = (n) => (stats.found ? `${Math.round((n / stats.found) * 100)}%` : "—");
 console.log(`\n===== ${APPLY ? "DONE" : "DRY RUN"} =====`);
-console.log(`Matched on G2 : ${stats.found} / ${targets.length}  (no match: ${stats.missed})`);
+console.log(`Matched on G2 : ${stats.found} / ${queue.length}  (no match: ${stats.missed})`);
 console.log(
   `Of the matches: logo ${pct(stats.logo)} · desc ${pct(stats.desc)} · HQ ${pct(stats.hq)} · ` +
     `founded ${pct(stats.year)} · website ${pct(stats.website)} · linkedin ${pct(stats.linkedin)} · x ${pct(stats.x)}`
