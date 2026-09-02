@@ -377,6 +377,8 @@ SELECT
   p.id,
   p.username,
   p.display_name,
+  p.email_hash,
+  p.avatar_url,
   p.created_at,
   p.updated_at,
   ts_rank_cd(p.vector, websearch_to_tsquery('simple', $1)) AS rank,
@@ -953,6 +955,7 @@ SELECT
   p.display_name,
   p.bio,
   p.email_hash,
+  p.avatar_url,
   (sqlc.arg(is_authenticated)::bool AND EXISTS(
     SELECT 1 FROM user_follows uf2
     WHERE uf2.follower_id = sqlc.arg(viewer_id) AND uf2.followee_id = p.id
@@ -971,6 +974,7 @@ SELECT
   p.display_name,
   p.bio,
   p.email_hash,
+  p.avatar_url,
   (sqlc.arg(is_authenticated)::bool AND EXISTS(
     SELECT 1 FROM user_follows uf2
     WHERE uf2.follower_id = sqlc.arg(viewer_id) AND uf2.followee_id = p.id

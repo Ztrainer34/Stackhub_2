@@ -1518,6 +1518,7 @@ SELECT
   p.display_name,
   p.bio,
   p.email_hash,
+  p.avatar_url,
   ($1::bool AND EXISTS(
     SELECT 1 FROM user_follows uf2
     WHERE uf2.follower_id = $2 AND uf2.followee_id = p.id
@@ -1544,6 +1545,7 @@ type FollowUserRow struct {
 	DisplayName pgtype.Text `json:"display_name"`
 	Bio         pgtype.Text `json:"bio"`
 	EmailHash   pgtype.Text `json:"email_hash"`
+	AvatarUrl   pgtype.Text `json:"avatar_url"`
 	IsFollowing bool        `json:"is_following"`
 	TotalCount  int64       `json:"total_count"`
 }
@@ -1569,6 +1571,7 @@ func (q *Queries) ListFollowers(ctx context.Context, arg ListFollowersParams) ([
 			&i.DisplayName,
 			&i.Bio,
 			&i.EmailHash,
+			&i.AvatarUrl,
 			&i.IsFollowing,
 			&i.TotalCount,
 		); err != nil {
@@ -1589,6 +1592,7 @@ SELECT
   p.display_name,
   p.bio,
   p.email_hash,
+  p.avatar_url,
   ($1::bool AND EXISTS(
     SELECT 1 FROM user_follows uf2
     WHERE uf2.follower_id = $2 AND uf2.followee_id = p.id
@@ -1630,6 +1634,7 @@ func (q *Queries) ListFollowing(ctx context.Context, arg ListFollowingParams) ([
 			&i.DisplayName,
 			&i.Bio,
 			&i.EmailHash,
+			&i.AvatarUrl,
 			&i.IsFollowing,
 			&i.TotalCount,
 		); err != nil {
@@ -3364,6 +3369,8 @@ SELECT
   p.id,
   p.username,
   p.display_name,
+  p.email_hash,
+  p.avatar_url,
   p.created_at,
   p.updated_at,
   ts_rank_cd(p.vector, websearch_to_tsquery('simple', $1)) AS rank,
@@ -3387,6 +3394,8 @@ type SearchProfileRow struct {
 	ID          uuid.UUID          `json:"id"`
 	Username    string             `json:"username"`
 	DisplayName string             `json:"display_name"`
+	EmailHash   pgtype.Text        `json:"email_hash"`
+	AvatarUrl   pgtype.Text        `json:"avatar_url"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 	Rank        float32            `json:"rank"`
@@ -3406,6 +3415,8 @@ func (q *Queries) SearchProfile(ctx context.Context, arg SearchProfileParams) ([
 			&i.ID,
 			&i.Username,
 			&i.DisplayName,
+			&i.EmailHash,
+			&i.AvatarUrl,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Rank,
