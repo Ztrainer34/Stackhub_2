@@ -1,0 +1,674 @@
+CROSS-BATCH DUPLICATE TOOLS
+========================================================================
+Only groups where the NEW import (created 2026-07) collides with a
+tool that was already in the catalogue (created 2025-11).
+Duplicates sitting entirely within one batch are excluded.
+
+[NEW] = added by the recent ColdIQ import
+[OLD] = already in the catalogue
+Nothing has been changed.
+
+
+A. IDENTICAL NAMES — 0 groups
+------------------------------------------------------------------------
+
+
+B. DIFFER ONLY BY FILLER WORDS — 17 groups
+   e.g. "Brevo" (old) vs "Brevo Marketing Platform" (new)
+------------------------------------------------------------------------
+
+  1.
+      [NEW] Agent AI   (https://agent.ai/)
+      [OLD] AgentAI
+
+  2.
+      [NEW] Auto-GPT   (https://www.coldiq.com/)
+      [OLD] AutoGPT
+
+  3.
+      [OLD] B2B Rocket   (https://www.b2brocket.ai)
+      [NEW] B2B Rocket   (https://www.coldiq.com/)
+
+  4.
+      [NEW] Brevo   (https://get.brevo.com/4pfvfx6u1kpw)
+      [OLD] Brevo Marketing Platform
+
+  5.
+      [NEW] Dubber   (https://dubber.net/)
+      [OLD] Dubber Platform
+
+  6.
+      [OLD] Email List Verify
+      [NEW] EmailListVerify   (https://www.emaillistverify.com/)
+
+  7.
+      [OLD] Faros.ai
+      [NEW] Faros AI   (https://faros.ai/)
+
+  8.
+      [OLD] Hippo Video
+      [NEW] HippoVideo   (https://hippovideo.grsm.io/michellieben452)
+
+  9.
+      [OLD] Letter Friend
+      [NEW] LetterFriend   (https://letterfriend.com/)
+
+  10.
+      [OLD] Murf.ai
+      [NEW] Murf AI   (https://www.coldiq.com/)
+
+  11.
+      [NEW] Pega   (https://www.pega.com/)
+      [OLD] Pega Platform
+
+  12.
+      [NEW] Poly AI   (https://www.coldiq.com/)
+      [OLD] PolyAI
+
+  13.
+      [NEW] Quantcast   (https://quantcast.com/)
+      [OLD] Quantcast Platform
+
+  14.
+      [NEW] Salesforce   (https://www.salesforce.com/)
+      [OLD] Salesforce Platform
+
+  15.
+      [OLD] Wavel.ai
+      [NEW] Wavel AI   (https://www.coldiq.com/)
+
+  16.
+      [OLD] weConnect
+      [NEW] We-Connect   (https://www.coldiq.com/)
+
+  17.
+      [NEW] ZoomInfo   (https://try.zoominfo.com/q7ap7thgldor)
+      [OLD] ZoomInfo Marketing
+
+
+C. ONE NAME EXTENDS ANOTHER — 112 groups  (review)
+   May be genuinely different products.
+------------------------------------------------------------------------
+
+  1.
+      [NEW] 6Sense   (https://6sense.com/)
+      [OLD] 6sense Revenue Marketing
+      [OLD] 6sense Sales Intelligence
+
+  2.
+      [NEW] Acuity   (https://www.acuitysds.com/)
+      [OLD] Acuity Scheduling   (https://www.squarespace.com/)
+
+  3.
+      [NEW] AdCreative   (https://free-trial.adcreative.ai/uocvcw7e0w6y)
+      [OLD] AdCreative.ai
+
+  4.
+      [OLD] Air
+      [OLD] Air Maestro
+      [NEW] Air Traffic Control   (https://www.coldiq.com/)
+
+  5.
+      [OLD] Alan
+      [NEW] Alan AI   (https://www.coldiq.com/)
+
+  6.
+      [NEW] Amplitude   (https://amplitude.com/)
+      [OLD] Amplitude Analytics
+      [OLD] Amplitude Guides & Surveys
+      [OLD] Amplitude Session Replay
+
+  7.
+      [NEW] AnyBiz   (https://anybiz.io/)
+      [OLD] AnyBiz.io
+
+  8.
+      [NEW] Appointwise   (https://appointwise.io/)
+      [OLD] Appointwise AI
+
+  9.
+      [OLD] Assembly
+      [NEW] Assembly AI   (https://www.coldiq.com/)
+      [OLD] Assembly Neos
+      [OLD] Assembly Voting
+
+  10.
+      [OLD] Augment
+      [NEW] Augment CXM   (https://www.coldiq.com/)
+
+  11.
+      [NEW] Automation Anywhere   (https://automationanywhere.com/)
+      [OLD] Automation Anywhere - RPA | Robotic Process Automation
+
+  12.
+      [NEW] Axiom   (https://axiom.ai/)
+      [OLD] Axiom Cemetery Management
+
+  13.
+      [NEW] Bigtincan   (https://bigtincan.com/)
+      [OLD] Bigtincan Content
+      [OLD] Bigtincan Engagement
+      [OLD] Bigtincan Readiness (formerly Brainshark)
+
+  14.
+      [NEW] Boomerang   (https://www.getboomerang.ai/)
+      [OLD] Boomerang for Gmail
+
+  15.
+      [NEW] Browse   (https://www.browse.ai/)
+      [OLD] Browse AI
+
+  16.
+      [NEW] Buzz   (https://buzzai.sjv.io/c/4337202/1630090/18902)
+      [OLD] Buzz Medical Messenger
+      [OLD] Buzz to the Rescues
+
+  17.
+      [NEW] Campaign Monitor   (https://www.coldiq.com/)
+      [OLD] Campaign Monitor by Marigold
+
+  18.
+      [NEW] Capsule   (https://get.capsulenow.io/c9w49tf7h2oz)
+      [OLD] Capsule CRM
+
+  19.
+      [NEW] Cargo   (https://www.getcargo.io/)
+      [OLD] Cargo-Planner
+
+  20.
+      [NEW] Chief   (https://www.coldiq.com/)
+      [OLD] Chief Architect Premier
+
+  21.
+      [OLD] CHORUS
+      [OLD] Chorus Analyse
+      [NEW] Chorus (ZoomInfo)   (https://www.coldiq.com/)
+      [OLD] Chorus by ZoomInfo
+
+  22.
+      [NEW] Clearout   (https://clearout.io/)
+      [OLD] Clearout.io
+
+  23.
+      [NEW] Clutch   (https://clutch.co/)
+      [OLD] Clutch.co
+
+  24.
+      [NEW] Cognigy   (https://cognigy.com/)
+      [OLD] Cognigy.AI
+
+  25.
+      [NEW] Colossyan   (https://www.colossyan.com/)
+      [OLD] Colossyan Creator
+
+  26.
+      [NEW] Competera   (https://competera.ai/)
+      [OLD] Competera Pricing Platform
+
+  27.
+      [NEW] Compose   (https://compose.ai/)
+      [OLD] Compose Hosted ScyllaDB
+
+  28.
+      [NEW] Convin   (https://convin.ai/)
+      [OLD] Convin.ai
+
+  29.
+      [OLD] Copilot
+      [NEW] CoPilot AI   (https://www.coldiq.com/)
+
+  30.
+      [NEW] Cvent   (https://cvent.com/)
+      [OLD] Cvent Attendee Hub
+      [OLD] Cvent Event Marketing & Management
+      [OLD] Cvent Supplier & Venue Solutions
+
+  31.
+      [OLD] dbt
+      [NEW] dbt Labs   (https://www.coldiq.com/)
+
+  32.
+      [NEW] DealHub   (https://dealhub.io/)
+      [OLD] DealHub.io
+
+  33.
+      [NEW] Demandbase   (https://www.demandbase.com/)
+      [OLD] Demandbase One
+
+  34.
+      [NEW] Dialpad   (https://www.dialpad.com/)
+      [OLD] Dialpad Connect
+
+  35.
+      [NEW] Dubb   (https://dubb.com/)
+      [OLD] Dubb: Sales Video System + CRM
+
+  36.
+      [NEW] Ebsta   (https://ebsta.com/)
+      [OLD] Ebsta for Bullhorn
+
+  37.
+      [NEW] Emma   (https://www.coldiq.com/)
+      [OLD] Emma by Marigold
+
+  38.
+      [NEW] Factors   (https://www.factors.ai/)
+      [OLD] Factors.AI
+
+  39.
+      [NEW] FactSet   (https://factset.com/)
+      [OLD] FactSet Workstation
+      [OLD] FactSet Portfolio Analytics
+
+  40.
+      [NEW] Fireflies   (https://fireflies.ai/)
+      [OLD] Fireflies.ai
+
+  41.
+      [NEW] Five9   (https://five9.com/)
+      [OLD] Five9 Intelligent Cloud Contact Center Platform
+
+  42.
+      [OLD] Flow
+      [OLD] Flow Commerce
+      [OLD] Flow Engineering
+      [NEW] Flow XO   (https://flowxo.com/)
+
+  43.
+      [NEW] GovWin   (https://www.coldiq.com/)
+      [OLD] GovWin IQ
+
+  44.
+      [NEW] GPTfy   (https://gptfy.ai/)
+      [OLD] GPTfy:AI for Salesforce
+
+  45.
+      [NEW] Gryphon   (https://gryphon.ai/)
+      [OLD] Gryphon ONE
+
+  46.
+      [NEW] Harmonic   (https://www.harmonic.ai/)
+      [OLD] Harmonic.Security
+
+  47.
+      [OLD] Hemingway
+      [NEW] Hemingway Editor   (https://hemingwayapp.com/)
+
+  48.
+      [NEW] Higher Logic   (https://higherlogic.com/)
+      [OLD] Higher Logic Thrive
+
+  49.
+      [NEW] HubSpot   (https://hubspot.sjv.io/AWygxN)
+      [OLD] HubSpot Academy   (https://hubspot.com)
+      [NEW] HubSpot AI   (https://www.hubspot.com/products/artificial-intelligence)
+      [OLD] HubSpot Content Hub   (https://hubspot.com)
+      [OLD] HubSpot Marketing Hub   (https://hubspot.com)
+      [OLD] HubSpot Operations Hub   (https://hubspot.com)
+      [OLD] HubSpot Sales Hub   (https://hubspot.com)
+      [OLD] HubSpot Service Hub   (https://hubspot.com)
+      [OLD] HubSpot CRM Integration for Jira
+
+  50.
+      [NEW] Humantic   (https://humantic.ai/)
+      [OLD] Humantic AI
+
+  51.
+      [NEW] Hume   (https://www.hume.ai/)
+      [OLD] Hume AI
+
+  52.
+      [NEW] Inventive   (https://www.getinventive.ai/)
+      [OLD] Inventive.AI
+
+  53.
+      [NEW] Khoros   (https://khoros.com/)
+      [OLD] Khoros Service
+
+  54.
+      [NEW] Kixie   (https://www.kixie.com/)
+      [OLD] Kixie PowerCall & SMS
+
+  55.
+      [NEW] LeadSquared   (https://leadsquared.com/)
+      [OLD] LeadSquared Mobile
+      [OLD] LeadSquared Lending Cloud
+
+  56.
+      [OLD] Leap
+      [NEW] Leap AI   (https://tryleap.ai/)
+      [OLD] Leap Motion
+
+  57.
+      [NEW] Lumin   (https://luminpdf.com/)
+      [OLD] Lumin Digital
+      [OLD] Lumin for G Suite
+
+  58.
+      [NEW] Mammoth   (https://mammoth.io/)
+      [OLD] Mammoth Enterprise Browser
+
+  59.
+      [NEW] Maxio   (https://maxio.com/)
+      [OLD] Maxio (formerly SaaSOptics and Chargify)
+
+  60.
+      [NEW] Mercury   (https://mercury.com/)
+      [OLD] Mercury Editor
+
+  61.
+      [OLD] Merlin
+      [NEW] Merlin AI   (https://www.coldiq.com/)
+
+  62.
+      [NEW] Metadata   (https://metadataio.grsm.io/r602wmajnw80)
+      [OLD] Metadata.io
+
+  63.
+      [NEW] Monday   (https://try.monday.com/x1jid8494e28)
+      [OLD] monday CRM
+      [OLD] monday dev
+      [OLD] monday Work Management
+
+  64.
+      [NEW] NetNut   (https://netnut.io/)
+      [OLD] NetNut.io
+
+  65.
+      [NEW] Odoo   (https://www.odoo.com/)
+      [OLD] Odoo ERP
+      [OLD] Odoo Fleet
+      [OLD] Odoo Forums
+      [OLD] Odoo MRP
+      [OLD] Odoo Rental
+
+  66.
+      [NEW] Omnia   (https://omniaretail.com/)
+      [OLD] Omnia Retail   (https://www.omniaretail.com)
+
+  67.
+      [NEW] OneStream   (https://onestream.com/)
+      [OLD] OneStream - Unified EPM
+
+  68.
+      [NEW] OpenAI   (https://openai.com/)
+      [OLD] OpenAI Whisper
+
+  69.
+      [NEW] Origami   (https://origamiagents.com/)
+      [OLD] Origami Risk
+
+  70.
+      [NEW] Otter   (https://otterai.sjv.io/c/4337202/1063514/13661)
+      [OLD] Otter.ai
+
+  71.
+      [OLD] Outbrain
+      [NEW] Outbrain Direct Response   (https://outbrain.com/)
+
+  72.
+      [NEW] PerformYard   (https://performyard.com/)
+      [OLD] PerformYard Performance Management
+
+  73.
+      [OLD] Pyramid
+      [NEW] Pyramid Analytics   (https://pyramidanalytics.com/)
+
+  74.
+      [NEW] Qualtrics   (https://qualtrics.com/)
+      [OLD] Qualtrics Customer Experience
+      [OLD] Qualtrics Employee Experience
+      [OLD] Qualtrics Strategy & Research
+
+  75.
+      [NEW] Quantive   (https://quantive.com/)
+      [OLD] Quantive StrategyAI
+
+  76.
+      [NEW] Quickbooks   (https://quickbooks.intuit.com/)
+      [OLD] QuickBooks Capital
+      [OLD] QuickBooks Online
+      [OLD] QuickBooks Desktop Enterprise
+      [OLD] QuickBooks Online Accountant
+      [OLD] QuickBooks for Google Workspace
+      [OLD] QuickBooks Point of Sale
+
+  77.
+      [NEW] Quicklizard   (https://quicklizard.com/)
+      [OLD] QuickLizard Pricing Optimization
+
+  78.
+      [NEW] Quillbot   (https://try.quillbot.com/e56frhqbc5go)
+      [OLD] Quillbot Paraphraser
+
+  79.
+      [NEW] Read   (https://www.read.ai/)
+      [OLD] read&write
+
+  80.
+      [NEW] Reoon   (https://www.coldiq.com/)
+      [OLD] Reoon Email Verifier
+
+  81.
+      [NEW] Revenue   (https://www.coldiq.com/)
+      [OLD] Revenue Grid   (https://revenuegrid.com/)
+      [OLD] Revenue.io
+      [OLD] Revenue Roll
+
+  82.
+      [NEW] RingCentral   (https://ringcentral.com/)
+      [OLD] RingCentral Events
+      [OLD] RingCentral Video
+      [OLD] RingCentral Contact Center
+
+  83.
+      [OLD] Rival
+      [NEW] Rival HR   (https://www.coldiq.com/)
+
+  84.
+      [NEW] Salesforce   (https://www.salesforce.com/)
+      [OLD] Salesforce Agentforce
+      [OLD] Salesforce Heroku
+      [OLD] Salesforce Maps
+      [OLD] Salesforce Platform
+      [OLD] Salesforce Shield
+      [OLD] Salesforce Spiff
+      [OLD] Salesforce Communications Cloud
+      [OLD] Salesforce Education Cloud
+      [OLD] Salesforce Field Service
+      [OLD] Salesforce Government Cloud
+      [OLD] Salesforce Health Cloud
+      [OLD] Salesforce Loyalty Management
+      [OLD] Salesforce Nonprofit Cloud
+      [OLD] Salesforce Order Management
+      [OLD] Salesforce Revenue Cloud
+      [OLD] Salesforce Sales Cloud
+      [OLD] Salesforce Service Cloud
+      [OLD] Salesforce Commerce for B2B
+      [OLD] Salesforce Commerce for B2C
+      [OLD] Salesforce Financial Services Cloud
+      [OLD] Salesforce Marketing Cloud Engagement
+      [OLD] Salesforce Energy and Utilities Cloud
+      [OLD] Salesforce Marketing Cloud Account Engagement
+      [OLD] Salesforce Partner Relationship Management (PRM)
+      [OLD] Salesforce CRM Analytics (formerly Tableau CRM)
+      [OLD] Salesforce Marketing Cloud Personalization (formerly Interaction Studio)
+
+  85.
+      [NEW] Seamless   (https://login.seamless.ai/invite/michel-lieben)
+      [OLD] Seamless.AI
+
+  86.
+      [NEW] Second Nature   (https://www.coldiq.com/)
+      [OLD] Second Nature AI
+
+  87.
+      [NEW] Segment   (https://segment.com/)
+      [OLD] Segment Tools
+
+  88.
+      [NEW] Seismic   (https://seismic.com/)
+      [OLD] Seismic Content
+      [OLD] Seismic Learning
+
+  89.
+      [NEW] Snov   (https://snov.io/)
+      [OLD] Snov.io
+
+  90.
+      [NEW] Speechify   (https://speechify.com/)
+      [OLD] Speechify AI Dubbing
+
+  91.
+      [NEW] Square   (https://squareup.com/)
+      [OLD] Square Appointments
+      [OLD] Square Banking
+      [OLD] Square Invoices
+      [OLD] Square Payments
+      [OLD] Square 9 Softworks
+      [OLD] Square for Restaurants
+      [OLD] Square for Retail
+      [OLD] Square Gift Cards
+      [OLD] Square Instant Transfers
+      [OLD] Square Online (formerly Weebly)
+      [OLD] Square Point of Sale
+
+  92.
+      [NEW] Stripe   (https://stripe.com/)
+      [OLD] Stripe Billing
+      [OLD] Stripe Connect
+      [OLD] Stripe Issuing
+      [OLD] Stripe Payments
+      [OLD] Stripe Radar
+      [OLD] Stripe Terminal
+
+  93.
+      [NEW] SugarCRM   (https://sugarcrm.com/)
+      [OLD] SugarCRM Google Calendar
+
+  94.
+      [NEW] Super   (https://super.work/)
+      [NEW] Super Send   (https://www.coldiq.com/)
+      [OLD] super.work
+
+  95.
+      [NEW] Talroo   (https://talroo.com/)
+      [OLD] Talroo Ad Platform
+
+  96.
+      [NEW] Telescope   (https://gotelescope.ai/)
+      [OLD] Telescope Voting
+
+  97.
+      [NEW] Tempo   (https://www.gettempo.app/)
+      [OLD] Tempo Financial Manager for Timesheets
+
+  98.
+      [NEW] Thrive   (https://thrivelearning.com/)
+      [OLD] Thrive Comments
+      [OLD] Thrive learning
+
+  99.
+      [NEW] Topo   (https://www.topo.io/)
+      [OLD] Topo.io
+
+  100.
+      [OLD] Treasure
+      [NEW] Treasure Data   (https://treasuredata.com/)
+      [OLD] Treasure Data Customer Data Platform
+
+  101.
+      [NEW] Unify   (https://www.unifygtm.com/partners/coldiq)
+      [OLD] Unify CRM
+
+  102.
+      [NEW] Unique   (https://unique.ch/)
+      [OLD] Unique Learning System
+
+  103.
+      [NEW] Vector   (https://vector.co/)
+      [OLD] Vector EHS
+      [OLD] Vector Magic
+      [OLD] Vector ML
+      [OLD] Vector By Datadog
+
+  104.
+      [OLD] Vibe
+      [NEW] Vibe Prospecting   (https://www.vibeprospecting.ai/)
+
+  105.
+      [NEW] Vonage   (https://vonage.com/)
+      [OLD] Vonage Business Communications
+      [OLD] Vonage Communications APIs
+      [OLD] Vonage Contact Center (formerly NewVoiceMedia)
+
+  106.
+      [NEW] Wiser   (https://getwiser.io/)
+      [OLD] Wiser Solutions
+
+  107.
+      [NEW] Xactly   (https://www.xactlycorp.com/)
+      [OLD] Xactly Incent
+
+  108.
+      [NEW] Yellow   (https://yellow.ai/)
+      [OLD] yellow.ai
+      [OLD] Yellow Dog Inventory
+
+  109.
+      [NEW] Yepic   (https://yepic.ai/)
+      [OLD] Yepic AI
+      [OLD] Yepic Studio
+
+  110.
+      [NEW] Zendesk   (https://www.coldiq.com/)
+      [OLD] Zendesk Sunshine
+      [OLD] Zendesk Support Suite
+      [OLD] Zendesk - Custom Data Actions
+
+  111.
+      [NEW] Zoho   (https://go.zoho.com/TTY)
+      [OLD] Zoho Assist
+      [OLD] Zoho BackToWork
+      [OLD] Zoho Billing
+      [OLD] Zoho Books
+      [OLD] Zoho Calendar
+      [OLD] Zoho Campaigns
+      [OLD] Zoho Cliq
+      [OLD] Zoho Connect
+      [OLD] Zoho CRM
+      [OLD] Zoho Desk
+      [OLD] Zoho Expense
+      [OLD] Zoho Inventory
+      [OLD] Zoho Invoice
+      [OLD] Zoho LandingPage
+      [OLD] Zoho Learn
+      [OLD] Zoho Lens
+      [OLD] Zoho Mail
+      [OLD] Zoho Meeting
+      [OLD] Zoho PageSense
+      [OLD] Zoho People
+      [OLD] Zoho Projects
+      [OLD] Zoho Recruit
+      [OLD] Zoho Sheet
+      [OLD] Zoho Social
+      [OLD] Zoho Sprints
+      [OLD] Zoho Survey
+      [OLD] Zoho Vault
+      [OLD] Zoho Webinar
+      [OLD] Zoho WorkDrive
+      [OLD] Zoho Workerly
+      [OLD] Zoho Writer
+      [OLD] ZOHO CRM CONNECTOR
+      [OLD] Zoho Sign API
+      [OLD] Zoho Books for G Suite
+      [OLD] Zoho Campaigns for G Suite
+      [OLD] Zoho Connect for G Suite
+
+  112.
+      [NEW] ZoomInfo   (https://try.zoominfo.com/q7ap7thgldor)
+      [OLD] ZoomInfo Marketing
+      [OLD] ZoomInfo Operations
+      [OLD] ZoomInfo Sales
+      [OLD] ZoomInfo Talent
+      [OLD] ZoomInfo Compliance API

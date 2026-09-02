@@ -1,0 +1,67 @@
+[
+  {
+    "id": "4a489d58-596d-4764-ae32-c219ccbecea0",
+    "name": "Cluely",
+    "website": "https://cluely.com"
+  },
+  {
+    "id": "23984fa3-1fa7-47ee-b983-9c9f2317bae8",
+    "name": "Easyscraper",
+    "website": "https://easyscraper.com"
+  },
+  {
+    "id": "a86e5dfe-12b8-4f36-9008-20f7c26d8a53",
+    "name": "Exa.ai",
+    "website": "https://exa.ai"
+  },
+  {
+    "id": "91b17020-97f0-4c08-b05a-bf471a9ad8f6",
+    "name": "Jungler.ai",
+    "website": "https://jungler.ai"
+  },
+  {
+    "id": "2fc14593-81e5-44e3-8c88-82bd9b3cb98f",
+    "name": "Loops.so",
+    "website": "https://loops.so"
+  },
+  {
+    "id": "1f8e38fa-8c30-47a2-ace0-2cdc7e0b5228",
+    "name": "Nyne.ai",
+    "website": "https://nyne.ai"
+  },
+  {
+    "id": "07acac8f-cf9c-4cb5-9222-0fd143541ab0",
+    "name": "OutboundSync",
+    "website": "https://outboundsync.com"
+  },
+  {
+    "id": "301bcde7-d52b-4006-8df6-fa937a745fc8",
+    "name": "Sandcastles.ai",
+    "website": "https://sandcastles.ai"
+  },
+  {
+    "id": "e28509e9-f0fc-4aa6-a1ce-c791dae3ec6e",
+    "name": "Scraperapi",
+    "website": "https://scraperapi.com"
+  },
+  {
+    "id": "58e80dd9-10b1-42a0-b68d-a6328cecbfe4",
+    "name": "Scripe.io",
+    "website": "https://scripe.io"
+  },
+  {
+    "id": "949b632b-bbff-4e17-9fc3-fd76aef1b7d3",
+    "name": "Serper.dev",
+    "website": "https://serper.dev"
+  },
+  {
+    "id": "4aa4f197-8ee1-4756-9502-61eff111271b",
+    "name": "Tweethunter",
+    "website": "https://tweethunter.io"
+  },
+  {
+    "id": "23a9eb8e-11e6-4bbd-b4d3-8e7de110fc59",
+    "name": "Viewstats",
+    "website": "https://viewstats.com"
+  }
+]

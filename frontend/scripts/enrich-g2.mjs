@@ -35,9 +35,12 @@ import { parseProduct, parseSeller, summarize, countWords } from "./g2-parse.mjs
 
 const TOKEN = process.env.BRIGHTDATA_TOKEN;
 const ZONE = process.env.BRIGHTDATA_ZONE || "web_unlocker1";
-// G2 localises by exit IP — pin the country so descriptions come back in
-// English rather than whatever the rotating proxy happens to land on.
-const COUNTRY = process.env.BRIGHTDATA_COUNTRY || "us";
+// G2 localises by exit IP, so the country must be English-speaking or the
+// descriptions come back in German/French. It also gates access: DataDome
+// hard-blocks the US pool, while gb/ie/au/ca get through. We try them in order
+// and move on when a pool is blocked — blocked requests are not billed.
+const COUNTRIES = (process.env.BRIGHTDATA_COUNTRIES || "gb,ie,au,ca")
+  .split(",").map((c) => c.trim()).filter(Boolean);
 const APPLY = process.env.APPLY === "1";
 const SAMPLE = parseInt(process.env.SAMPLE || "10", 10);
 const LIMIT = parseInt(process.env.LIMIT || "0", 10);
@@ -48,6 +51,7 @@ const CONCURRENCY = parseInt(process.env.CONCURRENCY || "6", 10);
 const REQ_TIMEOUT = parseInt(process.env.REQ_TIMEOUT || "60000", 10);
 const INSPECT = process.env.INSPECT || "";
 const PARSE_ONLY = process.env.PARSE === "1";
+const DEBUG = process.env.DEBUG === "1";
 // Descriptions shorter than this many WORDS are treated as placeholders worth
 // replacing with a condensed G2 summary; longer ones are left alone.
 const SHORT_DESC_WORDS = parseInt(process.env.SHORT_DESC_WORDS || "15", 10);
@@ -85,7 +89,11 @@ if (!TOKEN) {
 // ---- Bright Data Web Unlocker -------------------------------------------
 let requestCount = 0;
 async function unlock(url, { tries = 2, timeout = REQ_TIMEOUT } = {}) {
-  for (let attempt = 1; attempt <= tries; attempt++) {
+  // One pass per country, so a hard-blocked pool falls through to the next.
+  const attempts = COUNTRIES.length * tries;
+  let lastErr;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const country = COUNTRIES[(attempt - 1) % COUNTRIES.length];
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), timeout);
     try {
@@ -96,28 +104,55 @@ async function unlock(url, { tries = 2, timeout = REQ_TIMEOUT } = {}) {
           Authorization: `Bearer ${TOKEN}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ zone: ZONE, url, format: "raw", country: COUNTRY }),
+        body: JSON.stringify({ zone: ZONE, url, format: "raw", country }),
         signal: ctl.signal,
       });
-      // 4xx/5xx here means the page is genuinely unreachable — retrying a dead
-      // URL just burns another timeout, so give up immediately.
       if (!res.ok) {
-        const detail = (await res.text()).slice(0, 120);
+        const detail = (await res.text()).slice(0, 200);
+        // An auth/billing failure affects every request, so reporting it per
+        // tool as "no match" would be actively misleading. Stop the whole run.
+        if (res.status === 401 || res.status === 402 || res.status === 403) {
+          console.error(
+            `
+
+Bright Data rejected the request: ${res.status} ${detail}
+` +
+              `This is a credentials or billing problem, not a per-tool one —
+` +
+              `check BRIGHTDATA_TOKEN and that zone "${ZONE}" is active.
+`
+          );
+          process.exit(1);
+        }
+        // Other 4xx/5xx means the page is genuinely unreachable — retrying a
+        // dead URL just burns another timeout, so give up on it immediately.
         const err = new Error(`unlocker ${res.status}: ${detail}`);
         err.fatal = res.status === 404 || res.status >= 500;
         throw err;
       }
       const body = await res.text();
       // A 200 with an empty/stub body means the page did not really load.
-      if (body.length < 1000) throw new Error(`empty response (${body.length} bytes)`);
+      // Bright Data explains itself in x-brd-* headers — surface them.
+      if (body.length < 1000) {
+        const diag = [...res.headers]
+          .filter(([k]) => k.toLowerCase().startsWith("x-brd"))
+          .map(([k, v]) => `${k}=${v}`)
+          .join(" ");
+        throw new Error(
+          `empty response from ${country} (${body.length} bytes)` +
+            (diag ? ` [${diag}]` : "") + (body ? ` body="${body.slice(0, 120)}"` : "")
+        );
+      }
       return body;
     } catch (e) {
-      if (e.fatal || attempt === tries) throw e;
-      await new Promise((r) => setTimeout(r, 1500 * attempt));
+      lastErr = e;
+      if (e.fatal || attempt === attempts) throw e;
+      await new Promise((r) => setTimeout(r, 800 * attempt));
     } finally {
       clearTimeout(timer);
     }
   }
+  throw lastErr;
 }
 
 // ---- G2 lookup -----------------------------------------------------------
@@ -147,8 +182,9 @@ async function findG2(tool, needsVendor = true) {
   try {
     // Speculative: one try, short fuse — a miss falls through to search.
     hit = await fetchProduct(g2Slug(tool.name), tool.name, { tries: 1, timeout: 45000 });
-  } catch {
-    /* fall through to search */
+    if (DEBUG && !hit) console.log(`    [dbg] ${tool.name}: slug "${g2Slug(tool.name)}" loaded but name did not match`);
+  } catch (e) {
+    if (DEBUG) console.log(`    [dbg] ${tool.name}: slug "${g2Slug(tool.name)}" failed — ${e.message}`);
   }
 
   if (!hit) {
@@ -157,7 +193,8 @@ async function findG2(tool, needsVendor = true) {
       searchHtml = await unlock(
         `https://www.g2.com/search?query=${encodeURIComponent(tool.name)}`
       );
-    } catch {
+    } catch (e) {
+      if (DEBUG) console.log(`    [dbg] ${tool.name}: search failed — ${e.message}`);
       return null;
     }
     const slugs = [
@@ -167,12 +204,14 @@ async function findG2(tool, needsVendor = true) {
           .filter(Boolean)
       ),
     ].slice(0, 2);
+    if (DEBUG) console.log(`    [dbg] ${tool.name}: search candidates -> ${slugs.join(", ") || "(none)"}`);
     for (const slug of slugs) {
       try {
-        hit = await fetchProduct(slug, tool.name);
-        if (hit) break;
-      } catch {
-        /* try next candidate */
+        const got = await fetchProduct(slug, tool.name);
+        if (got) { hit = got; break; }
+        if (DEBUG) console.log(`    [dbg] ${tool.name}: candidate "${slug}" name mismatch`);
+      } catch (e) {
+        if (DEBUG) console.log(`    [dbg] ${tool.name}: candidate "${slug}" failed — ${e.message}`);
       }
     }
     if (!hit) return null;
@@ -257,9 +296,13 @@ process.on("SIGINT", () => {
   console.log(`\n\nInterrupted. ${done.size} tools recorded — re-run to resume.`);
   process.exit(130);
 });
-const imported = new Set(
-  JSON.parse(readFileSync("scripts/tools-enriched.json", "utf8")).map((t) => norm(t.name))
-);
+// Tools this pass is allowed to touch: the ColdIQ import plus any later
+// batch that passed the duplicate check. Extra files are ignored if absent.
+const imported = new Set();
+for (const file of ["scripts/tools-enriched.json", "scripts/new-batch-to-add.json"]) {
+  if (!existsSync(file)) continue;
+  for (const t of JSON.parse(readFileSync(file, "utf8"))) imported.add(norm(t.name));
+}
 
 console.log("Loading tools…");
 const tools = await allRows(
@@ -308,7 +351,7 @@ async function handle(group) {
   }
   if (!hit) {
     stats.missed++;
-    markDone(tool.name);
+    if (APPLY) markDone(tool.name); // a dry run must not touch the checkpoint
     console.log(`  ✗ ${tool.name.padEnd(26)} no confident G2 match`);
     return;
   }

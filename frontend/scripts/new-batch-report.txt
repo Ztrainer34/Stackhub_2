@@ -1,0 +1,287 @@
+NEW BATCH — DUPLICATE CHECK
+========================================================================
+Source     : scripts/toolverse.csv  (259 rows)
+Catalog    : 16283 tools
+SAFE TO ADD: 51
+REJECTED   : 208
+
+Rejected on any doubt, per instruction. Breakdown:
+   121  same website domain
+    74  exact name
+     7  same name minus filler words
+     6  one name extends the other
+
+
+REJECTED (not added)
+------------------------------------------------------------------------
+
+### same website domain — 121
+   11x                      ~ 11x
+   6sense                   ~ 6Sense
+   ActiveCampaign           ~ ActiveCampaign Postmark
+   Adobe                    ~ Adobe Marketo Measure (formerly Bizible)
+   AI Ark                   ~ AI Ark
+   Aimfox                   ~ Aimfox
+   Aircall                  ~ Aircall
+   AISDR                    ~ AiSDR
+   Albacross                ~ Albacross
+   Aligned                  ~ Aligned
+   Amplemarket              ~ Amplemarket
+   Amplitude                ~ Amplitude
+   Apify                    ~ Apify
+   Attio                    ~ Attio
+   Autobound.ai             ~ Autobound
+   Bardeen                  ~ Bardeen AI
+   BetterContact            ~ BetterContact
+   Bombora                  ~ Bombora
+   BounceBan                ~ BounceBan
+   Breakcold                ~ Breakcold
+   BuiltWith                ~ BuiltWith
+   Cargo                    ~ Cargo
+   ChilliPiper              ~ Chili Piper
+   Clay                     ~ Clay
+   Close.com                ~ Close
+   CloudTalk                ~ CloudTalk
+   Cognism                  ~ Cognism
+   ConnectAndSell           ~ ConnectAndSell
+   ContactOut               ~ ContactOut
+   Databar                  ~ Databar
+   Datagma                  ~ Datagma
+   Day.ai                   ~ Day
+   Default.com              ~ Default
+   Demandbase               ~ Demandbase
+   DialPad                  ~ Dialpad
+   Discolike                ~ DiscoLike
+   Dock                     ~ Dock
+   Dust.tt                  ~ Dust
+   Emailbison               ~ EmailBison
+   Expandi                  ~ Expandi
+   Factors.ai               ~ Factors
+   Findymail                ~ Findymail
+   Fireflies                ~ Fireflies
+   Folk                     ~ folk
+   Forager                  ~ Forager
+   Freckle                  ~ Freckle
+   FullEnrich               ~ FullEnrich
+   FullStory                ~ Fullstory
+   Gamma                    ~ Gamma
+   GetAccept                ~ GetAccept
+   GetResponse              ~ GetResponse MAX
+   GlenCoco                 ~ Glencoco
+   Gong                     ~ Gong
+   Grain                    ~ Grain
+   Gumloop                  ~ Gumloop
+   HeyReach                 ~ DataGenie
+   HubSpot                  ~ HubSpot Sales Hub
+   Hunter                   ~ Hunter
+   influencers.club         ~ Influencers.club
+   Instantly                ~ Instantly
+   Intercom                 ~ Intercom
+   Iterable                 ~ Iterable
+   Kaspr                    ~ Kaspr
+   Kixie                    ~ Kixie
+   LaGrowthMachine          ~ LaGrowthMachine
+   Lavender                 ~ Lavender
+   LeadIQ                   ~ LeadIQ
+   LeadMagic                ~ LeadMagic
+   Leandata                 ~ LeanData
+   Lemlist                  ~ Lemlist
+   MailerLite               ~ MailerLite
+   Manus                    ~ Manus
+   Midbound                 ~ Midbound
+   Mixmax                   ~ Mixmax
+   Modjo                    ~ Modjo
+   n8n                      ~ n8n
+   Nooks                    ~ Nooks
+   Octave                   ~ Octave
+   Octoparse                ~ Octoparse
+   Openmart                 ~ OpenMart
+   Orum                     ~ Orum
+   Oxylabs                  ~ Oxylabs
+   Phantombuster            ~ PhantomBuster
+   Pipedrive                ~ Pipedrive
+   Posthog                  ~ PostHog
+   Predict Leads            ~ PredictLeads
+   Propensity               ~ Propensity
+   Propseo                  ~ Prospeo
+   Qwilr                    ~ Qwilr
+   RapidAPI                 ~ RapidAPI
+   RB2B                     ~ RB2B
+   Read.ai                  ~ Read
+   Regie                    ~ Regie
+   Reply.io                 ~ Reply
+   Resend                   ~ Resend
+   RingCentral              ~ RingCentral
+   Salesforge               ~ Agent Frank
+   Saleshandy               ~ Saleshandy
+   Salesloft                ~ Salesloft
+   Segment                  ~ Segment
+   Signum AI                ~ Signum
+   SimilarWeb               ~ Similarweb
+   Smartlead                ~ Smartlead
+   Snov.io                  ~ Snov
+   SpyFu                    ~ SpyFu
+   Taplio                   ~ Taplio
+   TheirStack               ~ TheirStack
+   Topo                     ~ Topo
+   Trumpet                  ~ trumpet
+   Unify                    ~ Unify
+   UserGems                 ~ UserGems
+   Valley                   ~ Valley
+   Vector.co                ~ Vector
+   Warmly                   ~ Warmly
+   Woodpecker               ~ Woodpecker
+   Yesware                  ~ Yesware
+   Zapier                   ~ Zapier
+   Zapmail                  ~ Zapmail
+   ZenABM                   ~ ZenABM
+   Zoho                     ~ Zia
+   Zyte                     ~ Zyte
+
+### exact name — 74
+   AdRoll                   ~ AdRoll
+   Ahrefs                   ~ Ahrefs
+   Apollo                   ~ Apollo
+   Artisan                  ~ Artisan
+   Attention                ~ Attention
+   AWeber                   ~ AWeber
+   Beehiiv                  ~ beehiiv
+   Braze                    ~ Braze
+   Brightdata               ~ Bright Data
+   Canva                    ~ Canva
+   CaptainData              ~ Captain Data
+   Chargebee                ~ Chargebee
+   Circleback               ~ Circleback
+   Clari                    ~ Clari
+   Claude Code              ~ Claude Code
+   CommonRoom               ~ Common Room
+   Copy.ai                  ~ Copy.ai
+   Crossbeam                ~ Crossbeam
+   Customer.io              ~ Customer.io
+   Docusign                 ~ Docusign
+   Doodle                   ~ Doodle
+   Fathom                   ~ Fathom
+   Fibbler                  ~ Fibbler
+   Figma                    ~ Figma
+   Fivetran                 ~ Fivetran
+   Freshdesk                ~ Freshdesk
+   Front                    ~ Front
+   Help Scout               ~ Help Scout
+   Hightouch                ~ Hightouch
+   Influ2                   ~ Influ2
+   Ironclad                 ~ Ironclad
+   Jasper                   ~ Jasper
+   Jotform                  ~ Jotform
+   Juro                     ~ Juro
+   Just Call                ~ JustCall
+   Lindy                    ~ Lindy
+   Lusha                    ~ Lusha
+   Make                     ~ Make
+   Metadata                 ~ Metadata
+   Miro                     ~ Miro
+   MixPanel                 ~ Mixpanel
+   Notion                   ~ Notion
+   Ocean.io                 ~ Ocean.io
+   OpusClip                 ~ OpusClip
+   Outreach                 ~ Outreach
+   PandaDoc                 ~ PandaDoc
+   Parallel                 ~ Parallel
+   PathFactory              ~ PathFactory
+   Pendo                    ~ Pendo
+   Polytomic                ~ Polytomic
+   Proposify                ~ Proposify
+   Quickmail                ~ Quickmail
+   reclaim.ai               ~ Reclaim.ai
+   Recotap                  ~ Recotap
+   Recurly                  ~ Recurly
+   Relevance AI             ~ Relevance AI
+   Revenue.io               ~ Revenue.io
+   Revenuehero              ~ RevenueHero
+   RudderStack              ~ RudderStack
+   SE Ranking               ~ SE Ranking
+   Seam AI                  ~ Seam AI
+   Seamless.ai              ~ Seamless.AI
+   Semrush                  ~ Semrush
+   SignWell                 ~ SignWell
+   SparkToro                ~ SparkToro
+   StackAI                  ~ Stack AI
+   Storeleads               ~ Store Leads
+   Sybill                   ~ Sybill
+   Teamfluence              ~ Teamfluence
+   Twain                    ~ Twain
+   Typeform                 ~ Typeform
+   Warmy                    ~ Warmy
+   Wiza                     ~ Wiza
+   Zendesk                  ~ Zendesk
+
+### same name minus filler words — 7
+   Brevo                    ~ Brevo Marketing Platform
+   Momentum AI              ~ Momentum
+   Monday.com               ~ Monday
+   Relay                    ~ Relay.app
+   Salesforce               ~ Salesforce Platform
+   Winn                     ~ WINN.AI
+   ZoomInfo                 ~ ZoomInfo Marketing
+
+### one name extends the other — 6
+   Cloudflare               ~ Cloudflare SSE & SASE Platform
+   Decodo                   ~ Decodo (formerly Smartproxy)
+   Marketo                  ~ Marketo-Based Systems for Growth-Driven Marketing & Sales Teams
+   Scrape                   ~ Scrape Magic
+   Surfer SEO               ~ Surfer
+   Tally                    ~ Tally-I/O
+
+
+SAFE TO ADD — 51
+------------------------------------------------------------------------
+   AirOps                   https://airops.com
+   Bamboobox                https://bamboobox.ai
+   Cal.com                  https://cal.com
+   Cluely                   https://cluely.com
+   Crew AI                  https://crewai.com
+   Crustdata                https://crustdata.com
+   Easyscraper              https://easyscraper.com
+   Ergo                     https://joinergo.com
+   Exa.ai                   https://exa.ai
+   Favikon                  https://favikon.com
+   Firecrawl                https://firecrawl.dev
+   Flodesk                  https://flodesk.com
+   forms.app                https://forms.app
+   GlockApps                https://glockapps.com
+   GoHighLevel              https://gohighlevel.com
+   Heyflow                  https://heyflow.com
+   HockeyStack              https://hockeystack.com
+   iClosed                  https://iclosed.io
+   Icypeas                  https://icypeas.com
+   Inboxkit                 https://inboxkit.com
+   Jungler.ai               https://jungler.ai
+   Kit                      https://kit.com
+   Klenty                   https://klenty.com
+   Landbase                 https://landbase.com
+   Leadfeeder               https://leadfeeder.com
+   Leadlander               https://leadlander.com
+   Lemwarm                  https://lemwarm.com
+   Loops.so                 https://loops.so
+   Mutiny                   https://mutinyhq.com
+   Nyne.ai                  https://nyne.ai
+   OutboundSync             https://outboundsync.com
+   Outscraper               https://outscraper.com
+   Plain                    https://plain.com
+   PlusVibe                 https://plusvibe.ai
+   Pylon                    https://usepylon.com
+   Replicant                https://replicant.com
+   Salespeak                https://salespeak.ai
+   Sandcastles.ai           https://sandcastles.ai
+   Scraperapi               https://scraperapi.com
+   Screen Studio            https://screen.studio
+   Scripe.io                https://scripe.io
+   Serper.dev               https://serper.dev
+   Snitcher                 https://snitcher.com
+   TheSwarm                 https://theswarm.com
+   TitanX                   https://titanx.io
+   Tweethunter              https://tweethunter.io
+   Ubersuggest              https://neilpatel.com/ubersuggest/
+   Userled                  https://userled.io
+   VBout                    https://vbout.com
+   Viewstats                https://viewstats.com
+   Zenrows                  https://zenrows.com

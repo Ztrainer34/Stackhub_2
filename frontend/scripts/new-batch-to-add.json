@@ -1,0 +1,374 @@
+[
+  {
+    "name": "AirOps",
+    "website": "https://airops.com",
+    "categories": [
+      "Data Orchestration",
+      "SEO"
+    ]
+  },
+  {
+    "name": "Bamboobox",
+    "website": "https://bamboobox.ai",
+    "categories": [
+      "ABM"
+    ]
+  },
+  {
+    "name": "Cal.com",
+    "website": "https://cal.com",
+    "categories": [
+      "Meeting Scheduling"
+    ]
+  },
+  {
+    "name": "Cluely",
+    "website": "https://cluely.com",
+    "categories": [
+      "AI Notetaker"
+    ]
+  },
+  {
+    "name": "Crew AI",
+    "website": "https://crewai.com",
+    "categories": [
+      "AI Agent Builder"
+    ]
+  },
+  {
+    "name": "Crustdata",
+    "website": "https://crustdata.com",
+    "categories": [
+      "Search API"
+    ]
+  },
+  {
+    "name": "Easyscraper",
+    "website": "https://easyscraper.com",
+    "categories": [
+      "Data Scraping"
+    ]
+  },
+  {
+    "name": "Ergo",
+    "website": "https://joinergo.com",
+    "categories": [
+      "AI Notetaker",
+      "CRM Enrichment",
+      "Revenue Infrastructure",
+      "Sales Enablement"
+    ]
+  },
+  {
+    "name": "Exa.ai",
+    "website": "https://exa.ai",
+    "categories": [
+      "Search API"
+    ]
+  },
+  {
+    "name": "Favikon",
+    "website": "https://favikon.com",
+    "categories": [
+      "Content Ideation"
+    ]
+  },
+  {
+    "name": "Firecrawl",
+    "website": "https://firecrawl.dev",
+    "categories": [
+      "AI Agent Builder",
+      "Data Scraping",
+      "Search API"
+    ]
+  },
+  {
+    "name": "Flodesk",
+    "website": "https://flodesk.com",
+    "categories": [
+      "Marketing Automation"
+    ]
+  },
+  {
+    "name": "forms.app",
+    "website": "https://forms.app",
+    "categories": [
+      "Form Builders"
+    ]
+  },
+  {
+    "name": "GlockApps",
+    "website": "https://glockapps.com",
+    "categories": [
+      "Email Deliverability"
+    ]
+  },
+  {
+    "name": "GoHighLevel",
+    "website": "https://gohighlevel.com",
+    "categories": [
+      "CRM",
+      "Marketing Automation"
+    ]
+  },
+  {
+    "name": "Heyflow",
+    "website": "https://heyflow.com",
+    "categories": [
+      "Form Builders"
+    ]
+  },
+  {
+    "name": "HockeyStack",
+    "website": "https://hockeystack.com",
+    "categories": [
+      "Marketing Attribution"
+    ]
+  },
+  {
+    "name": "iClosed",
+    "website": "https://iclosed.io",
+    "categories": [
+      "Inbound Orchestration",
+      "Meeting Scheduling"
+    ]
+  },
+  {
+    "name": "Icypeas",
+    "website": "https://icypeas.com",
+    "categories": [
+      "Email Finder"
+    ]
+  },
+  {
+    "name": "Inboxkit",
+    "website": "https://inboxkit.com",
+    "categories": [
+      "Email Deliverability"
+    ]
+  },
+  {
+    "name": "Jungler.ai",
+    "website": "https://jungler.ai",
+    "categories": [
+      "Signal Tracking"
+    ]
+  },
+  {
+    "name": "Kit",
+    "website": "https://kit.com",
+    "categories": [
+      "Newsletter"
+    ]
+  },
+  {
+    "name": "Klenty",
+    "website": "https://klenty.com",
+    "categories": [
+      "Cold Email Sequencer",
+      "Multi-channel Sequencer"
+    ]
+  },
+  {
+    "name": "Landbase",
+    "website": "https://landbase.com",
+    "categories": [
+      "AI SDR",
+      "General Databases"
+    ]
+  },
+  {
+    "name": "Leadfeeder",
+    "website": "https://leadfeeder.com",
+    "categories": [
+      "All-in-one Sales Prospecting"
+    ]
+  },
+  {
+    "name": "Leadlander",
+    "website": "https://leadlander.com",
+    "categories": [
+      "Website Visitor Identification"
+    ]
+  },
+  {
+    "name": "Lemwarm",
+    "website": "https://lemwarm.com",
+    "categories": [
+      "Email Deliverability"
+    ]
+  },
+  {
+    "name": "Loops.so",
+    "website": "https://loops.so",
+    "categories": [
+      "Marketing Automation"
+    ]
+  },
+  {
+    "name": "Mutiny",
+    "website": "https://mutinyhq.com",
+    "categories": [
+      "ABM"
+    ]
+  },
+  {
+    "name": "Nyne.ai",
+    "website": "https://nyne.ai",
+    "categories": [
+      "Search API"
+    ]
+  },
+  {
+    "name": "OutboundSync",
+    "website": "https://outboundsync.com",
+    "categories": [
+      "CRM Enrichment",
+      "Marketing Attribution",
+      "Revenue Infrastructure"
+    ]
+  },
+  {
+    "name": "Outscraper",
+    "website": "https://outscraper.com",
+    "categories": [
+      "Data Scraping"
+    ]
+  },
+  {
+    "name": "Plain",
+    "website": "https://plain.com",
+    "categories": [
+      "Customer Support"
+    ]
+  },
+  {
+    "name": "PlusVibe",
+    "website": "https://plusvibe.ai",
+    "categories": [
+      "Cold Email Sequencer",
+      "Email Deliverability"
+    ]
+  },
+  {
+    "name": "Pylon",
+    "website": "https://usepylon.com",
+    "categories": [
+      "Customer Support"
+    ]
+  },
+  {
+    "name": "Replicant",
+    "website": "https://replicant.com",
+    "categories": [
+      "Customer Support"
+    ]
+  },
+  {
+    "name": "Salespeak",
+    "website": "https://salespeak.ai",
+    "categories": [
+      "Inbound Orchestration"
+    ]
+  },
+  {
+    "name": "Sandcastles.ai",
+    "website": "https://sandcastles.ai",
+    "categories": [
+      "Content Ideation"
+    ]
+  },
+  {
+    "name": "Scraperapi",
+    "website": "https://scraperapi.com",
+    "categories": [
+      "Data Scraping",
+      "Search API"
+    ]
+  },
+  {
+    "name": "Screen Studio",
+    "website": "https://screen.studio",
+    "categories": [
+      "Content Design"
+    ]
+  },
+  {
+    "name": "Scripe.io",
+    "website": "https://scripe.io",
+    "categories": [
+      "Content Ideation"
+    ]
+  },
+  {
+    "name": "Serper.dev",
+    "website": "https://serper.dev",
+    "categories": [
+      "Data Scraping",
+      "Search API"
+    ]
+  },
+  {
+    "name": "Snitcher",
+    "website": "https://snitcher.com",
+    "categories": [
+      "Website Visitor Identification"
+    ]
+  },
+  {
+    "name": "TheSwarm",
+    "website": "https://theswarm.com",
+    "categories": [
+      "Signal Tracking"
+    ]
+  },
+  {
+    "name": "TitanX",
+    "website": "https://titanx.io",
+    "categories": [
+      "Cold Call Dialer"
+    ]
+  },
+  {
+    "name": "Tweethunter",
+    "website": "https://tweethunter.io",
+    "categories": [
+      "Content Ideation"
+    ]
+  },
+  {
+    "name": "Ubersuggest",
+    "website": "https://neilpatel.com/ubersuggest/",
+    "categories": [
+      "SEO"
+    ]
+  },
+  {
+    "name": "Userled",
+    "website": "https://userled.io",
+    "categories": [
+      "ABM"
+    ]
+  },
+  {
+    "name": "VBout",
+    "website": "https://vbout.com",
+    "categories": [
+      "Marketing Automation"
+    ]
+  },
+  {
+    "name": "Viewstats",
+    "website": "https://viewstats.com",
+    "categories": [
+      "Content Ideation"
+    ]
+  },
+  {
+    "name": "Zenrows",
+    "website": "https://zenrows.com",
+    "categories": [
+      "Data Scraping"
+    ]
+  }
+]
