@@ -112,11 +112,18 @@ export function OnboardingModal() {
     }
   };
 
-  const wide = step === "username" ? "sm:max-w-[425px]" : "sm:max-w-3xl";
+  // Signup takes over the whole screen rather than sitting in a small dialog.
+  // The inner column keeps the content readable on wide monitors.
+  const column = step === "username" ? "max-w-md" : "max-w-4xl";
 
   return (
     <Dialog open={needsOnboarding || flowActive} onOpenChange={() => {}}>
-      <DialogContent className={`${wide} [&>button]:hidden max-h-[90vh] overflow-y-auto`}>
+      <DialogContent
+        className="[&>button]:hidden w-screen h-screen max-w-none rounded-none border-0
+                   p-0 sm:rounded-none translate-x-0 translate-y-0 left-0 top-0
+                   overflow-y-auto"
+      >
+        <div className={`mx-auto w-full ${column} px-6 py-12 sm:py-16`}>
         {/* ---------- 1. username ---------- */}
         {step === "username" && (
           <form onSubmit={handleUsername} className="space-y-5">
@@ -252,6 +259,7 @@ export function OnboardingModal() {
             </div>
           </div>
         )}
+        </div>
       </DialogContent>
     </Dialog>
   );

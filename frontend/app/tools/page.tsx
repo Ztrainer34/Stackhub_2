@@ -23,6 +23,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Search, Wrench, Calendar, Filter } from "lucide-react";
 import { ToolLogo } from "@/components/tool-logo";
+import { ToolActions } from "@/components/tool-actions";
 import { toolHref, BrowseTool } from "@/lib/tool";
 import { AddToolDialog } from "@/components/add-tool-dialog";
 import { useBrowseTools, useToolCategories } from "@/lib/queries/use-browse-tools";
@@ -46,16 +47,23 @@ function ToolCard({ tool }: { tool: BrowseTool }) {
                 </Badge>
               ))}
             </div>
+            {/* Stops the card's Link from firing — handled inside ToolActions. */}
+            <ToolActions tool={tool} variant="mini" />
+          </div>
+
+          <div className="flex items-start gap-3 mt-2">
             <div className="w-10 h-10 bg-white rounded-lg border shadow-sm flex items-center justify-center p-1 flex-shrink-0">
               <ToolLogo name={tool.name} logoUrl={tool.logo_url} size="sm" />
             </div>
+            <div className="min-w-0">
+              <CardTitle className="text-base font-semibold line-clamp-2 group-hover:text-primary transition-colors">
+                {tool.name}
+              </CardTitle>
+              <CardDescription className="text-sm line-clamp-2 mt-1">
+                {tool.description}
+              </CardDescription>
+            </div>
           </div>
-          <CardTitle className="text-base font-semibold line-clamp-2 group-hover:text-primary transition-colors mt-2">
-            {tool.name}
-          </CardTitle>
-          <CardDescription className="text-sm line-clamp-2 mt-1">
-            {tool.description}
-          </CardDescription>
         </CardHeader>
 
         <CardContent className="pt-0">

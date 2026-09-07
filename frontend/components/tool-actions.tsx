@@ -19,7 +19,8 @@ import { useAuth } from "@/lib/queries/use-auth";
 import { useLoginPrompt } from "@/components/login-prompt-provider";
 
 interface ToolActionsProps {
-  tool: Tool;
+  // Only the id is used (state comes from useTool), so browse-list rows work too.
+  tool: Pick<Tool, "id">;
   variant?: "full" | "mini";
 }
 
