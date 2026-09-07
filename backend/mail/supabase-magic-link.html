@@ -1,0 +1,68 @@
+<!--
+  Magic-link login email.
+
+  This template is NOT sent by the Go backend — it lives in Supabase:
+    Dashboard -> Authentication -> Emails -> Magic Link
+  Paste the markup below into that editor. {{ .ConfirmationURL }} is Supabase's
+  placeholder for the sign-in link.
+
+  Kept in the repo so the copy and styling are version-controlled alongside the
+  transactional emails in pkg/mail/mail.go, which use the same black hero,
+  black button and single 16px black type scale.
+-->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+  </head>
+  <body style="margin:0;background:#f6f9fc;font-family:Inter,Arial,sans-serif">
+    <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f6f9fc;padding:24px 0">
+      <tr>
+        <td align="center">
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;background:#ffffff;border:1px solid #e6ebf1;border-radius:8px;overflow:hidden">
+
+            <!-- Hero -->
+            <tr>
+              <td style="background:#000000;padding:28px 40px;text-align:center">
+                <h1 style="color:#ffffff;font-size:24px;margin:0 0 6px 0">StackHub</h1>
+                <p style="color:#ffffff;font-size:14px;line-height:1.5;margin:0">Your Hub for tools</p>
+              </td>
+            </tr>
+
+            <!-- Body: one type scale, one colour -->
+            <tr>
+              <td style="padding:36px 40px;color:#000000;font-size:16px;line-height:1.6">
+
+                <p style="color:#000000;font-size:16px;line-height:1.6;margin:0 0 16px 0">Hello again 👋</p>
+
+                <p style="color:#000000;font-size:16px;line-height:1.6;margin:0 0 24px 0">
+                  Here's your magic link to log in to StackHub.
+                </p>
+
+                <p style="margin:0 0 24px 0">
+                  <a href="{{ .ConfirmationURL }}"
+                     style="display:inline-block;background:#000000;color:#ffffff;border:1px solid #000000;text-decoration:none;font-size:15px;font-weight:600;padding:11px 22px;border-radius:6px">
+                    Log in to StackHub
+                  </a>
+                </p>
+
+                <p style="color:#000000;font-size:16px;line-height:1.6;margin:0 0 24px 0">
+                  This link will expire in 15 minutes for security reasons. If you didn't
+                  request this, you can safely ignore this email.
+                </p>
+
+                <p style="color:#000000;font-size:16px;line-height:1.6;margin:0">
+                  See you inside,<br />
+                  <strong style="color:#000000">StackHub team</strong>
+                </p>
+
+              </td>
+            </tr>
+
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

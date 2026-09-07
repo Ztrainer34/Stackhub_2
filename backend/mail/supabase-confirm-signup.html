@@ -1,0 +1,52 @@
+<!--
+  Signup / welcome email.
+
+  This is the email new users actually receive. It is NOT sent by the Go backend
+  and it is NOT mail/generated/welcome.html — Supabase sends it, because
+  signInWithOtp creates the account and therefore triggers "Confirm sign up":
+
+    Dashboard -> Authentication -> Emails -> Confirm sign up
+
+  Paste the markup below into that editor. {{ .ConfirmationURL }} is Supabase's
+  placeholder for the confirmation link.
+
+  Styling matches supabase-magic-link.html and pkg/mail/mail.go: black hero,
+  black button, one 16px black type scale, no divider rules.
+-->
+<div style="font-family:Inter,Arial,sans-serif;background:#f6f9fc;padding:24px">
+  <div style="max-width:600px;margin:0 auto;background:#fff;border:1px solid #e6ebf1;border-radius:8px;overflow:hidden">
+
+    <div style="background:#000000;padding:32px 40px;text-align:center">
+      <h1 style="color:#ffffff;font-size:26px;margin:0">StackHub</h1>
+      <p style="color:#ffffff;font-size:13px;margin:6px 0 0">Your Hub for tools</p>
+    </div>
+
+    <div style="padding:36px 40px">
+
+      <p style="font-size:16px;color:#000000;line-height:1.6;margin:0 0 16px">Welcome aboard 👋</p>
+
+      <p style="font-size:16px;color:#000000;line-height:1.6;margin:0 0 24px">
+        Just click below to start using StackHub.
+      </p>
+
+      <div style="text-align:center;margin:0 0 28px">
+        <a href="{{ .ConfirmationURL }}"
+           style="background:#000000;color:#ffffff;text-decoration:none;font-size:16px;font-weight:600;padding:14px 28px;border-radius:6px;display:inline-block">
+          Start using StackHub
+        </a>
+      </div>
+
+      <p style="font-size:16px;color:#000000;line-height:1.6;margin:0 0 14px">A couple of ideas to get started:</p>
+
+      <p style="font-size:16px;color:#000000;line-height:1.6;margin:0 0 10px">🔍 Explore people's stacks and playbooks</p>
+      <p style="font-size:16px;color:#000000;line-height:1.6;margin:0 0 10px">⭐ Add tools to your stack / watchlist</p>
+      <p style="font-size:16px;color:#000000;line-height:1.6;margin:0 0 24px">📝 Add your playbooks to grow your visibility</p>
+
+      <p style="font-size:16px;color:#000000;line-height:1.6;margin:0">
+        Enjoy the exploration,<br />
+        <strong style="color:#000000">StackHub team</strong>
+      </p>
+
+    </div>
+  </div>
+</div>

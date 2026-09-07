@@ -42,8 +42,8 @@ func emailShell(body string) string {
 		`<body style="margin:0;background:#f6f9fc;font-family:Inter,Arial,sans-serif">` +
 		`<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f6f9fc;padding:24px 0"><tr><td align="center">` +
 		`<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;background:#ffffff;border:1px solid #e6ebf1;border-radius:8px;overflow:hidden">` +
-		`<tr><td style="background:#1a365d;padding:28px 40px;text-align:center"><h1 style="color:#ffffff;font-size:24px;margin:0">StackHub</h1></td></tr>` +
-		`<tr><td style="padding:36px 40px;color:#4a5568;font-size:16px;line-height:1.6">` + body + `</td></tr>` +
+		`<tr><td style="background:#000000;padding:28px 40px;text-align:center"><h1 style="color:#ffffff;font-size:24px;margin:0">StackHub</h1></td></tr>` +
+		`<tr><td style="padding:36px 40px;color:#000000;font-size:16px;line-height:1.6">` + body + `</td></tr>` +
 		`</table></td></tr></table></body></html>`
 }
 
@@ -64,12 +64,12 @@ func nameLink(name, username string) string {
 
 // ctaButton renders a call-to-action button.
 func ctaButton(href, label string, primary bool) string {
-	bg := "#3182ce"
+	bg := "#000000"
 	color := "#ffffff"
-	border := "#3182ce"
+	border := "#000000"
 	if !primary {
 		bg = "#ffffff"
-		color = "#3182ce"
+		color = "#000000"
 	}
 	return fmt.Sprintf(
 		`<a href="%s" style="display:inline-block;background:%s;color:%s;border:1px solid %s;text-decoration:none;font-size:15px;font-weight:600;padding:11px 22px;border-radius:6px;margin:0 8px 8px 0">%s</a>`,

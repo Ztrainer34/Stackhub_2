@@ -3778,3 +3778,97 @@ func (q *Queries) SetProfileAvatar(ctx context.Context, arg SetProfileAvatarPara
 	_, err := q.db.Exec(ctx, setProfileAvatar, arg.ID, arg.AvatarUrl)
 	return err
 }
+
+const setProfileFocusAreas = `-- name: SetProfileFocusAreas :exec
+UPDATE profiles
+SET focus_areas = $1::text[],
+    onboarding_completed_at = now(),
+    updated_at = now()
+WHERE id = $2
+`
+
+type SetProfileFocusAreasParams struct {
+	FocusAreas []string  `json:"focus_areas"`
+	ProfileID  uuid.UUID `json:"profile_id"`
+}
+
+func (q *Queries) SetProfileFocusAreas(ctx context.Context, arg SetProfileFocusAreasParams) error {
+	_, err := q.db.Exec(ctx, setProfileFocusAreas, arg.FocusAreas, arg.ProfileID)
+	return err
+}
+
+const getToolsByNames = `-- name: GetToolsByNames :many
+SELECT id, name, logo_url
+FROM tools
+WHERE lower(name) = ANY($1::text[])
+ORDER BY name
+`
+
+type GetToolsByNamesRow struct {
+	ID      uuid.UUID   `json:"id"`
+	Name    string      `json:"name"`
+	LogoUrl pgtype.Text `json:"logo_url"`
+}
+
+func (q *Queries) GetToolsByNames(ctx context.Context, names []string) ([]GetToolsByNamesRow, error) {
+	rows, err := q.db.Query(ctx, getToolsByNames, names)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetToolsByNamesRow
+	for rows.Next() {
+		var i GetToolsByNamesRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.LogoUrl); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getToolsByCategoryKeywords = `-- name: GetToolsByCategoryKeywords :many
+SELECT DISTINCT t.id, t.name, t.logo_url
+FROM tools t
+JOIN tool_categories tc ON tc.tool_id = t.id
+JOIN categories c ON c.id = tc.category_id
+WHERE c.name ILIKE ANY($1::text[])
+  AND t.logo_url IS NOT NULL
+  AND t.logo_url <> ''
+ORDER BY t.name
+LIMIT $2
+`
+
+type GetToolsByCategoryKeywordsParams struct {
+	Patterns []string `json:"patterns"`
+	Lim      int32    `json:"lim"`
+}
+
+type GetToolsByCategoryKeywordsRow struct {
+	ID      uuid.UUID   `json:"id"`
+	Name    string      `json:"name"`
+	LogoUrl pgtype.Text `json:"logo_url"`
+}
+
+func (q *Queries) GetToolsByCategoryKeywords(ctx context.Context, arg GetToolsByCategoryKeywordsParams) ([]GetToolsByCategoryKeywordsRow, error) {
+	rows, err := q.db.Query(ctx, getToolsByCategoryKeywords, arg.Patterns, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetToolsByCategoryKeywordsRow
+	for rows.Next() {
+		var i GetToolsByCategoryKeywordsRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.LogoUrl); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

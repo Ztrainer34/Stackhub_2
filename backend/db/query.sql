@@ -1114,3 +1114,33 @@ LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 UPDATE profiles
 SET avatar_url = sqlc.narg(avatar_url), updated_at = now()
 WHERE id = $1;
+
+-- name: SetProfileFocusAreas :exec
+-- Stores the GTM focus areas picked during onboarding and marks the multi-step
+-- flow as finished so it is not shown again.
+UPDATE profiles
+SET focus_areas = sqlc.arg(focus_areas)::text[],
+    onboarding_completed_at = now(),
+    updated_at = now()
+WHERE id = sqlc.arg(profile_id);
+
+-- name: GetToolsByNames :many
+-- Resolves a fixed list of catalog names (the onboarding "popular tools" grid)
+-- to real tools, so the tiles can show the stored logo.
+SELECT id, name, logo_url
+FROM tools
+WHERE lower(name) = ANY(sqlc.arg(names)::text[])
+ORDER BY name;
+
+-- name: GetToolsByCategoryKeywords :many
+-- Loose match of tools whose categories look like one of the chosen onboarding
+-- focus areas. Requires a logo so every onboarding tile renders properly.
+SELECT DISTINCT t.id, t.name, t.logo_url
+FROM tools t
+JOIN tool_categories tc ON tc.tool_id = t.id
+JOIN categories c ON c.id = tc.category_id
+WHERE c.name ILIKE ANY(sqlc.arg(patterns)::text[])
+  AND t.logo_url IS NOT NULL
+  AND t.logo_url <> ''
+ORDER BY t.name
+LIMIT sqlc.arg(lim);

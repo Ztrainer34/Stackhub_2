@@ -130,6 +130,8 @@ type Profile struct {
 	Website             pgtype.Text        `json:"website"`
 	EmailHash           pgtype.Text        `json:"email_hash"`
 	AvatarUrl           pgtype.Text        `json:"avatar_url"`
+	FocusAreas          []string           `json:"focus_areas"`
+	OnboardingCompletedAt pgtype.Timestamptz `json:"onboarding_completed_at"`
 }
 
 type StackItem struct {
