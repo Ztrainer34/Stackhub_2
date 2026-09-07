@@ -52,6 +52,9 @@ export function OnboardingModal() {
 
   const router = useRouter();
   const [step, setStep] = useState<Step>("username");
+  // Creating the profile flips needsOnboarding to false, which would close the
+  // dialog mid-flow. Once started, we keep it open until the user finishes.
+  const [flowActive, setFlowActive] = useState(false);
   const [focus, setFocus] = useState<string[]>([]);
   const [tools, setTools] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
@@ -73,7 +76,10 @@ export function OnboardingModal() {
     onboard(
       { username },
       {
-        onSuccess: () => setStep("focus"),
+        onSuccess: () => {
+          setFlowActive(true);
+          setStep("focus");
+        },
         onError: (error) =>
           toast.error("Error", {
             description:
@@ -93,6 +99,7 @@ export function OnboardingModal() {
           ? `${tools.length} ${tools.length === 1 ? "tool" : "tools"} added to your stack.`
           : "Your profile is ready.",
       });
+      setFlowActive(false);
       router.push(destination);
       router.refresh();
     } catch (error) {
@@ -108,7 +115,7 @@ export function OnboardingModal() {
   const wide = step === "username" ? "sm:max-w-[425px]" : "sm:max-w-3xl";
 
   return (
-    <Dialog open={needsOnboarding} onOpenChange={() => {}}>
+    <Dialog open={needsOnboarding || flowActive} onOpenChange={() => {}}>
       <DialogContent className={`${wide} [&>button]:hidden max-h-[90vh] overflow-y-auto`}>
         {/* ---------- 1. username ---------- */}
         {step === "username" && (
