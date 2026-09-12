@@ -392,8 +392,10 @@ ORDER BY
 LIMIT $2 OFFSET $3;
 
 -- name: GetTool :one
-SELECT *
-FROM tools_with_details
+SELECT
+  twd.*,
+  EXISTS(SELECT 1 FROM tool_owners tow WHERE tow.tool_id = twd.id) AS is_claimed
+FROM tools_with_details twd
 WHERE id = $1;
 
 -- name: GetToolAuthenticated :one
@@ -403,7 +405,11 @@ SELECT
   EXISTS(SELECT 1 FROM stack_items si WHERE si.profile_id = $2 AND si.tool_id = twd.id) AS is_in_stack,
   EXISTS(SELECT 1 FROM watchlist_items wi WHERE wi.profile_id = $2 AND wi.tool_id = twd.id) AS is_in_watchlist,
   EXISTS(SELECT 1 FROM old_stack_items oi WHERE oi.profile_id = $2 AND oi.tool_id = twd.id) AS is_in_old_stack,
-  EXISTS(SELECT 1 FROM tool_follows tf WHERE tf.profile_id = $2 AND tf.tool_id = twd.id) AS is_followed
+  EXISTS(SELECT 1 FROM tool_follows tf WHERE tf.profile_id = $2 AND tf.tool_id = twd.id) AS is_followed,
+  -- Page ownership: is_owner unlocks the inline editors, is_claimed hides the
+  -- "Claim this page" call to action once somebody has taken the page over.
+  EXISTS(SELECT 1 FROM tool_owners tow WHERE tow.profile_id = $2 AND tow.tool_id = twd.id) AS is_owner,
+  EXISTS(SELECT 1 FROM tool_owners tow2 WHERE tow2.tool_id = twd.id) AS is_claimed
 FROM tools_with_details twd
 WHERE id = $1;
 
@@ -1144,3 +1150,66 @@ WHERE c.name ILIKE ANY(sqlc.arg(patterns)::text[])
   AND t.logo_url <> ''
 ORDER BY t.name
 LIMIT sqlc.arg(lim);
+
+-- name: IsToolOwner :one
+-- Gate for every tool-page edit. Ownership is granted out of band (see
+-- scripts/grant-tool-owner.mjs), never through the API.
+SELECT EXISTS(
+  SELECT 1 FROM tool_owners WHERE tool_id = $1 AND profile_id = $2
+) AS is_owner;
+
+-- name: ListToolOwners :many
+SELECT p.id, p.username, p.display_name, p.avatar_url, tow.granted_at
+FROM tool_owners tow
+JOIN profiles p ON p.id = tow.profile_id
+WHERE tow.tool_id = $1
+ORDER BY tow.granted_at;
+
+-- name: ListOwnedTools :many
+SELECT t.id, t.name, t.logo_url
+FROM tool_owners tow
+JOIN tools t ON t.id = tow.tool_id
+WHERE tow.profile_id = $1
+ORDER BY t.name;
+
+-- name: UpdateToolPageContent :exec
+-- Partial update: a NULL argument leaves the stored value alone, so each of the
+-- page's edit icons can save just its own field.
+UPDATE tools
+SET description      = COALESCE($2, description),
+    description_rich = COALESCE($3, description_rich),
+    logo_url         = COALESCE($4, logo_url),
+    updated_at       = now()
+WHERE id = $1;
+
+-- name: GetToolVendorID :one
+SELECT vendor_id FROM tools WHERE id = $1;
+
+-- name: CreateVendorForTool :one
+-- Tools imported without vendor details have no vendors row at all; the owner
+-- filling in the vendor card is what creates one.
+INSERT INTO vendors (name)
+SELECT name FROM tools WHERE id = $1
+RETURNING id;
+
+-- name: SetToolVendor :exec
+UPDATE tools SET vendor_id = $2, updated_at = now() WHERE id = $1;
+
+-- name: UpdateVendorDetails :exec
+-- The vendor card is edited as one form, so blanks are written through —
+-- clearing a field the owner emptied is the point.
+UPDATE vendors
+SET website            = $2,
+    x_profile          = $3,
+    linkedin_profile   = $4,
+    head_office        = $5,
+    year_of_foundation = $6
+WHERE id = $1;
+
+-- name: DeleteToolCategories :exec
+DELETE FROM tool_categories WHERE tool_id = $1;
+
+-- name: AddToolCategories :exec
+INSERT INTO tool_categories (tool_id, category_id)
+SELECT $1, unnest($2::int[])
+ON CONFLICT DO NOTHING;

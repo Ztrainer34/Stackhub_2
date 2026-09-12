@@ -38,9 +38,10 @@ export function useAddToStack() {
       // Snapshot the previous value
       const previousTool = queryClient.getQueryData(["tool", toolId]);
       
-      // Optimistically update to the new value
+      // Optimistically update to the new value.
       // A tool belongs to at most one list: adding to the stack clears the
-      // watchlist and old stack flags.
+      // watchlist and old stack flags. The server also auto-follows the tool,
+      // so show that straight away instead of waiting for a refetch.
       queryClient.setQueryData(["tool", toolId], (old: unknown) => {
         if (old && typeof old === 'object') {
           return {
@@ -48,6 +49,7 @@ export function useAddToStack() {
             is_in_stack: true,
             is_in_watchlist: false,
             is_in_old_stack: false,
+            is_followed: true,
           };
         }
         return old;
@@ -61,8 +63,9 @@ export function useAddToStack() {
       queryClient.setQueryData(["tool", toolId], context?.previousTool);
     },
     onSettled: () => {
-      // Don't refetch the tool, just invalidate stack
+      // Don't refetch the tool, just the lists it moved between.
       queryClient.invalidateQueries({ queryKey: ["stack"] });
+      queryClient.invalidateQueries({ queryKey: ["followed-tools"] });
     },
   });
 }

@@ -800,14 +800,29 @@ func (q *Queries) GetProfileWithUsername(ctx context.Context, username string) (
 }
 
 const getTool = `-- name: GetTool :one
-SELECT id, name, description, logo_url, created_at, updated_at, categories, vendor
-FROM tools_with_details
+SELECT
+  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor, twd.description_rich,
+  EXISTS(SELECT 1 FROM tool_owners tow WHERE tow.tool_id = twd.id) AS is_claimed
+FROM tools_with_details twd
 WHERE id = $1
 `
 
-func (q *Queries) GetTool(ctx context.Context, id uuid.UUID) (ToolsWithDetail, error) {
+type GetToolRow struct {
+	ID              uuid.UUID          `json:"id"`
+	Name            string             `json:"name"`
+	Description     pgtype.Text        `json:"description"`
+	LogoUrl         pgtype.Text        `json:"logo_url"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	Categories      interface{}        `json:"categories"`
+	Vendor          json.RawMessage    `json:"vendor"`
+	DescriptionRich pgtype.Text        `json:"description_rich"`
+	IsClaimed       bool               `json:"is_claimed"`
+}
+
+func (q *Queries) GetTool(ctx context.Context, id uuid.UUID) (GetToolRow, error) {
 	row := q.db.QueryRow(ctx, getTool, id)
-	var i ToolsWithDetail
+	var i GetToolRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
@@ -817,6 +832,8 @@ func (q *Queries) GetTool(ctx context.Context, id uuid.UUID) (ToolsWithDetail, e
 		&i.UpdatedAt,
 		&i.Categories,
 		&i.Vendor,
+		&i.DescriptionRich,
+		&i.IsClaimed,
 	)
 	return i, err
 }
@@ -904,12 +921,16 @@ func (q *Queries) ListTools(ctx context.Context, arg ListToolsParams) ([]ListToo
 
 const getToolAuthenticated = `-- name: GetToolAuthenticated :one
 SELECT
-  id, name, description, logo_url, created_at, updated_at, categories, vendor,
+  id, name, description, logo_url, created_at, updated_at, categories, vendor, description_rich,
   -- User status
   EXISTS(SELECT 1 FROM stack_items si WHERE si.profile_id = $2 AND si.tool_id = twd.id) AS is_in_stack,
   EXISTS(SELECT 1 FROM watchlist_items wi WHERE wi.profile_id = $2 AND wi.tool_id = twd.id) AS is_in_watchlist,
   EXISTS(SELECT 1 FROM old_stack_items oi WHERE oi.profile_id = $2 AND oi.tool_id = twd.id) AS is_in_old_stack,
-  EXISTS(SELECT 1 FROM tool_follows tf WHERE tf.profile_id = $2 AND tf.tool_id = twd.id) AS is_followed
+  EXISTS(SELECT 1 FROM tool_follows tf WHERE tf.profile_id = $2 AND tf.tool_id = twd.id) AS is_followed,
+  -- Page ownership: is_owner unlocks the inline editors, is_claimed hides the
+  -- "Claim this page" call to action once somebody has taken the page over.
+  EXISTS(SELECT 1 FROM tool_owners tow WHERE tow.profile_id = $2 AND tow.tool_id = twd.id) AS is_owner,
+  EXISTS(SELECT 1 FROM tool_owners tow2 WHERE tow2.tool_id = twd.id) AS is_claimed
 FROM tools_with_details twd
 WHERE id = $1
 `
@@ -926,12 +947,15 @@ type GetToolAuthenticatedRow struct {
 	LogoUrl       pgtype.Text        `json:"logo_url"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
-	Categories    interface{}        `json:"categories"`
-	Vendor        json.RawMessage    `json:"vendor"`
-	IsInStack     bool               `json:"is_in_stack"`
-	IsInWatchlist bool               `json:"is_in_watchlist"`
-	IsInOldStack  bool               `json:"is_in_old_stack"`
-	IsFollowed    bool               `json:"is_followed"`
+	Categories      interface{}      `json:"categories"`
+	Vendor          json.RawMessage  `json:"vendor"`
+	DescriptionRich pgtype.Text      `json:"description_rich"`
+	IsInStack       bool             `json:"is_in_stack"`
+	IsInWatchlist   bool             `json:"is_in_watchlist"`
+	IsInOldStack    bool             `json:"is_in_old_stack"`
+	IsFollowed      bool             `json:"is_followed"`
+	IsOwner         bool             `json:"is_owner"`
+	IsClaimed       bool             `json:"is_claimed"`
 }
 
 func (q *Queries) GetToolAuthenticated(ctx context.Context, arg GetToolAuthenticatedParams) (GetToolAuthenticatedRow, error) {
@@ -946,10 +970,13 @@ func (q *Queries) GetToolAuthenticated(ctx context.Context, arg GetToolAuthentic
 		&i.UpdatedAt,
 		&i.Categories,
 		&i.Vendor,
+		&i.DescriptionRich,
 		&i.IsInStack,
 		&i.IsInWatchlist,
 		&i.IsInOldStack,
 		&i.IsFollowed,
+		&i.IsOwner,
+		&i.IsClaimed,
 	)
 	return i, err
 }
@@ -3871,4 +3898,218 @@ func (q *Queries) GetToolsByCategoryKeywords(ctx context.Context, arg GetToolsBy
 		return nil, err
 	}
 	return items, nil
+}
+
+const isToolOwner = `-- name: IsToolOwner :one
+SELECT EXISTS(
+  SELECT 1 FROM tool_owners WHERE tool_id = $1 AND profile_id = $2
+) AS is_owner
+`
+
+type IsToolOwnerParams struct {
+	ToolID    uuid.UUID `json:"tool_id"`
+	ProfileID uuid.UUID `json:"profile_id"`
+}
+
+func (q *Queries) IsToolOwner(ctx context.Context, arg IsToolOwnerParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isToolOwner, arg.ToolID, arg.ProfileID)
+	var is_owner bool
+	err := row.Scan(&is_owner)
+	return is_owner, err
+}
+
+const listToolOwners = `-- name: ListToolOwners :many
+SELECT p.id, p.username, p.display_name, p.avatar_url, tow.granted_at
+FROM tool_owners tow
+JOIN profiles p ON p.id = tow.profile_id
+WHERE tow.tool_id = $1
+ORDER BY tow.granted_at
+`
+
+type ListToolOwnersRow struct {
+	ID          uuid.UUID          `json:"id"`
+	Username    string             `json:"username"`
+	DisplayName string             `json:"display_name"`
+	AvatarUrl   pgtype.Text        `json:"avatar_url"`
+	GrantedAt   pgtype.Timestamptz `json:"granted_at"`
+}
+
+func (q *Queries) ListToolOwners(ctx context.Context, toolID uuid.UUID) ([]ListToolOwnersRow, error) {
+	rows, err := q.db.Query(ctx, listToolOwners, toolID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListToolOwnersRow
+	for rows.Next() {
+		var i ListToolOwnersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.DisplayName,
+			&i.AvatarUrl,
+			&i.GrantedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOwnedTools = `-- name: ListOwnedTools :many
+SELECT t.id, t.name, t.logo_url
+FROM tool_owners tow
+JOIN tools t ON t.id = tow.tool_id
+WHERE tow.profile_id = $1
+ORDER BY t.name
+`
+
+type ListOwnedToolsRow struct {
+	ID      uuid.UUID   `json:"id"`
+	Name    string      `json:"name"`
+	LogoUrl pgtype.Text `json:"logo_url"`
+}
+
+func (q *Queries) ListOwnedTools(ctx context.Context, profileID uuid.UUID) ([]ListOwnedToolsRow, error) {
+	rows, err := q.db.Query(ctx, listOwnedTools, profileID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOwnedToolsRow
+	for rows.Next() {
+		var i ListOwnedToolsRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.LogoUrl); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateToolPageContent = `-- name: UpdateToolPageContent :exec
+UPDATE tools
+SET description      = COALESCE($2, description),
+    description_rich = COALESCE($3, description_rich),
+    logo_url         = COALESCE($4, logo_url),
+    updated_at       = now()
+WHERE id = $1
+`
+
+type UpdateToolPageContentParams struct {
+	ID              uuid.UUID   `json:"id"`
+	Description     pgtype.Text `json:"description"`
+	DescriptionRich pgtype.Text `json:"description_rich"`
+	LogoUrl         pgtype.Text `json:"logo_url"`
+}
+
+func (q *Queries) UpdateToolPageContent(ctx context.Context, arg UpdateToolPageContentParams) error {
+	_, err := q.db.Exec(ctx, updateToolPageContent,
+		arg.ID,
+		arg.Description,
+		arg.DescriptionRich,
+		arg.LogoUrl,
+	)
+	return err
+}
+
+const getToolVendorID = `-- name: GetToolVendorID :one
+SELECT vendor_id FROM tools WHERE id = $1
+`
+
+func (q *Queries) GetToolVendorID(ctx context.Context, id uuid.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, getToolVendorID, id)
+	var vendor_id pgtype.UUID
+	err := row.Scan(&vendor_id)
+	return vendor_id, err
+}
+
+const createVendorForTool = `-- name: CreateVendorForTool :one
+INSERT INTO vendors (name)
+SELECT name FROM tools WHERE id = $1
+RETURNING id
+`
+
+func (q *Queries) CreateVendorForTool(ctx context.Context, toolID uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createVendorForTool, toolID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const setToolVendor = `-- name: SetToolVendor :exec
+UPDATE tools SET vendor_id = $2, updated_at = now() WHERE id = $1
+`
+
+type SetToolVendorParams struct {
+	ID       uuid.UUID   `json:"id"`
+	VendorID pgtype.UUID `json:"vendor_id"`
+}
+
+func (q *Queries) SetToolVendor(ctx context.Context, arg SetToolVendorParams) error {
+	_, err := q.db.Exec(ctx, setToolVendor, arg.ID, arg.VendorID)
+	return err
+}
+
+const updateVendorDetails = `-- name: UpdateVendorDetails :exec
+UPDATE vendors
+SET website            = $2,
+    x_profile          = $3,
+    linkedin_profile   = $4,
+    head_office        = $5,
+    year_of_foundation = $6
+WHERE id = $1
+`
+
+type UpdateVendorDetailsParams struct {
+	ID               uuid.UUID   `json:"id"`
+	Website          pgtype.Text `json:"website"`
+	XProfile         pgtype.Text `json:"x_profile"`
+	LinkedinProfile  pgtype.Text `json:"linkedin_profile"`
+	HeadOffice       pgtype.Text `json:"head_office"`
+	YearOfFoundation pgtype.Int4 `json:"year_of_foundation"`
+}
+
+func (q *Queries) UpdateVendorDetails(ctx context.Context, arg UpdateVendorDetailsParams) error {
+	_, err := q.db.Exec(ctx, updateVendorDetails,
+		arg.ID,
+		arg.Website,
+		arg.XProfile,
+		arg.LinkedinProfile,
+		arg.HeadOffice,
+		arg.YearOfFoundation,
+	)
+	return err
+}
+
+const deleteToolCategories = `-- name: DeleteToolCategories :exec
+DELETE FROM tool_categories WHERE tool_id = $1
+`
+
+func (q *Queries) DeleteToolCategories(ctx context.Context, toolID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteToolCategories, toolID)
+	return err
+}
+
+const addToolCategories = `-- name: AddToolCategories :exec
+INSERT INTO tool_categories (tool_id, category_id)
+SELECT $1, unnest($2::int[])
+ON CONFLICT DO NOTHING
+`
+
+type AddToolCategoriesParams struct {
+	ToolID      uuid.UUID `json:"tool_id"`
+	CategoryIds []int32   `json:"category_ids"`
+}
+
+func (q *Queries) AddToolCategories(ctx context.Context, arg AddToolCategoriesParams) error {
+	_, err := q.db.Exec(ctx, addToolCategories, arg.ToolID, arg.CategoryIds)
+	return err
 }

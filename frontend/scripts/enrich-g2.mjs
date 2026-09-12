@@ -299,7 +299,11 @@ process.on("SIGINT", () => {
 // Tools this pass is allowed to touch: the ColdIQ import plus any later
 // batch that passed the duplicate check. Extra files are ignored if absent.
 const imported = new Set();
-for (const file of ["scripts/tools-enriched.json", "scripts/new-batch-to-add.json"]) {
+for (const file of [
+  "scripts/tools-enriched.json",
+  "scripts/new-batch-to-add.json",
+  "scripts/creator-tools-to-add.json",
+]) {
   if (!existsSync(file)) continue;
   for (const t of JSON.parse(readFileSync(file, "utf8"))) imported.add(norm(t.name));
 }

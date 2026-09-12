@@ -1,0 +1,181 @@
+[
+  {
+    "name": "LinkedIn",
+    "website": "https://www.linkedin.com",
+    "categories": [
+      "Social Selling",
+      "Prospecting"
+    ]
+  },
+  {
+    "name": "LinkedIn Ads",
+    "website": "https://business.linkedin.com/marketing-solutions/ads",
+    "categories": [
+      "Advertising",
+      "Demand Generation"
+    ]
+  },
+  {
+    "name": "Meta Ads",
+    "website": "https://www.facebook.com/business/ads",
+    "categories": [
+      "Advertising",
+      "Demand Generation"
+    ]
+  },
+  {
+    "name": "Conversions API",
+    "website": "https://developers.facebook.com/docs/marketing-api/conversions-api",
+    "categories": [
+      "Advertising",
+      "Marketing Attribution"
+    ]
+  },
+  {
+    "name": "Gmail",
+    "website": "https://mail.google.com",
+    "categories": [
+      "Email"
+    ]
+  },
+  {
+    "name": "Outlook",
+    "website": "https://outlook.com",
+    "categories": [
+      "Email"
+    ]
+  },
+  {
+    "name": "Google Postmaster Tools",
+    "website": "https://postmaster.google.com",
+    "categories": [
+      "Email Deliverability"
+    ]
+  },
+  {
+    "name": "MillionVerifier",
+    "website": "https://www.millionverifier.com",
+    "categories": [
+      "Email Verification"
+    ]
+  },
+  {
+    "name": "Marketo",
+    "website": "https://business.adobe.com/products/marketo/adobe-marketo.html",
+    "categories": [
+      "Marketing Automation"
+    ]
+  },
+  {
+    "name": "Agentforce",
+    "website": "https://www.salesforce.com/agentforce",
+    "categories": [
+      "AI Agents",
+      "CRM"
+    ]
+  },
+  {
+    "name": "Breeze Intelligence",
+    "website": "https://www.hubspot.com/products/breeze",
+    "categories": [
+      "Data Enrichment",
+      "AI Agents"
+    ]
+  },
+  {
+    "name": "HG Insights",
+    "website": "https://hginsights.com",
+    "categories": [
+      "Technographics",
+      "Market Intelligence"
+    ]
+  },
+  {
+    "name": "Datanyze",
+    "website": "https://www.datanyze.com",
+    "categories": [
+      "Technographics",
+      "Prospecting"
+    ]
+  },
+  {
+    "name": "Dealfront",
+    "website": "https://www.dealfront.com",
+    "categories": [
+      "Website Visitor Identification",
+      "General Databases"
+    ]
+  },
+  {
+    "name": "Excel",
+    "website": "https://www.microsoft.com/microsoft-365/excel",
+    "categories": [
+      "Spreadsheets",
+      "Analytics"
+    ]
+  },
+  {
+    "name": "YouTube",
+    "website": "https://www.youtube.com",
+    "categories": [
+      "Content Marketing",
+      "Video"
+    ]
+  },
+  {
+    "name": "Medium",
+    "website": "https://medium.com",
+    "categories": [
+      "Content Marketing",
+      "Publishing"
+    ]
+  },
+  {
+    "name": "Reddit",
+    "website": "https://www.reddit.com",
+    "categories": [
+      "Community",
+      "Social Selling"
+    ]
+  },
+  {
+    "name": "Quora",
+    "website": "https://www.quora.com",
+    "categories": [
+      "Community",
+      "Content Marketing"
+    ]
+  },
+  {
+    "name": "Discord",
+    "website": "https://discord.com",
+    "categories": [
+      "Community",
+      "Team Communication"
+    ]
+  },
+  {
+    "name": "Frontal",
+    "website": "https://www.frontal.io",
+    "categories": [
+      "Advertising",
+      "Demand Generation"
+    ]
+  },
+  {
+    "name": "Naano",
+    "website": "https://www.naano.com",
+    "categories": [
+      "Prospecting"
+    ]
+  },
+  {
+    "name": "Sumble",
+    "website": "https://sumble.com",
+    "categories": [
+      "Technographics",
+      "Job Intelligence",
+      "Prospecting"
+    ]
+  }
+]

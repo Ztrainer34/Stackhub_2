@@ -1,0 +1,742 @@
+{
+  "users": [
+    {
+      "username": "alexvacca",
+      "bio": "Founder & CEO @ Frontal",
+      "location": "",
+      "stack": [
+        "Clay",
+        "LinkedIn",
+        "Frontal",
+        "Apollo",
+        "Claygent",
+        "HubSpot",
+        "Salesforce",
+        "BuiltWith",
+        "LeadMagic",
+        "Prospeo",
+        "LinkedIn Sales Navigator",
+        "Serper",
+        "G2",
+        "Crunchbase",
+        "Clearbit",
+        "Trigify",
+        "RB2B",
+        "Bombora",
+        "HG Insights",
+        "Slack",
+        "Ocean.io",
+        "6sense",
+        "Google Workspace",
+        "Findymail",
+        "Lemlist",
+        "Groundswell",
+        "LinkedIn Ads",
+        "Leadfeeder",
+        "PredictLeads",
+        "Gmail",
+        "ZoomInfo",
+        "ZeroBounce",
+        "BetterContact",
+        "MXToolbox",
+        "GitHub",
+        "Warmly",
+        "Zen ABM",
+        "ChatGPT",
+        "Claude",
+        "Common Room",
+        "MillionVerifier",
+        "NeverBounce",
+        "Notion",
+        "Outlook",
+        "Koala",
+        "Loom",
+        "Capterra",
+        "Google Postmaster",
+        "Meta Ads",
+        "People Data Labs",
+        "PhantomBuster",
+        "Pipedrive",
+        "PitchBook",
+        "Semrush",
+        "Snowflake",
+        "Excel",
+        "FullEnrich",
+        "RocketReach",
+        "Salesloft",
+        "Smartlead",
+        "Bouncer",
+        "Bright Data",
+        "Dealfront",
+        "HeyReach",
+        "Klaviyo",
+        "Reddit",
+        "TrustRadius",
+        "Wiza",
+        "X (Twitter)",
+        "Breeze Intelligence",
+        "Cognism",
+        "Datanyze",
+        "Discord",
+        "Fibbler",
+        "Google Sheets",
+        "Nooks",
+        "Sendspark",
+        "Wappalyzer",
+        "n8n"
+      ]
+    },
+    {
+      "username": "aliceteodorescu",
+      "bio": "Co-Founder, Tipar Collective",
+      "location": ""
+    },
+    {
+      "username": "alongoldenberg",
+      "bio": "Technical Product Manager, Nimbleway",
+      "location": "",
+      "stack": [
+        "LinkedIn",
+        "ChatGPT",
+        "Notion",
+        "Meta Ads"
+      ]
+    },
+    {
+      "username": "amirbaldiga",
+      "bio": "Founder, Zooq",
+      "location": ""
+    },
+    {
+      "username": "amitrotstein",
+      "bio": "Head of Product, Spotlight.ai",
+      "location": ""
+    },
+    {
+      "username": "amosbarjoseph",
+      "bio": "CEO & Co-Founder",
+      "location": "",
+      "stack": [
+        "LinkedIn"
+      ]
+    },
+    {
+      "username": "andreguelmann",
+      "bio": "Founder, BeSeenByAI",
+      "location": ""
+    },
+    {
+      "username": "arielcohen",
+      "bio": "Founding Growth Engineer",
+      "location": "",
+      "stack": [
+        "LinkedIn",
+        "Slack",
+        "HubSpot",
+        "Attio",
+        "Salesforce"
+      ]
+    },
+    {
+      "username": "austinhay",
+      "bio": "Operating Partner @ Khosla Ventures",
+      "location": ""
+    },
+    {
+      "username": "boazdescalo",
+      "bio": "Founder & CEO, Node8",
+      "location": "",
+      "stack": [
+        "Clearbit",
+        "Bright Data",
+        "Clay"
+      ]
+    },
+    {
+      "username": "bojandjakonovicberisavljevic",
+      "bio": "Head of Innovation @ BLYNKED",
+      "location": ""
+    },
+    {
+      "username": "bradsmith",
+      "bio": "Startups & Investor Partnerships",
+      "location": ""
+    },
+    {
+      "username": "briannethomas",
+      "bio": "VP Marketing at Elastic Path",
+      "location": "",
+      "stack": [
+        "LinkedIn",
+        "LinkedIn Ads"
+      ]
+    },
+    {
+      "username": "danielbustamante",
+      "bio": "Founder & CEO @ Velocity",
+      "location": "",
+      "stack": [
+        "LinkedIn"
+      ]
+    },
+    {
+      "username": "dannichen",
+      "bio": "Head of Product & GTM, AI",
+      "location": ""
+    },
+    {
+      "username": "daveengel",
+      "bio": "Founder @ Confra",
+      "location": ""
+    },
+    {
+      "username": "dimabilous",
+      "bio": "Founder, Anfloy",
+      "location": ""
+    },
+    {
+      "username": "dinarbel",
+      "bio": "GTM @ Utila",
+      "location": "",
+      "stack": [
+        "LinkedIn",
+        "Slack",
+        "Crunchbase",
+        "HubSpot"
+      ]
+    },
+    {
+      "username": "dusanvystrcil",
+      "bio": "Product Manager, Apify AI team",
+      "location": "",
+      "stack": [
+        "LinkedIn"
+      ]
+    },
+    {
+      "username": "eladhefetz",
+      "bio": "CEO, Airfleet",
+      "location": ""
+    },
+    {
+      "username": "eliezercohen",
+      "bio": "Head of Global Sales & Partnerships, GoPerfect",
+      "location": ""
+    },
+    {
+      "username": "emiliakorczynska",
+      "bio": "VP of Marketing @ Userpilot",
+      "location": "",
+      "stack": [
+        "LinkedIn",
+        "Zen ABM",
+        "LinkedIn Ads",
+        "Notion",
+        "HubSpot"
+      ]
+    },
+    {
+      "username": "erwannlefevre",
+      "bio": "Growth & GTM Engineer, La Growth Machine",
+      "location": "",
+      "stack": [
+        "LinkedIn"
+      ]
+    },
+    {
+      "username": "galaga",
+      "bio": "Co-Founder & CEO @ Aligned",
+      "location": ""
+    },
+    {
+      "username": "galifiron",
+      "bio": "Sales & Marketing Coordinator, Kidoz Inc.",
+      "location": "",
+      "stack": [
+        "LinkedIn"
+      ]
+    },
+    {
+      "username": "galtamir",
+      "bio": "Director of Marketing Operations",
+      "location": "",
+      "stack": [
+        "Lusha",
+        "LinkedIn"
+      ]
+    },
+    {
+      "username": "gerritkesten",
+      "bio": "Co-Founder, job.rocks",
+      "location": ""
+    },
+    {
+      "username": "huxleypeckham",
+      "bio": "Founder, Tech Horizon Labs",
+      "location": ""
+    },
+    {
+      "username": "idogoldberg",
+      "bio": "Co-Founder & CPO",
+      "location": "",
+      "stack": [
+        "LinkedIn",
+        "Swan",
+        "Slack",
+        "HubSpot",
+        "Reddit",
+        "Apollo",
+        "G2",
+        "Amplitude",
+        "Fireflies",
+        "Mixpanel",
+        "Salesforce",
+        "X (Twitter)"
+      ]
+    },
+    {
+      "username": "imadbadreddine",
+      "bio": "Founder, Alpaca Leads",
+      "location": "",
+      "stack": [
+        "LinkedIn"
+      ]
+    },
+    {
+      "username": "ivanfalco",
+      "bio": "Ads Engineer @ Frontal",
+      "location": "",
+      "stack": [
+        "Meta Ads",
+        "LinkedIn",
+        "Conversions API",
+        "HubSpot",
+        "LinkedIn Ads",
+        "Frontal",
+        "Google Ads",
+        "Clay",
+        "Fibbler",
+        "n8n",
+        "G2",
+        "Salesforce",
+        "YouTube",
+        "BuiltWith",
+        "Reddit",
+        "LinkedIn Sales Navigator",
+        "Notion",
+        "Slack",
+        "Zen ABM",
+        "Apollo",
+        "Claude Code",
+        "Capterra",
+        "Freckle",
+        "Google Tag Manager",
+        "OpenAI",
+        "Aligned",
+        "Attio",
+        "Excel",
+        "Google Sheets",
+        "Medium",
+        "X (Twitter)"
+      ]
+    },
+    {
+      "username": "jeremyhurst",
+      "bio": "VP of Autonomous GTM",
+      "location": "",
+      "stack": [
+        "LinkedIn",
+        "Slack",
+        "Attio",
+        "HubSpot",
+        "Salesforce"
+      ]
+    },
+    {
+      "username": "johnwilliams",
+      "bio": "Founder, AHMEEGO",
+      "location": "",
+      "stack": [
+        "Google Ads"
+      ]
+    },
+    {
+      "username": "jorgemacias",
+      "bio": "Founder @ The GTM Engineering Company",
+      "location": "",
+      "stack": [
+        "LinkedIn"
+      ]
+    },
+    {
+      "username": "joshuawaldman",
+      "bio": "Founder, SendX",
+      "location": "",
+      "stack": [
+        "Gmail",
+        "Google Postmaster",
+        "Outlook"
+      ]
+    },
+    {
+      "username": "katyatarapovskaia",
+      "bio": "Head of Marketing & AI Solutions @ YouStellar",
+      "location": "",
+      "stack": [
+        "Clay",
+        "Apollo",
+        "HubSpot",
+        "LinkedIn"
+      ]
+    },
+    {
+      "username": "kevinkddorsey",
+      "bio": "CRO",
+      "location": ""
+    },
+    {
+      "username": "khondokarmdasifulislam",
+      "bio": "Co-founder, SerpDad. Organizer, The SEO Event",
+      "location": ""
+    },
+    {
+      "username": "lucasgodtfredsen",
+      "bio": "Founder, GTM Now",
+      "location": ""
+    },
+    {
+      "username": "lukeshalom",
+      "bio": "Founder & CEO @ Atticus",
+      "location": "",
+      "stack": [
+        "LinkedIn"
+      ]
+    },
+    {
+      "username": "majavoje",
+      "bio": "Founder",
+      "location": ""
+    },
+    {
+      "username": "mannymedina",
+      "bio": "Founder & CEO",
+      "location": ""
+    },
+    {
+      "username": "maxnimmo",
+      "bio": "Founder @ CreatorWorks",
+      "location": "",
+      "stack": [
+        "LinkedIn"
+      ]
+    },
+    {
+      "username": "monicadinu",
+      "bio": "VP Growth & Marketing @ Alasco",
+      "location": ""
+    },
+    {
+      "username": "nadavdavid",
+      "bio": "Strategic Partnerships Manager, Kidoz",
+      "location": ""
+    },
+    {
+      "username": "nikhilmirza",
+      "bio": "Sr Director, Sales Operations, Taboola",
+      "location": ""
+    },
+    {
+      "username": "nylanrichard",
+      "bio": "AI Expert in Residence @ FullEnrich",
+      "location": "",
+      "stack": [
+        "LinkedIn",
+        "FullEnrich",
+        "Apollo",
+        "Clay",
+        "Clearbit",
+        "Cognism",
+        "Dropcontact",
+        "Findymail",
+        "Kaspr",
+        "Lemlist",
+        "Lusha",
+        "ZoomInfo"
+      ]
+    },
+    {
+      "username": "omerlevy",
+      "bio": "GTM AI Solution Architect",
+      "location": "",
+      "stack": [
+        "Lusha",
+        "Gmail",
+        "LinkedIn",
+        "Claude"
+      ]
+    },
+    {
+      "username": "petemientkiewicz",
+      "bio": "Founder, ScaleUP Systems",
+      "location": "",
+      "stack": [
+        "LinkedIn"
+      ]
+    },
+    {
+      "username": "petercools",
+      "bio": "Founder, Rodz",
+      "location": ""
+    },
+    {
+      "username": "petersborkovich",
+      "bio": "VP Americas Sales @ HiBob",
+      "location": "",
+      "stack": [
+        "LinkedIn"
+      ]
+    },
+    {
+      "username": "robsnyder",
+      "bio": "Author, The Power of Pull",
+      "location": ""
+    },
+    {
+      "username": "romanpalii",
+      "bio": "Founder",
+      "location": ""
+    },
+    {
+      "username": "rutgerkatz",
+      "bio": "Founder @ Neon Triforce — AI-Ready Revenue Systems",
+      "location": "",
+      "stack": [
+        "HubSpot",
+        "Salesforce",
+        "Ebsta",
+        "Slack",
+        "Gong",
+        "Agentforce",
+        "dbt",
+        "LinkedIn",
+        "Notion",
+        "Hightouch",
+        "Claude",
+        "Clay",
+        "Fullcast",
+        "G2",
+        "ZoomInfo",
+        "Breeze Intelligence",
+        "Clari",
+        "Apollo",
+        "6sense",
+        "Fathom",
+        "LeanData",
+        "Clearbit",
+        "Chili Piper",
+        "Cognism",
+        "Zapier",
+        "Fireflies",
+        "Snowflake",
+        "n8n",
+        "Census",
+        "Salesloft",
+        "BigQuery",
+        "Capterra",
+        "OpenAI",
+        "Gmail",
+        "Swan",
+        "Amplitude",
+        "Aviso",
+        "BetterContact",
+        "Looker",
+        "Lusha",
+        "Tableau",
+        "Bombora",
+        "Default (routing)",
+        "Demandbase",
+        "Gradient Works",
+        "Marketo",
+        "Avoma",
+        "Intercom",
+        "Lemlist"
+      ]
+    },
+    {
+      "username": "ryanestes",
+      "bio": "Founder @ AI For Founders",
+      "location": "",
+      "stack": [
+        "Beehiiv"
+      ]
+    },
+    {
+      "username": "ryaniyengar",
+      "bio": "CEO & Founder, Full Stack GTM",
+      "location": ""
+    },
+    {
+      "username": "sabahudinmurtic",
+      "bio": "Founder @ Unstuck",
+      "location": "",
+      "stack": [
+        "Notion",
+        "Claude Code"
+      ]
+    },
+    {
+      "username": "samdunning",
+      "bio": "Founder @ Breaking B2B",
+      "location": "",
+      "stack": [
+        "Ahrefs",
+        "Fathom",
+        "Slack",
+        "Fireflies"
+      ]
+    },
+    {
+      "username": "samjacobs",
+      "bio": "Founder & CEO @ Pavilion",
+      "location": ""
+    },
+    {
+      "username": "sangramvajre",
+      "bio": "Co-founder & CEO",
+      "location": "",
+      "stack": [
+        "Aligned"
+      ]
+    },
+    {
+      "username": "shaneoconnor",
+      "bio": "Founder, The GTM Co-Founder",
+      "location": ""
+    },
+    {
+      "username": "stevearmenti",
+      "bio": "Founder @ twelfth agency",
+      "location": ""
+    },
+    {
+      "username": "sungjo",
+      "bio": "SEO/AEO Lead @ Clay",
+      "location": "",
+      "stack": [
+        "Clay",
+        "LinkedIn"
+      ]
+    },
+    {
+      "username": "tanyogochev",
+      "bio": "Co-Founder & Head of GTM, The Demand Department",
+      "location": "",
+      "stack": [
+        "LinkedIn"
+      ]
+    },
+    {
+      "username": "thomasmarcelle",
+      "bio": "Co-founder",
+      "location": "",
+      "stack": [
+        "LinkedIn",
+        "Naano"
+      ]
+    },
+    {
+      "username": "timyakubson",
+      "bio": "Founder @ B2B Boosted",
+      "location": ""
+    },
+    {
+      "username": "udicohen",
+      "bio": "Director of Revenue Operations",
+      "location": "",
+      "stack": [
+        "Lusha"
+      ]
+    },
+    {
+      "username": "urielknorovich",
+      "bio": "Co-Founder & CEO, Nimble",
+      "location": "",
+      "stack": [
+        "Reddit",
+        "LinkedIn",
+        "G2",
+        "X (Twitter)",
+        "YouTube",
+        "Capterra",
+        "Crunchbase",
+        "GitHub",
+        "Medium",
+        "Outlook"
+      ]
+    },
+    {
+      "username": "vesselinmalev",
+      "bio": "Managing Director, The Demand Department",
+      "location": "",
+      "stack": [
+        "Reddit",
+        "Quora",
+        "LinkedIn"
+      ]
+    },
+    {
+      "username": "victormoen",
+      "bio": "Co-Founder & CEO @ Affilial",
+      "location": ""
+    },
+    {
+      "username": "yahavfuchs",
+      "bio": "Founder",
+      "location": "",
+      "stack": [
+        "Reddit"
+      ]
+    },
+    {
+      "username": "yonitserruya",
+      "bio": "Co-Founder & CEO",
+      "location": "",
+      "stack": [
+        "Lusha"
+      ]
+    },
+    {
+      "username": "fivosaresti",
+      "bio": "",
+      "location": "",
+      "stack": [
+        "Apollo",
+        "AI Ark",
+        "Ocean.io",
+        "Discolike",
+        "BetterContact",
+        "FindyMail",
+        "RB2B",
+        "Sumble",
+        "Clay",
+        "Jungler",
+        "Notion",
+        "Claude Code",
+        "Freckle",
+        "Instantly",
+        "HeyReach",
+        "Nooks",
+        "n8n",
+        "OutboundSync",
+        "Serper",
+        "Apify",
+        "Cal.com",
+        "Superhuman",
+        "Qwilr",
+        "HubSpot",
+        "Slack",
+        "Ergo"
+      ]
+    }
+  ]
+}

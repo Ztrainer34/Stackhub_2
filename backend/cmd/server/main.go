@@ -1399,18 +1399,10 @@ func (app *App) autocompleteCategory(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *App) getTool(w http.ResponseWriter, r *http.Request) {
-	idUnparsed := chi.URLParam(r, "id")
-
-	// The URL segment is normally a slug (e.g. "brevo-marketing-platform"), but
-	// links created before slugs used the raw UUID — keep supporting both.
-	id, err := uuid.Parse(idUnparsed)
-
+	id, err := app.resolveToolID(r.Context(), chi.URLParam(r, "id"))
 	if err != nil {
-		id, err = app.queries.GetToolIDBySlug(r.Context(), strings.ToLower(idUnparsed))
-		if err != nil {
-			http.Error(w, "Tool not found", http.StatusNotFound)
-			return
-		}
+		http.Error(w, "Tool not found", http.StatusNotFound)
+		return
 	}
 
 	// Check if user is authenticated
@@ -1439,6 +1431,335 @@ func (app *App) getTool(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(tool)
 	}
+}
+
+// maxToolCategories caps what a page owner can attach, so the categories card
+// stays a short list rather than a keyword dump.
+const maxToolCategories = 12
+
+// blankLineRun collapses the runs of newlines that flattening a Tiptap document
+// leaves behind between nested blocks.
+var blankLineRun = regexp.MustCompile(`\n{3,}`)
+
+// tiptapPlainText flattens a Tiptap document to plain text. tools.description
+// feeds full-text search, the embeddings and the catalogue cards, so it is kept
+// as a readable projection of whatever the owner wrote in the rich editor.
+func tiptapPlainText(raw string) string {
+	var doc any
+	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
+		return ""
+	}
+
+	var b strings.Builder
+
+	// inList keeps list items on consecutive lines while ordinary blocks stay
+	// separated by a blank line — the shape parseDescription already expects
+	// from the scraped descriptions.
+	var walk func(node any, inList bool)
+	walk = func(node any, inList bool) {
+		n, ok := node.(map[string]any)
+		if !ok {
+			return
+		}
+
+		kind, _ := n["type"].(string)
+		switch kind {
+		case "text":
+			if s, ok := n["text"].(string); ok {
+				b.WriteString(s)
+			}
+		case "hardBreak":
+			b.WriteByte('\n')
+		}
+
+		if kids, ok := n["content"].([]any); ok {
+			for _, kid := range kids {
+				walk(kid, inList || kind == "listItem")
+			}
+		}
+
+		// Block-level nodes end the line they just wrote.
+		switch kind {
+		case "paragraph", "heading", "blockquote", "codeBlock":
+			if inList {
+				b.WriteByte('\n')
+			} else {
+				b.WriteString("\n\n")
+			}
+		case "bulletList", "orderedList", "taskList":
+			b.WriteByte('\n')
+		}
+	}
+	walk(doc, false)
+
+	return strings.TrimSpace(blankLineRun.ReplaceAllString(b.String(), "\n\n"))
+}
+
+// resolveToolID turns the {id} URL segment into a tool id. The segment is
+// normally a slug ("brevo-marketing-platform"), but links made before slugs
+// existed used the raw UUID — both still work.
+func (app *App) resolveToolID(ctx context.Context, segment string) (uuid.UUID, error) {
+	if id, err := uuid.Parse(segment); err == nil {
+		return id, nil
+	}
+	return app.queries.GetToolIDBySlug(ctx, strings.ToLower(segment))
+}
+
+// requireToolOwner resolves the tool in the URL and checks the caller owns its
+// page. It writes the error response itself; ok == false means stop.
+func (app *App) requireToolOwner(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
+	toolID, err := app.resolveToolID(r.Context(), chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "Tool not found", http.StatusNotFound)
+		return uuid.Nil, false
+	}
+
+	owner, err := app.queries.IsToolOwner(r.Context(), db.IsToolOwnerParams{
+		ToolID:    toolID,
+		ProfileID: extractUserIDFromRequest(r),
+	})
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Could not check page ownership", http.StatusInternalServerError)
+		return uuid.Nil, false
+	}
+	if !owner {
+		// Deliberately not a 404: the page exists, the caller just cannot edit it.
+		http.Error(w, "You do not have edit rights on this tool's page", http.StatusForbidden)
+		return uuid.Nil, false
+	}
+
+	return toolID, true
+}
+
+// ToolVendorInput is the vendor card as one form. Blank strings are written
+// through — clearing a field the owner emptied is the point.
+type ToolVendorInput struct {
+	Website          string `json:"website"`
+	XProfile         string `json:"x_profile"`
+	LinkedinProfile  string `json:"linkedin_profile"`
+	HeadOffice       string `json:"head_office"`
+	YearOfFoundation *int32 `json:"year_of_foundation"`
+}
+
+// UpdateToolPageRequest mirrors the edit icons on a tool page. Every section is
+// optional: each icon sends only the part it changed.
+type UpdateToolPageRequest struct {
+	DescriptionRich *string          `json:"description_rich"`
+	LogoURL         *string          `json:"logo_url"`
+	Vendor          *ToolVendorInput `json:"vendor"`
+	CategoryIDs     *[]int32         `json:"category_ids"`
+}
+
+// updateToolPage applies an owner's edit to a tool page. Copy, logo, vendor
+// details and categories go through one endpoint so a single edit is atomic.
+func (app *App) updateToolPage(w http.ResponseWriter, r *http.Request) {
+	toolID, ok := app.requireToolOwner(w, r)
+	if !ok {
+		return
+	}
+
+	var form UpdateToolPageRequest
+	if err := json.NewDecoder(r.Body).Decode(&form); err != nil {
+		http.Error(w, "Malformed request", http.StatusBadRequest)
+		return
+	}
+
+	if form.CategoryIDs != nil && len(*form.CategoryIDs) > maxToolCategories {
+		http.Error(w, fmt.Sprintf("A tool can have at most %d categories", maxToolCategories), http.StatusBadRequest)
+		return
+	}
+
+	tx, err := app.db.Begin(r.Context())
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to start transaction", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback(r.Context())
+
+	qtx := app.queries.WithTx(tx)
+
+	// A NULL argument leaves the stored value alone, so each icon saves only
+	// its own field.
+	content := db.UpdateToolPageContentParams{ID: toolID}
+	if form.DescriptionRich != nil {
+		content.DescriptionRich = pgtype.Text{String: *form.DescriptionRich, Valid: true}
+		content.Description = pgtype.Text{String: tiptapPlainText(*form.DescriptionRich), Valid: true}
+	}
+	if form.LogoURL != nil {
+		content.LogoUrl = pgtype.Text{String: strings.TrimSpace(*form.LogoURL), Valid: true}
+	}
+	if content.DescriptionRich.Valid || content.LogoUrl.Valid {
+		if err := qtx.UpdateToolPageContent(r.Context(), content); err != nil {
+			log.Println(err)
+			http.Error(w, "Failed to save the page", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	if form.Vendor != nil {
+		vendorID, err := qtx.GetToolVendorID(r.Context(), toolID)
+		if err != nil {
+			log.Println(err)
+			http.Error(w, "Failed to save the vendor details", http.StatusInternalServerError)
+			return
+		}
+
+		var vid uuid.UUID
+		if vendorID.Valid {
+			vid = uuid.UUID(vendorID.Bytes)
+		} else {
+			vid, err = qtx.CreateVendorForTool(r.Context(), toolID)
+			if err != nil {
+				log.Println(err)
+				http.Error(w, "Failed to save the vendor details", http.StatusInternalServerError)
+				return
+			}
+			err = qtx.SetToolVendor(r.Context(), db.SetToolVendorParams{
+				ID:       toolID,
+				VendorID: pgtype.UUID{Bytes: vid, Valid: true},
+			})
+			if err != nil {
+				log.Println(err)
+				http.Error(w, "Failed to save the vendor details", http.StatusInternalServerError)
+				return
+			}
+		}
+
+		year := pgtype.Int4{}
+		if form.Vendor.YearOfFoundation != nil {
+			year = pgtype.Int4{Int32: *form.Vendor.YearOfFoundation, Valid: true}
+		}
+		err = qtx.UpdateVendorDetails(r.Context(), db.UpdateVendorDetailsParams{
+			ID:               vid,
+			Website:          optionalText(form.Vendor.Website),
+			XProfile:         optionalText(form.Vendor.XProfile),
+			LinkedinProfile:  optionalText(form.Vendor.LinkedinProfile),
+			HeadOffice:       optionalText(form.Vendor.HeadOffice),
+			YearOfFoundation: year,
+		})
+		if err != nil {
+			log.Println(err)
+			http.Error(w, "Failed to save the vendor details", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	if form.CategoryIDs != nil {
+		// Replace wholesale: the card is edited as a set, not item by item.
+		if err := qtx.DeleteToolCategories(r.Context(), toolID); err != nil {
+			log.Println(err)
+			http.Error(w, "Failed to save the categories", http.StatusInternalServerError)
+			return
+		}
+		if len(*form.CategoryIDs) > 0 {
+			err := qtx.AddToolCategories(r.Context(), db.AddToolCategoriesParams{
+				ToolID:      toolID,
+				CategoryIds: *form.CategoryIDs,
+			})
+			if err != nil {
+				log.Println(err)
+				http.Error(w, "Failed to save the categories", http.StatusInternalServerError)
+				return
+			}
+		}
+	}
+
+	if err := tx.Commit(r.Context()); err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to commit", http.StatusInternalServerError)
+		return
+	}
+
+	// Hand back the whole tool so the client can drop it straight into its cache.
+	tool, err := app.queries.GetToolAuthenticated(r.Context(), db.GetToolAuthenticatedParams{
+		ID:        toolID,
+		ProfileID: extractUserIDFromRequest(r),
+	})
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Saved, but could not read the page back", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(tool)
+}
+
+// optionalText stores a blank field as NULL rather than an empty string, so the
+// page's "does this vendor have a website?" checks stay a single test.
+func optionalText(s string) pgtype.Text {
+	trimmed := strings.TrimSpace(s)
+	if trimmed == "" {
+		return pgtype.Text{Valid: false}
+	}
+	return pgtype.Text{String: trimmed, Valid: true}
+}
+
+// uploadToolLogo replaces a tool's logo with an image the page owner uploads,
+// the same way profile pictures work.
+func (app *App) uploadToolLogo(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	toolID, ok := app.requireToolOwner(w, r)
+	if !ok {
+		return
+	}
+
+	if err := r.ParseMultipartForm(5 << 20); err != nil { // 5 MB
+		http.Error(w, "Image must be smaller than 5MB", http.StatusBadRequest)
+		return
+	}
+
+	file, fileHeader, err := r.FormFile("image")
+	if err != nil {
+		http.Error(w, "No image supplied", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	ok, err = isImage(file)
+	if err != nil {
+		http.Error(w, "Could not read the image", http.StatusBadRequest)
+		return
+	}
+	if !ok {
+		http.Error(w, "That file type isn't supported. Use a PNG, JPEG or GIF.", http.StatusBadRequest)
+		return
+	}
+
+	filename := fmt.Sprintf("tool-logos/%s%s", uuid.NewString(), filepath.Ext(fileHeader.Filename))
+
+	uploader := manager.NewUploader(app.bucket)
+	_, err = uploader.Upload(ctx, &s3.PutObjectInput{
+		Bucket:      app.bucketName,
+		Key:         aws.String(filename),
+		Body:        file,
+		ContentType: aws.String(fileHeader.Header.Get("Content-Type")),
+	})
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to upload the image", http.StatusInternalServerError)
+		return
+	}
+
+	fileURL := getPublicSupabaseBucketURL(*app.supabaseProjectRef, *app.bucketName, filename)
+
+	err = app.queries.UpdateToolPageContent(ctx, db.UpdateToolPageContentParams{
+		ID:      toolID,
+		LogoUrl: pgtype.Text{String: fileURL, Valid: true},
+	})
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to save the logo", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(struct {
+		LogoURL string `json:"logo_url"`
+	}{LogoURL: fileURL})
 }
 
 type SuggestToolRequest struct {
@@ -2650,6 +2971,19 @@ func (app *App) addToStack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Using a tool implies wanting its updates, so adding to the stack also
+	// follows it. Unfollowing stays manual — removing from the stack does not
+	// undo this.
+	err = qtx.FollowTool(r.Context(), db.FollowToolParams{
+		ProfileID: userID,
+		ToolID:    toolID,
+	})
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to add to stack", http.StatusInternalServerError)
+		return
+	}
+
 	err = qtx.RemoveFromWatchlist(r.Context(), db.RemoveFromWatchlistParams{
 		ProfileID: userID,
 		ToolID:    toolID,
@@ -3186,6 +3520,15 @@ func (app *App) saveOnboarding(w http.ResponseWriter, r *http.Request) {
 			continue // ignore malformed ids rather than failing the whole step
 		}
 		if err := qtx.AddToStack(r.Context(), db.AddToStackParams{
+			ProfileID: userID,
+			ToolID:    toolID,
+		}); err != nil {
+			log.Println(err)
+			http.Error(w, "Failed to add tools to your stack", http.StatusInternalServerError)
+			return
+		}
+		// Same rule as addToStack: stacking a tool follows it.
+		if err := qtx.FollowTool(r.Context(), db.FollowToolParams{
 			ProfileID: userID,
 			ToolID:    toolID,
 		}); err != nil {
@@ -4178,6 +4521,11 @@ func main() {
 
 		// Standalone tool suggestion from the /tools "Add tool" flow.
 		r.Post("/tool/suggest", app.suggestTool)
+
+		// Tool page editing. Both handlers check tool_owners themselves, so a
+		// signed-in user who does not own the page gets a 403.
+		r.Put("/tool/{id}/page", app.updateToolPage)
+		r.Post("/tool/{id}/logo", app.uploadToolLogo)
 		r.Post("/post/{id}/save", app.savePost)
 		r.Post("/post/{id}/publish", app.publishPost)
 		r.Get("/post/{id}/unpublish", app.unpublishPost)

@@ -1,67 +1,52 @@
 [
   {
-    "id": "4a489d58-596d-4764-ae32-c219ccbecea0",
-    "name": "Cluely",
-    "website": "https://cluely.com"
+    "id": "5cc3072a-f12d-4420-b19f-104812ea8ee0",
+    "name": "LinkedIn Ads",
+    "website": "https://business.linkedin.com/marketing-solutions/ads"
   },
   {
-    "id": "23984fa3-1fa7-47ee-b983-9c9f2317bae8",
-    "name": "Easyscraper",
-    "website": "https://easyscraper.com"
+    "id": "8b6ce4d0-0b53-45a1-a2f3-2c6b702db4e4",
+    "name": "Meta Ads",
+    "website": "https://www.facebook.com/business/ads"
   },
   {
-    "id": "a86e5dfe-12b8-4f36-9008-20f7c26d8a53",
-    "name": "Exa.ai",
-    "website": "https://exa.ai"
+    "id": "a6d8ce92-8f5b-47a5-969a-d51761a47c92",
+    "name": "Conversions API",
+    "website": "https://developers.facebook.com/docs/marketing-api/conversions-api"
   },
   {
-    "id": "91b17020-97f0-4c08-b05a-bf471a9ad8f6",
-    "name": "Jungler.ai",
-    "website": "https://jungler.ai"
+    "id": "f1dcd1c6-2e85-4bad-a002-81b904f5aa98",
+    "name": "Gmail",
+    "website": "https://mail.google.com"
   },
   {
-    "id": "2fc14593-81e5-44e3-8c88-82bd9b3cb98f",
-    "name": "Loops.so",
-    "website": "https://loops.so"
+    "id": "32ef5f0c-e818-4ef2-913f-73e592e902f2",
+    "name": "Outlook",
+    "website": "https://outlook.com"
   },
   {
-    "id": "1f8e38fa-8c30-47a2-ace0-2cdc7e0b5228",
-    "name": "Nyne.ai",
-    "website": "https://nyne.ai"
+    "id": "7f1d6be0-4c50-4d13-8c2d-0e051f499fb2",
+    "name": "Google Postmaster",
+    "website": "https://postmaster.google.com"
   },
   {
-    "id": "07acac8f-cf9c-4cb5-9222-0fd143541ab0",
-    "name": "OutboundSync",
-    "website": "https://outboundsync.com"
+    "id": "654dfc6e-a682-4bd7-8bbf-f368c4f513b8",
+    "name": "Breeze Intelligence",
+    "website": "https://www.hubspot.com/products/breeze"
   },
   {
-    "id": "301bcde7-d52b-4006-8df6-fa937a745fc8",
-    "name": "Sandcastles.ai",
-    "website": "https://sandcastles.ai"
+    "id": "50641b57-f6b8-4489-a88a-6b6f74cc2902",
+    "name": "Dealfront",
+    "website": "https://www.dealfront.com"
   },
   {
-    "id": "e28509e9-f0fc-4aa6-a1ce-c791dae3ec6e",
-    "name": "Scraperapi",
-    "website": "https://scraperapi.com"
+    "id": "983ac7d7-2ff3-4096-a67e-c19291e31a3d",
+    "name": "BigQuery",
+    "website": "https://cloud.google.com/bigquery"
   },
   {
-    "id": "58e80dd9-10b1-42a0-b68d-a6328cecbfe4",
-    "name": "Scripe.io",
-    "website": "https://scripe.io"
-  },
-  {
-    "id": "949b632b-bbff-4e17-9fc3-fd76aef1b7d3",
-    "name": "Serper.dev",
-    "website": "https://serper.dev"
-  },
-  {
-    "id": "4aa4f197-8ee1-4756-9502-61eff111271b",
-    "name": "Tweethunter",
-    "website": "https://tweethunter.io"
-  },
-  {
-    "id": "23a9eb8e-11e6-4bbd-b4d3-8e7de110fc59",
-    "name": "Viewstats",
-    "website": "https://viewstats.com"
+    "id": "81f47672-bd7e-4076-8d09-8a4cbf67cdcb",
+    "name": "Medium",
+    "website": "https://medium.com"
   }
 ]

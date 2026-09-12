@@ -11,6 +11,12 @@ export type Tool = {
   id: string;
   name: string;
   description: string | null;
+  /**
+   * Owner-written page copy as Tiptap JSON. `description` stays the plain-text
+   * projection of it, so anything that only needs text (cards, search) keeps
+   * reading that field.
+   */
+  description_rich?: string | null;
   logo_url: string;
   created_at: string;
   updated_at: string;
@@ -21,6 +27,10 @@ export type Tool = {
   is_in_watchlist: boolean;
   is_in_old_stack?: boolean;
   is_followed?: boolean;
+  /** The signed-in user owns this tool's page and may edit it. */
+  is_owner?: boolean;
+  /** Somebody already owns the page, so the claim call to action is hidden. */
+  is_claimed?: boolean;
   added_at?: string;
 };
 
@@ -339,4 +349,71 @@ export async function setKeyTools(
   );
 
   if (!response.ok) throw new Error("Failed to update key tools");
+}
+
+/** The vendor card is saved as one form; blanks clear the stored value. */
+export type ToolVendorInput = {
+  website: string;
+  x_profile: string;
+  linkedin_profile: string;
+  head_office: string;
+  year_of_foundation: number | null;
+};
+
+/**
+ * A tool page edit. Every section is optional — each edit icon sends only the
+ * part it changed, and the server leaves the rest alone.
+ */
+export type ToolPageUpdate = {
+  description_rich?: string;
+  logo_url?: string;
+  vendor?: ToolVendorInput;
+  category_ids?: number[];
+};
+
+/** Owner-only. Returns the tool as it now stands, ready for the query cache. */
+export async function updateToolPage(
+  supabaseClient: SupabaseClient,
+  toolId: string,
+  update: ToolPageUpdate
+): Promise<Tool> {
+  const response = await fetchApiAuthenticated(
+    supabaseClient,
+    `/tool/${toolId}/page`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(update),
+    }
+  );
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || "Failed to save the page");
+  }
+
+  return response.json();
+}
+
+/** Owner-only. Uploads a logo file and returns its public URL. */
+export async function uploadToolLogo(
+  supabaseClient: SupabaseClient,
+  toolId: string,
+  file: File
+): Promise<{ logo_url: string }> {
+  const body = new FormData();
+  body.append("image", file);
+
+  const response = await fetchApiAuthenticated(
+    supabaseClient,
+    `/tool/${toolId}/logo`,
+    { method: "POST", body }
+  );
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || "Failed to upload the logo");
+  }
+
+  return response.json();
 }

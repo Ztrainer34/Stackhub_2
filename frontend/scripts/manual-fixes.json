@@ -1,0 +1,75 @@
+[
+  {
+    "id": "8b6ce4d0-0b53-45a1-a2f3-2c6b702db4e4",
+    "name": "Meta Ads",
+    "fetch": "https://www.facebook.com/business/ads?content_id=FK47Zf8fCbHRHX2&ref=sem_smb",
+    "website": "https://www.facebook.com/business/ads",
+    "description": "Meta Ads (formerly Facebook Ads) is a comprehensive digital advertising platform that allows businesses to create, run, and track ad campaigns across Meta's entire ecosystem, which includes Facebook, Instagram, Messenger, WhatsApp, and the Audience Network. It is designed to help go-to-market teams and advertisers reach specific audiences using highly granular targeting based on user demographics, interests, location, and behavior.\n\nThe platform offers a suite of tools for businesses of all sizes to build brand awareness, drive website traffic, generate high-quality leads, and increase conversions. With advanced machine learning capabilities—such as their Advantage+ automated campaigns—Meta Ads helps advertisers optimize their budgets, automate ad placements, and dynamically test creatives to deliver the right message to the most relevant users at scale.",
+    "vendor": {
+      "head_office": "Menlo Park, California, United States",
+      "year_of_foundation": 2004,
+      "linkedin_profile": "https://www.linkedin.com/company/meta",
+      "x_profile": "@Meta"
+    },
+    "logo": "https://www.google.com/s2/favicons?domain=meta.com&sz=128"
+  },
+  {
+    "id": "50641b57-f6b8-4489-a88a-6b6f74cc2902",
+    "name": "Dealfront",
+    "fetch": "https://www.leadfeeder.com/dealfront/",
+    "website": "https://www.dealfront.com",
+    "description": "Dealfront is a European-first go-to-market platform built for B2B companies. Created from the merger of German sales intelligence provider Echobot and Finnish web visitor intelligence platform Leadfeeder, it unifies firmographic data, website visitor tracking, and buyer intent insights into a single revenue engine. The platform empowers sales and marketing teams to identify, prioritize, and engage high-intent prospects by turning anonymous website traffic into actionable pipeline.\n\nDealfront provides live data on tens of millions of companies and hundreds of millions of verified contacts, with a strong emphasis on strict GDPR compliance, EU-specific data, and localized market insights. Through integrated modules for website visitor identification, B2B prospecting, data enrichment, and display advertising, the platform helps organizations target their ideal customer profiles and accelerate their sales funnel while maintaining seamless CRM synchronization.",
+    "vendor": {
+      "head_office": "Karlsruhe, Germany",
+      "year_of_foundation": 2023,
+      "linkedin_profile": "https://www.linkedin.com/company/dealfront"
+    }
+  },
+  {
+    "id": "81f47672-bd7e-4076-8d09-8a4cbf67cdcb",
+    "name": "Medium",
+    "fetch": "https://medium.com/",
+    "website": "https://medium.com"
+  },
+  {
+    "id": "7f1d6be0-4c50-4d13-8c2d-0e051f499fb2",
+    "name": "Google Postmaster",
+    "rename": "Google Postmaster Tools",
+    "fetch": "https://postmaster.google.com",
+    "website": "https://postmaster.google.com",
+    "description": "Google Postmaster Tools is a free analytics service provided by Google that helps high-volume email senders monitor and improve their email deliverability to Gmail and Google Workspace users. It provides detailed dashboards and insights into critical metrics such as user-reported spam rates, delivery errors, authentication status (SPF, DKIM, DMARC), and encryption. Designed to help senders adhere to Google's strict bulk sender guidelines, the platform gives organizations the visibility needed to troubleshoot delivery issues and ensure their campaigns successfully reach their audiences' inboxes rather than being filtered to spam.",
+    "vendor": {
+      "head_office": "Mountain View, California, United States",
+      "year_of_foundation": 2015,
+      "linkedin_profile": "https://www.linkedin.com/company/google",
+      "x_profile": "@Google"
+    }
+  },
+  {
+    "id": "32ef5f0c-e818-4ef2-913f-73e592e902f2",
+    "name": "Outlook",
+    "fetch": "https://outlook.com",
+    "website": "https://outlook.com",
+    "description": "Microsoft Outlook is a comprehensive personal information manager software system from Microsoft, primarily known for its widespread use as an enterprise and personal email client. Available as part of the Microsoft 365 suite or as a standalone application, Outlook seamlessly integrates email, calendaring, contact management, and task tracking into a unified platform. It is designed to serve both individual users and large organizations, offering robust security features, deep integration with other Microsoft productivity tools (such as Teams, Word, and Excel), and advanced organizational capabilities that help professionals manage their daily workflows and communications efficiently.",
+    "vendor": {
+      "head_office": "Redmond, Washington, United States",
+      "year_of_foundation": 1997,
+      "linkedin_profile": "https://www.linkedin.com/company/microsoft",
+      "x_profile": "@Outlook"
+    }
+  },
+  {
+    "id": "dfa7027f-f431-4ff9-ad1d-c68d176cb668",
+    "name": "YouTube",
+    "fetch": "https://www.youtube.com",
+    "website": "https://www.youtube.com",
+    "logo": "https://www.google.com/s2/favicons?domain=youtube.com&sz=128"
+  },
+  {
+    "id": "d4300efc-5c34-4451-9129-4ae1ca598266",
+    "name": "MillionVerifier",
+    "fetch": "https://www.millionverifier.com",
+    "website": "https://www.millionverifier.com",
+    "logo": "https://www.google.com/s2/favicons?domain=millionverifier.com&sz=128"
+  }
+]

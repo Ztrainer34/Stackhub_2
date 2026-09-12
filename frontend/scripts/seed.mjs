@@ -145,8 +145,11 @@ async function main() {
     const userId = usernameToId[String(u.username).toLowerCase()];
     if (!userId) continue;
 
+    // Stacking a tool implies following it (the API does this in
+    // PUT /user/stack/{id}); these direct inserts must match that rule.
     const lists = [
       ["stack_items", u.stack],
+      ["tool_follows", u.stack],
       ["watchlist_items", u.watchlist],
       ["tool_follows", u.followed_tools],
     ];

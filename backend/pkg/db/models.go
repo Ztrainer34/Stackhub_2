@@ -145,15 +145,25 @@ type OldStackItem struct {
 }
 
 type Tool struct {
-	ID          uuid.UUID          `json:"id"`
-	Name        string             `json:"name"`
-	Description pgtype.Text        `json:"description"`
-	LogoUrl     pgtype.Text        `json:"logo_url"`
-	VendorID    pgtype.UUID        `json:"vendor_id"`
-	Vector      interface{}        `json:"vector"`
-	Embedding   interface{}        `json:"embedding"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	ID              uuid.UUID          `json:"id"`
+	Name            string             `json:"name"`
+	Description     pgtype.Text        `json:"description"`
+	LogoUrl         pgtype.Text        `json:"logo_url"`
+	VendorID        pgtype.UUID        `json:"vendor_id"`
+	Vector          interface{}        `json:"vector"`
+	Embedding       interface{}        `json:"embedding"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	DescriptionRich pgtype.Text        `json:"description_rich"`
+}
+
+// ToolOwner is the vendor-side claim on a tool page: whoever is listed here may
+// edit the page's copy, logo, vendor details and categories.
+type ToolOwner struct {
+	ToolID    uuid.UUID          `json:"tool_id"`
+	ProfileID uuid.UUID          `json:"profile_id"`
+	GrantedBy pgtype.UUID        `json:"granted_by"`
+	GrantedAt pgtype.Timestamptz `json:"granted_at"`
 }
 
 type ToolCategory struct {
@@ -183,14 +193,15 @@ type ToolTicketCategory struct {
 }
 
 type ToolsWithDetail struct {
-	ID          uuid.UUID          `json:"id"`
-	Name        string             `json:"name"`
-	Description pgtype.Text        `json:"description"`
-	LogoUrl     pgtype.Text        `json:"logo_url"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
-	Categories  interface{}        `json:"categories"`
-	Vendor      json.RawMessage    `json:"vendor"`
+	ID              uuid.UUID          `json:"id"`
+	Name            string             `json:"name"`
+	Description     pgtype.Text        `json:"description"`
+	LogoUrl         pgtype.Text        `json:"logo_url"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	Categories      interface{}        `json:"categories"`
+	Vendor          json.RawMessage    `json:"vendor"`
+	DescriptionRich pgtype.Text        `json:"description_rich"`
 }
 
 type UserFollow struct {
