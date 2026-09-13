@@ -39,6 +39,33 @@ FROM
 WHERE
   username = $1;
 
+-- name: GetProfileWithUsernameAuthenticated :one
+-- Same as GetProfileWithUsername plus whether the viewer already follows this
+-- profile, so the profile page's Follow button renders in the right state on
+-- the first paint instead of always starting at "Follow".
+SELECT
+  id,
+  username,
+  display_name,
+  bio,
+  website,
+  company,
+  location,
+  linkedin,
+  twitter,
+  email_hash,
+  avatar_url,
+  created_at,
+  updated_at,
+  EXISTS(
+    SELECT 1 FROM user_follows uf
+    WHERE uf.follower_id = $2 AND uf.followee_id = profiles.id
+  ) AS is_following
+FROM
+  profiles
+WHERE
+  username = $1;
+
 -- name: CreateProfile :one
 INSERT INTO profiles (
   id,

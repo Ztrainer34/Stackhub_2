@@ -16,6 +16,11 @@ export type User = {
   twitter?: string;
   created_at?: string;
   updated_at?: string;
+  /**
+   * Whether the signed-in viewer follows this profile. Only present when the
+   * request carried a session — anonymous reads leave it undefined.
+   */
+  is_following?: boolean;
 };
 
 export async function getAuthenticatedUser(supabaseClient: SupabaseClient): Promise<User> {
@@ -31,10 +36,19 @@ export async function getAuthenticatedUser(supabaseClient: SupabaseClient): Prom
   return (await resp.json()) as User;
 }
 
-export async function getUserFromUsername(username: string): Promise<User> {
-  const resp = await fetch(
-    `${process.env.NEXT_PUBLIC_API_URL!}/user/${username}`
-  );
+/**
+ * Pass the caller's Supabase client to get is_following back with the profile;
+ * without it the request is anonymous and the field is omitted.
+ */
+export async function getUserFromUsername(
+  username: string,
+  supabaseClient?: SupabaseClient
+): Promise<User> {
+  const path = `/user/${username}`;
+
+  const resp = supabaseClient
+    ? await fetchApiAuthenticated(supabaseClient, path)
+    : await fetch(`${process.env.NEXT_PUBLIC_API_URL!}${path}`);
 
   if (!resp.ok) throw new Error("Could not get user");
 

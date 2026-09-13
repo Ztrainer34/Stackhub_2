@@ -71,5 +71,63 @@
     "fetch": "https://www.millionverifier.com",
     "website": "https://www.millionverifier.com",
     "logo": "https://www.google.com/s2/favicons?domain=millionverifier.com&sz=128"
+  },
+  {
+    "id": "654dfc6e-a682-4bd7-8bbf-f368c4f513b8",
+    "name": "Breeze Intelligence",
+    "fetch": "https://www.hubspot.com/products/breeze",
+    "website": "https://www.hubspot.com/products/breeze",
+    "description": "Breeze Intelligence is HubSpot's data enrichment and buyer intent layer, built directly into the Smart CRM rather than bolted on as a separate tool. It draws on a pool of more than 200 million continually refreshed company and buyer profiles — the data assets HubSpot acquired with Clearbit — to give go-to-market teams a fuller picture of who they are selling to without adding another vendor to the stack.\n\nIt does three jobs. One-click enrichment fills in over 40 firmographic, demographic and technographic attributes on company and contact records, so reps stop working from half-empty rows. Buyer intent surfaces the high-fit companies visiting your site and researching your market, letting marketers define a target market and prioritise accounts showing real signal. Form shortening drops fields Breeze already knows the answer to, cutting abandonment while still capturing the full record behind the scenes.",
+    "vendor": {
+      "head_office": "Cambridge, Massachusetts, United States",
+      "year_of_foundation": 2006,
+      "linkedin_profile": "https://www.linkedin.com/company/hubspot",
+      "x_profile": "@HubSpot"
+    },
+    "logo": "https://www.google.com/s2/favicons?domain=hubspot.com&sz=128"
+  },
+  {
+    "id": "a6d8ce92-8f5b-47a5-969a-d51761a47c92",
+    "name": "Conversions API",
+    "rename": "Conversion AI",
+    "fetch": "https://conversion.ai",
+    "website": "https://conversion.ai",
+    "description": "Conversion is the agentic marketing automation platform built for enterprises. It unifies CRM and warehouse data — Salesforce, Snowflake, BigQuery and others — into a single context layer purpose-built for marketing operations, then lets teams automate on top of it with AI agents and ship campaigns in hours rather than weeks. Around 90% of its customers moved over from a legacy platform: Marketo, Pardot, HubSpot or Iterable.\n\nThe platform covers the full MOps surface — flexible data modelling with custom objects and relationships, a drag-and-drop email builder with Liquid templating and dynamic personalisation, audience segmentation backed by a query engine, visual real-time workflow builders, forms and landing pages, A/B testing across subject lines, content and send times, and campaign reporting tied back to pipeline and revenue. Salesforce sync is bidirectional and audit-logged.\n\nConversion Agents take on the monotonous half of the job: MOps tickets, QA, reporting and campaign builds, run on a schedule, on a trigger or on demand, with every output staying inside the same approval framework a human would use. Customers include ClickHouse, Plaid, Webflow, Productboard, Veriforce and ACV Auctions. SOC 2 Type II certified and GDPR compliant, with SSO/SAML and role-based access control standard.",
+    "vendor": {
+      "website": "https://conversion.ai",
+      "head_office": "San Francisco, California, United States",
+      "year_of_foundation": 2020,
+      "linkedin_profile": "https://www.linkedin.com/company/tryconversion",
+      "x_profile": "@conversionai"
+    },
+    "logo": "https://www.google.com/s2/favicons?domain=conversion.ai&sz=128"
+  },
+  {
+    "id": "5cc3072a-f12d-4420-b19f-104812ea8ee0",
+    "name": "LinkedIn Ads",
+    "fetch": "https://business.linkedin.com/marketing-solutions/ads",
+    "website": "https://business.linkedin.com/marketing-solutions/ads",
+    "description": "LinkedIn Ads is LinkedIn's self-serve advertising platform, built around one thing no other channel offers at scale: professional context. Campaigns reach a network of over a billion members using more than 20 categories of targeting attributes — job title, function, seniority, industry, company size, skills — so B2B advertisers can put a message in front of the actual decision-maker rather than inferring intent from consumer signals.\n\nThe platform carries several formats. Sponsored Content places media-rich ads directly in the feed across devices; Sponsored Messaging delivers into members' inboxes; Text Ads are quick pay-per-click placements on desktop; and Dynamic Ads personalise creative using profile data such as a viewer's name, job title or employer. Budgets are flexible enough for a small business testing a single campaign and deep enough for agencies and enterprises running always-on demand generation, with lead generation, brand awareness and event registration as the usual objectives.",
+    "vendor": {
+      "head_office": "Sunnyvale, California, United States",
+      "year_of_foundation": 2003,
+      "linkedin_profile": "https://www.linkedin.com/company/linkedin",
+      "x_profile": "@LinkedIn"
+    },
+    "logo": "https://www.google.com/s2/favicons?domain=linkedin.com&sz=128"
+  },
+  {
+    "id": "f1dcd1c6-2e85-4bad-a002-81b904f5aa98",
+    "name": "Gmail",
+    "fetch": "https://workspace.google.com/gmail/",
+    "website": "https://workspace.google.com/gmail/",
+    "description": "Gmail is Google's email service — secure, smart and easy-to-use email used by billions of people, now with Gemini built in. For go-to-market teams it is the default sending and receiving surface: the inbox outbound sequences land in, the address prospects reply to, and the account most sales tooling connects to first.\n\nIts filtering blocks 99.9% of spam, malware and dangerous links before they reach the inbox, backed by industry-leading encryption on all messages and advanced phishing detection across more than a billion users. Gemini adds suggested replies matched to your own writing style, AI summaries of long threads, and smarter inbox search, alongside long-standing features like Smart Compose and follow-up nudges. It works offline and across devices, can pull in other accounts, and connects directly to the rest of Google Workspace — Calendar, Meet, Chat, Docs and Drive. Business plans add custom domains, more storage, guaranteed uptime and 24/7 support.",
+    "vendor": {
+      "head_office": "Mountain View, California, United States",
+      "year_of_foundation": 2004,
+      "linkedin_profile": "https://www.linkedin.com/company/google",
+      "x_profile": "@gmail"
+    },
+    "logo": "https://www.google.com/s2/favicons?domain=gmail.com&sz=128"
   }
 ]

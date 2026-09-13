@@ -2154,6 +2154,23 @@ func (app *App) getUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A signed-in viewer also gets is_following, so the profile page's Follow
+	// button renders in the right state rather than always starting at "Follow".
+	if viewerID := extractUserIDFromRequestIfPresent(r); viewerID != uuid.Nil {
+		user, err := app.queries.GetProfileWithUsernameAuthenticated(
+			r.Context(),
+			db.GetProfileWithUsernameAuthenticatedParams{Username: slug, ViewerID: viewerID},
+		)
+		if err != nil {
+			http.Error(w, "Unknown user", http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(user)
+		return
+	}
+
 	user, err := app.queries.GetProfileWithUsername(r.Context(), slug)
 
 	if err != nil {
@@ -4594,6 +4611,10 @@ func main() {
 		r.Get("/user/{slug}/followers", app.listFollowers)
 		r.Get("/user/{slug}/following", app.listFollowing)
 
+		// Optional auth: anonymous visitors get the plain profile, a signed-in
+		// viewer additionally gets is_following for the Follow button.
+		r.Get("/user/{slug}", app.getUser)
+
 		r.Get("/search", app.search)
 	})
 
@@ -4608,7 +4629,6 @@ func main() {
 		r.Get("/category/autocomplete", app.autocompleteCategory)
 
 		// User routes
-		r.Get("/user/{slug}", app.getUser)
 		r.Get("/user/{slug}/stack", app.listUserStack)
 		r.Get("/user/{slug}/watchlist", app.listUserWatchlist)
 		r.Get("/user/{slug}/old-stack", app.listUserOldStack)

@@ -1,5 +1,6 @@
 import { getUserFromUsername, getUserStats } from "@/lib/user";
 import { getServerAuthState } from "@/lib/auth-server";
+import { createClient } from "@/utils/supabase/server";
 import { UserAvatar } from "@/components/user-avatar";
 import { notFound } from "next/navigation";
 import ProfileTabsInjector from "./profile-tabs-injector";
@@ -17,7 +18,10 @@ export default async function ProfileLayoutWrapper({ username, children }: Profi
   // getUserFromUsername throws when the profile doesn't exist (404 from the
   // API). Treat any failure as "not found" so we render the 404 page instead of
   // a server-side exception.
-  const user = await getUserFromUsername(username).catch(() => null);
+  // Pass the viewer's session so the response carries is_following — without
+  // it the Follow button below always renders as "Follow".
+  const supabase = await createClient();
+  const user = await getUserFromUsername(username, supabase).catch(() => null);
 
   if (!user) {
     notFound();
@@ -92,6 +96,7 @@ export default async function ProfileLayoutWrapper({ username, children }: Profi
                     <FollowButton
                       userId={user.id}
                       size="sm"
+                      initialFollowing={user.is_following ?? false}
                     />
                   </div>
                 )}

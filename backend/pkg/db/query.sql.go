@@ -4113,3 +4113,72 @@ func (q *Queries) AddToolCategories(ctx context.Context, arg AddToolCategoriesPa
 	_, err := q.db.Exec(ctx, addToolCategories, arg.ToolID, arg.CategoryIds)
 	return err
 }
+
+const getProfileWithUsernameAuthenticated = `-- name: GetProfileWithUsernameAuthenticated :one
+SELECT
+  id,
+  username,
+  display_name,
+  bio,
+  website,
+  company,
+  location,
+  linkedin,
+  twitter,
+  email_hash,
+  avatar_url,
+  created_at,
+  updated_at,
+  EXISTS(
+    SELECT 1 FROM user_follows uf
+    WHERE uf.follower_id = $2 AND uf.followee_id = profiles.id
+  ) AS is_following
+FROM
+  profiles
+WHERE
+  username = $1
+`
+
+type GetProfileWithUsernameAuthenticatedParams struct {
+	Username string    `json:"username"`
+	ViewerID uuid.UUID `json:"viewer_id"`
+}
+
+type GetProfileWithUsernameAuthenticatedRow struct {
+	ID          uuid.UUID          `json:"id"`
+	Username    string             `json:"username"`
+	DisplayName string             `json:"display_name"`
+	Bio         pgtype.Text        `json:"bio"`
+	Website     pgtype.Text        `json:"website"`
+	Company     pgtype.Text        `json:"company"`
+	Location    pgtype.Text        `json:"location"`
+	Linkedin    pgtype.Text        `json:"linkedin"`
+	Twitter     pgtype.Text        `json:"twitter"`
+	EmailHash   pgtype.Text        `json:"email_hash"`
+	AvatarUrl   pgtype.Text        `json:"avatar_url"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	IsFollowing bool               `json:"is_following"`
+}
+
+func (q *Queries) GetProfileWithUsernameAuthenticated(ctx context.Context, arg GetProfileWithUsernameAuthenticatedParams) (GetProfileWithUsernameAuthenticatedRow, error) {
+	row := q.db.QueryRow(ctx, getProfileWithUsernameAuthenticated, arg.Username, arg.ViewerID)
+	var i GetProfileWithUsernameAuthenticatedRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.DisplayName,
+		&i.Bio,
+		&i.Website,
+		&i.Company,
+		&i.Location,
+		&i.Linkedin,
+		&i.Twitter,
+		&i.EmailHash,
+		&i.AvatarUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.IsFollowing,
+	)
+	return i, err
+}

@@ -20,7 +20,21 @@ export function FollowButton({
   variant = "default",
   initialFollowing = false
 }: FollowButtonProps) {
-  const [isFollowed, setIsFollowed] = useState(initialFollowing);
+  // Tracked alongside the id it belongs to: moving from one profile to another
+  // reuses this component, which would otherwise keep showing the previous
+  // person's follow state. Keyed on userId rather than initialFollowing so an
+  // optimistic toggle survives an unrelated re-render.
+  const [followState, setFollowState] = useState({
+    userId,
+    following: initialFollowing,
+  });
+  if (followState.userId !== userId) {
+    setFollowState({ userId, following: initialFollowing });
+  }
+  const isFollowed = followState.following;
+  const setIsFollowed = (following: boolean) =>
+    setFollowState({ userId, following });
+
   const followUserMutation = useFollowUser();
   const unfollowUserMutation = useUnfollowUser();
 
