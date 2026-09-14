@@ -1,14 +1,30 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { fetchApiAuthenticated } from "./api";
 
-/** What produced the event — used to explain "why am I seeing this?". */
-export type FeedReason = "following_user" | "following_tool" | "latest";
+/**
+ * What produced the event — used to explain "why am I seeing this?". For
+ * notification rows this is the notification's own type instead.
+ */
+export type FeedReason =
+  | "following_user"
+  | "following_tool"
+  | "latest"
+  | "post_star"
+  | "post_comment"
+  | "follow"
+  | "tool_approved";
 
-export type FeedKind = "post" | "tool_follow" | "user_follow";
+export type FeedKind = "notification" | "post";
 
 export interface FeedItem {
   kind: FeedKind;
   reason: FeedReason;
+  /**
+   * How closely the event concerns the viewer: 0 things about you, 1 people you
+   * follow, 2 tools you follow, 3 discovery filler. The server sorts by this
+   * first, then by recency within the tier.
+   */
+  tier: number;
   occurred_at: string;
   actor_id: string;
   actor_username: string;
@@ -20,8 +36,8 @@ export interface FeedItem {
   tool_id: string | null;
   tool_name: string | null;
   tool_logo_url: string | null;
-  target_user_id: string | null;
-  target_username: string | null;
+  /** Ready-made sentence for notification rows; null for everything else. */
+  notification_message: string | null;
 }
 
 export interface FeedResponse {

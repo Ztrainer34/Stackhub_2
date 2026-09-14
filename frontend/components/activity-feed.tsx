@@ -6,10 +6,16 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ToolLogo } from "@/components/tool-logo";
-import { Activity, BookOpen, UserPlus, Wrench } from "lucide-react";
+import {
+  Activity,
+  BookOpen,
+  CheckCircle2,
+  MessageSquare,
+  Star,
+  UserPlus,
+} from "lucide-react";
 import { useFeed } from "@/lib/queries/use-feed";
 import { FeedItem } from "@/lib/feed";
-import { toolSlug } from "@/lib/tool";
 
 /** "3 hours ago" / "2 days ago" — compact relative time for feed entries. */
 function timeAgo(iso: string): string {
@@ -46,15 +52,59 @@ function ActorLink({ username }: { username: string }) {
   );
 }
 
+/** Icon for a tier-0 row, picked from the notification's own type. */
+function notificationIcon(reason: FeedItem["reason"]) {
+  if (reason === "post_star") return <Star className="h-4 w-4 text-amber-500" />;
+  if (reason === "post_comment")
+    return <MessageSquare className="h-4 w-4 text-primary" />;
+  if (reason === "tool_approved")
+    return <CheckCircle2 className="h-4 w-4 text-emerald-600" />;
+  return <UserPlus className="h-4 w-4 text-primary" />;
+}
+
+/**
+ * Something that happened to the viewer. The message is written server-side
+ * when the notification is created, so it is rendered as-is rather than
+ * reassembled from parts here.
+ */
+function NotificationRow({ item }: { item: FeedItem }) {
+  const body = (
+    <div className="flex items-center gap-x-1.5 text-sm">
+      {notificationIcon(item.reason)}
+      <span className="font-medium">
+        {item.notification_message ?? "You have a new notification"}
+      </span>
+      <span className="text-muted-foreground">
+        · {timeAgo(item.occurred_at)}
+      </span>
+    </div>
+  );
+
+  return (
+    <div className="flex gap-3 py-4">
+      <Avatar className="h-8 w-8 shrink-0">
+        <AvatarFallback className="text-xs">
+          {item.actor_username.charAt(0).toUpperCase()}
+        </AvatarFallback>
+      </Avatar>
+      <div className="min-w-0 flex-1">
+        {item.post_slug ? (
+          <Link
+            href={`/${item.actor_username}/${item.post_slug}`}
+            className="hover:underline"
+          >
+            {body}
+          </Link>
+        ) : (
+          body
+        )}
+      </div>
+    </div>
+  );
+}
+
 function FeedRow({ item }: { item: FeedItem }) {
-  const icon =
-    item.kind === "post" ? (
-      <BookOpen className="h-4 w-4 text-primary" />
-    ) : item.kind === "tool_follow" ? (
-      <Wrench className="h-4 w-4 text-muted-foreground" />
-    ) : (
-      <UserPlus className="h-4 w-4 text-muted-foreground" />
-    );
+  if (item.kind === "notification") return <NotificationRow item={item} />;
 
   return (
     <div className="flex gap-3 py-4">
@@ -66,33 +116,12 @@ function FeedRow({ item }: { item: FeedItem }) {
 
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm">
-          {icon}
+          <BookOpen className="h-4 w-4 text-primary" />
           <ActorLink username={item.actor_username} />
 
-          {item.kind === "post" && (
-            <span className="text-muted-foreground">
-              published a {item.post_type ?? "playbook"}
-            </span>
-          )}
-          {item.kind === "tool_follow" && (
-            <span className="text-muted-foreground">started following</span>
-          )}
-          {item.kind === "user_follow" && (
-            <span className="text-muted-foreground">started following</span>
-          )}
-
-          {item.kind === "user_follow" && item.target_username && (
-            <ActorLink username={item.target_username} />
-          )}
-
-          {item.kind === "tool_follow" && item.tool_name && (
-            <Link
-              href={`/tool/${toolSlug(item.tool_name)}`}
-              className="font-medium hover:underline hover:text-primary"
-            >
-              {item.tool_name}
-            </Link>
-          )}
+          <span className="text-muted-foreground">
+            published a {item.post_type ?? "playbook"}
+          </span>
 
           <span className="text-muted-foreground">
             · {timeAgo(item.occurred_at)}
@@ -103,10 +132,15 @@ function FeedRow({ item }: { item: FeedItem }) {
               tool you follow
             </Badge>
           )}
+          {item.reason === "latest" && (
+            <Badge variant="outline" className="text-[10px] font-normal">
+              suggested
+            </Badge>
+          )}
         </div>
 
         {/* Published playbooks get a card so they're the focus of the feed. */}
-        {item.kind === "post" && item.post_slug && (
+        {item.post_slug && (
           <Link href={`/${item.actor_username}/${item.post_slug}`}>
             <Card className="mt-2 hover:shadow-md transition-shadow">
               <CardContent className="p-4">
@@ -149,7 +183,7 @@ export default function ActivityFeed({ limit = 20 }: { limit?: number }) {
         <h2 className="text-2xl font-semibold">Your feed</h2>
       </div>
       <p className="text-muted-foreground mb-4">
-        Playbooks and activity from the people and tools you follow
+        What happened to you, then playbooks from the people and tools you follow
       </p>
 
       {isLoading ? (
@@ -177,7 +211,7 @@ export default function ActivityFeed({ limit = 20 }: { limit?: number }) {
         <div className="divide-y rounded-lg border px-4">
           {items.map((item, i) => (
             <FeedRow
-              key={`${item.kind}-${item.post_id ?? item.tool_id ?? item.target_user_id}-${item.actor_id}-${i}`}
+              key={`${item.kind}-${item.reason}-${item.post_id ?? item.tool_id}-${item.actor_id}-${i}`}
               item={item}
             />
           ))}

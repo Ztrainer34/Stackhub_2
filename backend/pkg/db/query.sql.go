@@ -3666,65 +3666,88 @@ func (q *Queries) UpdateProfile(ctx context.Context, arg UpdateProfileParams) er
 }
 
 const getUserFeed = `-- name: GetUserFeed :many
+-- Activity feed, ranked by how much each event has to do with the viewer:
+--   tier 0  about you       — unread stars, comments, new followers, tool approvals
+--   tier 1  people you follow — they published a playbook / combo / comparison
+--   tier 2  tools you follow  — someone published about one
+--   tier 3  discovery filler  — recent playbooks, and ONLY for a viewer who
+--                               follows nobody and no tools, so an established
+--                               account never sees strangers in its feed
+-- Within a tier the newest event wins. Every branch carries an event_key so a
+-- post matching several reasons appears once, keeping its strongest reason.
+--
+-- Deliberately absent: "someone you follow started following X". Adding a tool
+-- to a stack auto-follows it, so those rows were the highest-volume and least
+-- informative thing in the feed, and they named tools the viewer had no
+-- relationship with.
 WITH followed_users AS (
   SELECT followee_id FROM user_follows WHERE follower_id = $1
 ), followed_tools AS (
   SELECT tool_id FROM tool_follows WHERE profile_id = $1
+), follows_anything AS (
+  SELECT (EXISTS(SELECT 1 FROM followed_users)
+       OR EXISTS(SELECT 1 FROM followed_tools)) AS yes
 ), events AS (
-  SELECT 'post'::text AS kind, 'following_user'::text AS reason, p.last_publish AS occurred_at,
-         p.author_id AS actor_id, p.id AS post_id, NULL::uuid AS tool_id, NULL::uuid AS target_user_id
+  -- Tier 0 — things that happened to you. Unread only: once you have seen a
+  -- notification it stops pinning the top of the feed, and the notifications
+  -- page still holds the full history.
+  SELECT 'notification'::text AS kind, n.type AS reason, 0 AS tier,
+         'notification:' || n.id::text AS event_key,
+         n.created_at AS occurred_at, n.actor_id AS actor_id,
+         CASE WHEN n.entity_type = 'post' THEN n.entity_id END AS post_id,
+         NULL::uuid AS tool_id,
+         n.message AS notification_message
+  FROM notifications n
+  WHERE n.recipient_id = $1
+    AND NOT COALESCE(n.is_read, false)
+
+  UNION ALL
+  -- Tier 1 — a playbook published by someone the viewer follows.
+  SELECT 'post', 'following_user', 1, 'post:' || p.id::text,
+         p.last_publish, p.author_id, p.id, NULL::uuid, NULL::text
   FROM posts p
   WHERE p.is_published AND p.last_publish IS NOT NULL
     AND p.author_id IN (SELECT followee_id FROM followed_users)
 
   UNION ALL
-  SELECT 'post', 'following_tool', p.last_publish, p.author_id, p.id, pt.tool_id, NULL::uuid
+  -- Tier 2 — a playbook about a tool the viewer follows.
+  SELECT 'post', 'following_tool', 2, 'post:' || p.id::text,
+         p.last_publish, p.author_id, p.id, pt.tool_id, NULL::text
   FROM posts p
   JOIN post_tools pt ON pt.post_id = p.id
   WHERE p.is_published AND p.last_publish IS NOT NULL
     AND pt.tool_id IN (SELECT tool_id FROM followed_tools)
 
   UNION ALL
-  SELECT 'tool_follow', 'following_user', tf.added_at, tf.profile_id, NULL::uuid, tf.tool_id, NULL::uuid
-  FROM tool_follows tf
-  WHERE tf.profile_id IN (SELECT followee_id FROM followed_users)
-
-  UNION ALL
-  SELECT 'user_follow', 'following_user', uf.created_at, uf.follower_id, NULL::uuid, NULL::uuid, uf.followee_id
-  FROM user_follows uf
-  WHERE uf.follower_id IN (SELECT followee_id FROM followed_users)
-    AND uf.followee_id <> $1
-
-  UNION ALL
-  SELECT 'post', 'latest', p.last_publish, p.author_id, p.id, NULL::uuid, NULL::uuid
+  -- Tier 3 — recent playbooks, so a brand-new account still sees something.
+  -- Suppressed the moment the viewer follows anyone or any tool: this branch is
+  -- what used to put strangers' posts in an established account's feed.
+  SELECT 'post', 'latest', 3, 'post:' || p.id::text,
+         p.last_publish, p.author_id, p.id, NULL::uuid, NULL::text
   FROM posts p
   WHERE p.is_published AND p.last_publish IS NOT NULL
+    AND NOT (SELECT yes FROM follows_anything)
 ), ranked AS (
-  SELECT e.kind, e.reason, e.occurred_at, e.actor_id, e.post_id, e.tool_id, e.target_user_id,
-    ROW_NUMBER() OVER (
-      PARTITION BY e.kind,
-        COALESCE(e.post_id::text,
-                 e.actor_id::text || ':' || e.tool_id::text,
-                 e.actor_id::text || ':' || e.target_user_id::text)
-      ORDER BY CASE e.reason WHEN 'following_user' THEN 0 WHEN 'following_tool' THEN 1 ELSE 2 END
+  SELECT e.*, ROW_NUMBER() OVER (
+      PARTITION BY e.event_key ORDER BY e.tier
     ) AS rn
   FROM events e
 )
 SELECT
-  r.kind, r.reason, r.occurred_at,
+  r.kind, r.reason, r.tier, r.occurred_at,
   r.actor_id, actor.username AS actor_username,
   r.post_id, p.name AS post_name, p.slug AS post_slug, p.type AS post_type, p.description AS post_description,
   r.tool_id, t.name AS tool_name, t.logo_url AS tool_logo_url,
-  r.target_user_id, tu.username AS target_username,
+  r.notification_message,
   COUNT(*) OVER() AS total_count
 FROM ranked r
 JOIN profiles actor ON actor.id = r.actor_id
 LEFT JOIN posts p ON p.id = r.post_id
 LEFT JOIN tools t ON t.id = r.tool_id
-LEFT JOIN profiles tu ON tu.id = r.target_user_id
 WHERE r.rn = 1
-  AND (r.kind = 'post' OR r.actor_id <> $1)
-ORDER BY r.occurred_at DESC
+  -- A feed is what other people did; your own activity is not news to you.
+  AND r.actor_id <> $1
+ORDER BY r.tier, r.occurred_at DESC
 LIMIT $2 OFFSET $3
 `
 
@@ -3735,22 +3758,22 @@ type GetUserFeedParams struct {
 }
 
 type GetUserFeedRow struct {
-	Kind            string             `json:"kind"`
-	Reason          string             `json:"reason"`
-	OccurredAt      pgtype.Timestamptz `json:"occurred_at"`
-	ActorID         uuid.UUID          `json:"actor_id"`
-	ActorUsername   string             `json:"actor_username"`
-	PostID          pgtype.UUID        `json:"post_id"`
-	PostName        pgtype.Text        `json:"post_name"`
-	PostSlug        pgtype.Text        `json:"post_slug"`
-	PostType        pgtype.Text        `json:"post_type"`
-	PostDescription pgtype.Text        `json:"post_description"`
-	ToolID          pgtype.UUID        `json:"tool_id"`
-	ToolName        pgtype.Text        `json:"tool_name"`
-	ToolLogoUrl     pgtype.Text        `json:"tool_logo_url"`
-	TargetUserID    pgtype.UUID        `json:"target_user_id"`
-	TargetUsername  pgtype.Text        `json:"target_username"`
-	TotalCount      int64              `json:"total_count"`
+	Kind                string             `json:"kind"`
+	Reason              string             `json:"reason"`
+	Tier                int32              `json:"tier"`
+	OccurredAt          pgtype.Timestamptz `json:"occurred_at"`
+	ActorID             uuid.UUID          `json:"actor_id"`
+	ActorUsername       string             `json:"actor_username"`
+	PostID              pgtype.UUID        `json:"post_id"`
+	PostName            pgtype.Text        `json:"post_name"`
+	PostSlug            pgtype.Text        `json:"post_slug"`
+	PostType            pgtype.Text        `json:"post_type"`
+	PostDescription     pgtype.Text        `json:"post_description"`
+	ToolID              pgtype.UUID        `json:"tool_id"`
+	ToolName            pgtype.Text        `json:"tool_name"`
+	ToolLogoUrl         pgtype.Text        `json:"tool_logo_url"`
+	NotificationMessage pgtype.Text        `json:"notification_message"`
+	TotalCount          int64              `json:"total_count"`
 }
 
 func (q *Queries) GetUserFeed(ctx context.Context, arg GetUserFeedParams) ([]GetUserFeedRow, error) {
@@ -3765,6 +3788,7 @@ func (q *Queries) GetUserFeed(ctx context.Context, arg GetUserFeedParams) ([]Get
 		if err := rows.Scan(
 			&i.Kind,
 			&i.Reason,
+			&i.Tier,
 			&i.OccurredAt,
 			&i.ActorID,
 			&i.ActorUsername,
@@ -3776,8 +3800,7 @@ func (q *Queries) GetUserFeed(ctx context.Context, arg GetUserFeedParams) ([]Get
 			&i.ToolID,
 			&i.ToolName,
 			&i.ToolLogoUrl,
-			&i.TargetUserID,
-			&i.TargetUsername,
+			&i.NotificationMessage,
 			&i.TotalCount,
 		); err != nil {
 			return nil, err
