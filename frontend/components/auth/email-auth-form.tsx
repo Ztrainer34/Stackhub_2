@@ -10,9 +10,20 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface EmailAuthFormProps {
   onBack: () => void;
+  /**
+   * Signing in and signing up are the same magic-link request — Supabase sends
+   * "Confirm sign up" for an address it has never seen and "Magic link" for one
+   * it has. Only the copy differs, so that the page matches the mail that turns
+   * up.
+   */
+  mode?: "login" | "signup";
 }
 
-export default function EmailAuthForm({ onBack }: EmailAuthFormProps) {
+export default function EmailAuthForm({
+  onBack,
+  mode = "login",
+}: EmailAuthFormProps) {
+  const isSignup = mode === "signup";
   const [step, setStep] = useState<"email" | "sent">("email");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
@@ -68,7 +79,11 @@ export default function EmailAuthForm({ onBack }: EmailAuthFormProps) {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <h2 className="text-xl font-semibold">
-          {step === "email" ? "Enter your email" : "Check your email"}
+          {step === "sent"
+            ? "Check your email"
+            : isSignup
+              ? "Create your account"
+              : "Enter your email"}
         </h2>
       </div>
       <div>
@@ -101,7 +116,7 @@ export default function EmailAuthForm({ onBack }: EmailAuthFormProps) {
               ) : (
                 <>
                   <Mail className="mr-2 h-4 w-4" />
-                  Send magic link
+                  {isSignup ? "Send sign-up link" : "Send magic link"}
                 </>
               )}
             </Button>
@@ -112,9 +127,12 @@ export default function EmailAuthForm({ onBack }: EmailAuthFormProps) {
               <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
                 <Mail className="h-6 w-6 text-green-600" />
               </div>
-              <h3 className="font-medium">Magic link sent!</h3>
+              <h3 className="font-medium">
+                {isSignup ? "Sign-up link sent!" : "Magic link sent!"}
+              </h3>
               <p className="text-sm text-muted-foreground">
-                We sent a magic link to <strong>{email}</strong>. Click the link in your email to sign in.
+                We sent a link to <strong>{email}</strong>. Click it to{" "}
+                {isSignup ? "finish creating your account" : "sign in"}.
               </p>
             </div>
 
