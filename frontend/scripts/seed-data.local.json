@@ -1,0 +1,137 @@
+{
+  "_comment": [
+    "Seed for the LOCAL Supabase stack (supabase start). Deliberately small —",
+    "just enough to exercise everything built in Sept 2026: tool page ownership,",
+    "the tiered feed, the follow button and the login flow. Cloning 16k tools",
+    "would prove nothing these 8 don't.",
+    "",
+    "Two users, because half of what needs testing (following, feed tiers, the",
+    "claim CTA as a non-owner) is invisible with only one account.",
+    "",
+    "Run from frontend/ with the local credentials printed by `supabase start`:",
+    "  node scripts/seed.mjs scripts/seed-data.local.json"
+  ],
+
+  "users": [
+    {
+      "email": "alice@local.test",
+      "password": "Password123!",
+      "username": "alice",
+      "display_name": "Alice Martin",
+      "bio": "Growth marketer. Owns the Clay page for ownership testing.",
+      "company": "Acme Inc.",
+      "location": "Paris, France",
+      "website": "https://alice.example.com",
+      "linkedin": "alice-martin",
+      "twitter": "alice"
+    },
+    {
+      "email": "bob@local.test",
+      "password": "Password123!",
+      "username": "bob",
+      "display_name": "Bob Chen",
+      "bio": "Second account — follow this one to test the feed and follow button.",
+      "location": "Berlin, Germany"
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "Clay",
+      "description": "Clay helps Go-To-Market teams access unique data from 100+ sources and AI agents, enabling them to automate growth workflows. Grant yourself ownership of this one to test the four edit pencils.",
+      "website": "https://clay.com",
+      "logo_url": "https://www.google.com/s2/favicons?domain=clay.com&sz=128",
+      "categories": ["Data Enrichment", "Sales Workflow"]
+    },
+    {
+      "name": "HubSpot",
+      "description": "All-in-one CRM and marketing platform covering marketing, sales, service and CMS.",
+      "website": "https://hubspot.com",
+      "logo_url": "https://www.google.com/s2/favicons?domain=hubspot.com&sz=128",
+      "categories": ["CRM", "Marketing Automation"]
+    },
+    {
+      "name": "Lemlist",
+      "description": "Cold email outreach and automation with deliverability tooling built in.",
+      "website": "https://lemlist.com",
+      "logo_url": "https://www.google.com/s2/favicons?domain=lemlist.com&sz=128",
+      "categories": ["Email", "Sales Workflow"]
+    },
+    {
+      "name": "Apollo",
+      "description": "B2B database and sales engagement platform with contact and company data.",
+      "website": "https://apollo.io",
+      "logo_url": "https://www.google.com/s2/favicons?domain=apollo.io&sz=128",
+      "categories": ["Data Enrichment", "Sales Workflow"]
+    },
+    {
+      "name": "Notion",
+      "description": "Connected workspace for notes, docs, wikis and lightweight project tracking.",
+      "website": "https://notion.so",
+      "logo_url": "https://www.google.com/s2/favicons?domain=notion.so&sz=128",
+      "categories": ["Productivity"]
+    },
+    {
+      "name": "Brevo",
+      "description": "Affordable all-in-one marketing and CRM stack — email, SMS, WhatsApp and chat.",
+      "website": "https://brevo.com",
+      "logo_url": "https://www.google.com/s2/favicons?domain=brevo.com&sz=128",
+      "categories": ["Email", "Marketing Automation"]
+    },
+    {
+      "name": "Toolwithnologo",
+      "description": "Deliberately has no logo_url, so the ToolLogo initials fallback and the owner's 'Change logo' dialog can both be checked.",
+      "website": "https://example.com",
+      "logo_url": "",
+      "categories": ["Productivity"]
+    },
+    {
+      "name": "Toolwithnodescription",
+      "website": "https://example.org",
+      "logo_url": "",
+      "categories": ["Productivity"]
+    }
+  ],
+
+  "playbooks": [
+    {
+      "author": "bob",
+      "type": "playbook",
+      "title": "Enrich inbound leads with Clay before they hit the CRM",
+      "description": "Turn a bare email address into a scored, routed lead.",
+      "tools": ["Clay"],
+      "published": true,
+      "body": [
+        "Published by bob, about Clay. Follow bob to see this as a tier 1 feed item.",
+        "Follow Clay but not bob to see it as tier 2, badged 'tool you follow'.",
+        "Follow neither and it should not appear at all — that was the bug."
+      ]
+    },
+    {
+      "author": "bob",
+      "type": "combo",
+      "title": "Capture visitors in HubSpot and follow up with Lemlist",
+      "description": "A two-tool outbound loop.",
+      "tools": ["HubSpot", "Lemlist"],
+      "published": true,
+      "body": [
+        "Sync identified companies from HubSpot.",
+        "Push contacts into a Lemlist campaign.",
+        "Second post by bob, so the feed has more than one row to order."
+      ]
+    },
+    {
+      "author": "alice",
+      "type": "comparison",
+      "title": "Apollo vs Clay for outbound data",
+      "description": "Which one to reach for, and when.",
+      "tools": ["Apollo", "Clay"],
+      "published": true,
+      "body": [
+        "Written by alice. Signed in as alice this must NOT appear in her own feed —",
+        "a feed is what other people did.",
+        "Signed in as bob, following alice, it should appear as tier 1."
+      ]
+    }
+  ]
+}

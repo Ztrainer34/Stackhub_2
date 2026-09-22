@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import CategoryFilter from "@/components/category-filter";
+import { makeSearchMatcher } from "@/lib/search-query";
 import Link from "next/link";
 import { Tool, toolHref } from "@/lib/tool";
 import { Layers, Bookmark, Archive, Search } from "lucide-react";
@@ -116,13 +117,11 @@ function applyFilters(
   categories: string[],
   sort: SortOption
 ): Tool[] {
-  const query = search.trim().toLowerCase();
+  // Parsed once per filter pass, not once per tool.
+  const matchesQuery = makeSearchMatcher(search);
 
   const filtered = tools.filter((tool) => {
-    const matchesSearch =
-      query === "" ||
-      tool.name.toLowerCase().includes(query) ||
-      (tool.description?.toLowerCase().includes(query) ?? false);
+    const matchesSearch = matchesQuery([tool.name, tool.description]);
 
     const matchesCategory =
       categories.length === 0 ||
@@ -229,6 +228,15 @@ function ToolSection({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-10"
+              // Plain text still works; the title is where the operators are
+              // discoverable without cluttering the placeholder.
+              title={
+                'Search supports operators:\n' +
+                '  adobe content    both words\n' +
+                '  adobe|content    either word\n' +
+                '  adobe -cloud     adobe but not cloud\n' +
+                '  "adobe cloud"    that exact phrase'
+              }
             />
           </div>
 

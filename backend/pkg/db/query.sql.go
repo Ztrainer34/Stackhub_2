@@ -3667,14 +3667,23 @@ func (q *Queries) UpdateProfile(ctx context.Context, arg UpdateProfileParams) er
 
 const getUserFeed = `-- name: GetUserFeed :many
 -- Activity feed, ranked by how much each event has to do with the viewer:
---   tier 0  about you       — unread stars, comments, new followers, tool approvals
---   tier 1  people you follow — they published a playbook / combo / comparison
---   tier 2  tools you follow  — someone published about one
---   tier 3  discovery filler  — recent playbooks, and ONLY for a viewer who
---                               follows nobody and no tools, so an established
---                               account never sees strangers in its feed
+--   tier 0  about you        — unread stars, comments, new followers, tool approvals
+--   tier 1  people you follow  — they published a playbook / combo / comparison
+--   tier 2  tools in your stack — someone published about one
+--   tier 3  other followed tools — watchlist, plus anything followed by hand
+--   tier 4  discovery filler   — recent playbooks, and ONLY for a viewer who
+--                                follows nobody and no tools, so an established
+--                                account never sees strangers in its feed
+--
+-- Tiers 2 and 3 are how "a watchlist tool carries half the weight of a stack
+-- tool" is expressed: both are followed, but a post about something you
+-- actually run always outranks a post about something you are only watching.
+-- Tools in the old stack are absent entirely — archiving unfollows them.
+--
 -- Within a tier the newest event wins. Every branch carries an event_key so a
--- post matching several reasons appears once, keeping its strongest reason.
+-- post matching several reasons appears once, keeping its strongest reason —
+-- which is also what makes a post about both a stack tool and a watchlist tool
+-- rank as a stack post.
 --
 -- Deliberately absent: "someone you follow started following X". Adding a tool
 -- to a stack auto-follows it, so those rows were the highest-volume and least
@@ -3684,6 +3693,8 @@ WITH followed_users AS (
   SELECT followee_id FROM user_follows WHERE follower_id = $1
 ), followed_tools AS (
   SELECT tool_id FROM tool_follows WHERE profile_id = $1
+), stack_tools AS (
+  SELECT tool_id FROM stack_items WHERE profile_id = $1
 ), follows_anything AS (
   SELECT (EXISTS(SELECT 1 FROM followed_users)
        OR EXISTS(SELECT 1 FROM followed_tools)) AS yes
@@ -3710,19 +3721,32 @@ WITH followed_users AS (
     AND p.author_id IN (SELECT followee_id FROM followed_users)
 
   UNION ALL
-  -- Tier 2 — a playbook about a tool the viewer follows.
-  SELECT 'post', 'following_tool', 2, 'post:' || p.id::text,
+  -- Tier 2 — a playbook about a tool in the viewer's ACTIVE STACK.
+  SELECT 'post', 'stack_tool', 2, 'post:' || p.id::text,
          p.last_publish, p.author_id, p.id, pt.tool_id, NULL::text
   FROM posts p
   JOIN post_tools pt ON pt.post_id = p.id
   WHERE p.is_published AND p.last_publish IS NOT NULL
     AND pt.tool_id IN (SELECT tool_id FROM followed_tools)
+    AND pt.tool_id IN (SELECT tool_id FROM stack_tools)
 
   UNION ALL
-  -- Tier 3 — recent playbooks, so a brand-new account still sees something.
+  -- Tier 3 — a playbook about a followed tool that is NOT in the stack: the
+  -- watchlist, plus any tool followed by hand from its page. Half the weight of
+  -- tier 2 in the sense that matters — it never outranks it.
+  SELECT 'post', 'watchlist_tool', 3, 'post:' || p.id::text,
+         p.last_publish, p.author_id, p.id, pt.tool_id, NULL::text
+  FROM posts p
+  JOIN post_tools pt ON pt.post_id = p.id
+  WHERE p.is_published AND p.last_publish IS NOT NULL
+    AND pt.tool_id IN (SELECT tool_id FROM followed_tools)
+    AND pt.tool_id NOT IN (SELECT tool_id FROM stack_tools)
+
+  UNION ALL
+  -- Tier 4 — recent playbooks, so a brand-new account still sees something.
   -- Suppressed the moment the viewer follows anyone or any tool: this branch is
   -- what used to put strangers' posts in an established account's feed.
-  SELECT 'post', 'latest', 3, 'post:' || p.id::text,
+  SELECT 'post', 'latest', 4, 'post:' || p.id::text,
          p.last_publish, p.author_id, p.id, NULL::uuid, NULL::text
   FROM posts p
   WHERE p.is_published AND p.last_publish IS NOT NULL

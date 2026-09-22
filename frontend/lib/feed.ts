@@ -7,7 +7,8 @@ import { fetchApiAuthenticated } from "./api";
  */
 export type FeedReason =
   | "following_user"
-  | "following_tool"
+  | "stack_tool"
+  | "watchlist_tool"
   | "latest"
   | "post_star"
   | "post_comment"
@@ -21,8 +22,10 @@ export interface FeedItem {
   reason: FeedReason;
   /**
    * How closely the event concerns the viewer: 0 things about you, 1 people you
-   * follow, 2 tools you follow, 3 discovery filler. The server sorts by this
-   * first, then by recency within the tier.
+   * follow, 2 tools in your stack, 3 other followed tools (watchlist and manual
+   * follows), 4 discovery filler. The server sorts by this first, then by
+   * recency within the tier — which is how a stack tool outranks a watchlisted
+   * one for the same post.
    */
   tier: number;
   occurred_at: string;

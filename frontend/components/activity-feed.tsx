@@ -127,9 +127,14 @@ function FeedRow({ item }: { item: FeedItem }) {
             · {timeAgo(item.occurred_at)}
           </span>
 
-          {item.reason === "following_tool" && (
+          {item.reason === "stack_tool" && (
             <Badge variant="outline" className="text-[10px] font-normal">
-              tool you follow
+              in your stack
+            </Badge>
+          )}
+          {item.reason === "watchlist_tool" && (
+            <Badge variant="outline" className="text-[10px] font-normal">
+              saved for later
             </Badge>
           )}
           {item.reason === "latest" && (

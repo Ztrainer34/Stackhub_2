@@ -25,7 +25,9 @@
 - **React**: 19.1.0
 - **State Management**: TanStack Query (React Query) for server state
 - **Forms**: React Hook Form + Zod validation
-- **Rich Text Editor**: Lexical with custom plugins
+- **Rich Text Editor**: Tiptap (`@tiptap/react` + `@tiptap/static-renderer`).
+  Some unused Lexical packages and plugin files are still in the tree — ignore
+  them, they are dead leftovers from an earlier editor.
 - **Styling**: Tailwind CSS + shadcn/ui components
 - **Authentication**: Supabase Auth client-side integration
 
@@ -267,7 +269,18 @@ function onSubmit(data: z.infer<typeof formSchema>) {
 - `PUT /user/follow/{user_id}` - Follow user
 - `DELETE /user/follow/{user_id}` - Unfollow user
 
-### Admin Routes (Protected)
+### Admin Routes (authenticated, but **no role check**)
+
+> ⚠️ These are gated only on being signed in. There is no admin role — the
+> backend `/admin` group sits inside the ordinary authenticated group, and
+> `frontend/app/admin/layout.tsx` still carries a `TODO: Add proper admin role
+> check`. Any signed-in user can resolve or reject tool tickets.
+>
+> **`/admin` is a UI convention, not a security boundary.** Do not add
+> privileged capabilities behind it until a real role check exists. This is why
+> tool-page ownership is granted by `frontend/scripts/grant-tool-owner.mjs`
+> using the service-role key rather than through an HTTP endpoint.
+
 - `GET /admin/tool-tickets` - List tool tickets
 - `POST /admin/tool-tickets/{id}/resolve-existing` - Resolve with existing tool
 - `POST /admin/tool-tickets/{id}/resolve-new` - Resolve with new tool
@@ -443,20 +456,51 @@ const user = authState.user; // Type-safe
 ## Development Workflow
 
 ### Backend Development
-1. Modify SQL queries in `backend/queries/` (SQLC source)
-2. Run `sqlc generate` to regenerate Go code
-3. Update handlers in `cmd/server/main.go`
-4. Test with `go run cmd/server/main.go`
+
+> ⚠️ **`sqlc generate` is NOT available in this project.** Every query is
+> hand-written into **both** files below, and they must be kept in sync.
+
+1. Add the query to `backend/db/query.sql` (the SQLC source, using
+   `sqlc.arg(name)` placeholders)
+2. Add the matching Go by hand to `backend/pkg/db/query.sql.go`: the SQL
+   constant with `$1`/`$2` positional placeholders substituted in
+   first-appearance order, the `...Params` struct, the `...Row` struct, and the
+   `rows.Scan` field list. **The Scan order must match the SELECT column order
+   exactly** or rows come back shifted.
+3. New tables also need their model in `backend/pkg/db/models.go`
+4. Update handlers in `cmd/server/main.go`
+5. Test with `go run cmd/server/main.go`
+
+Note that there is no Go toolchain on the primary dev machine — backend code is
+first compiled on the VPS (`go build -o stackhub ./cmd/server`). Review Go
+changes by reading, and expect SQL errors inside query strings to surface only
+at runtime, as a 500 on the affected endpoint.
 
 ### Frontend Development
 1. Update React Query hooks in `lib/queries/`
 2. Ensure cache invalidation is correct
 3. Test with `npm run dev`
+4. Before considering work done: `npx tsc --noEmit`, `npx next lint` and
+   `npm run build`. ESLint failures (unused vars, `no-html-link-for-pages`) fail
+   the Vercel build and are *not* caught by `tsc`.
 
 ### Database Migrations
-1. Create new SQL file in `backend/migrations/`
-2. Use naming convention: `YYYYMMDD_description.sql`
-3. Run migration system (custom tooling)
+1. Create a new SQL file in `backend/db/migrations/`
+2. Use the naming convention `YYYYMMDDHHMMSS_description.sql`, with
+   `-- +goose Up` / `-- +goose Down` sections
+3. There is no migration runner in the repo — apply migrations by pasting the
+   Up section (minus the goose comment lines) into the Supabase SQL editor
+
+### Deployment order — always migration → backend → frontend
+
+1. **Migration** in the Supabase SQL editor, then verify it applied
+2. **Backend**: `git pull` on the VPS, `go build`, restart the service
+3. **Frontend**: push to `main`; Vercel builds automatically. `NEXT_PUBLIC_*`
+   variables are baked in at build time, so set them *before* the build
+
+Shipping the backend before its migration 404s every affected page — this has
+happened in production. The reverse order is safe: a new frontend against an old
+backend just sees the new fields come back undefined.
 
 ## Testing Guidelines
 
@@ -486,6 +530,24 @@ test('creating post invalidates caches', async () => {
 ```
 
 ## Recent Changes
+
+### 2026-09-19: Doc correction pass
+- **Fixed**: the Backend Development section claimed `sqlc generate` regenerates
+  the Go code. It does not exist here — queries are hand-written into both
+  `query.sql` and `query.sql.go`. This is the most important convention in the
+  repo and it was documented backwards.
+- **Fixed**: rich text editor is Tiptap, not Lexical
+- **Added**: deployment order (migration → backend → frontend) and the reason
+- **Added**: explicit warning that `/admin` has no role check
+- **Added**: frontend pre-flight checks (`tsc`, `next lint`, `build`)
+
+### 2026-09: Tool page ownership
+- **Added**: `tool_owners` join table; owners edit a tool page's logo,
+  description, vendor details and categories inline
+- **Added**: `tools.description_rich` (Tiptap JSON) with `tools.description`
+  kept as its plain-text projection, so search and embeddings are unaffected
+- **Added**: "Claim this page" CTA linking to a Tally form; ownership is granted
+  out of band via `frontend/scripts/grant-tool-owner.mjs`
 
 ### 2025-01-14: Authentication Pattern Modernization
 - **Migrated**: All pages from `getAuthenticatedUser()` to `getServerAuthState()`
@@ -557,7 +619,8 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 # Backend
 cd backend
 go run cmd/server/main.go              # Start server
-sqlc generate                           # Regenerate SQLC code
+# NOTE: `sqlc generate` is not available — hand-write queries into both
+# backend/db/query.sql and backend/pkg/db/query.sql.go (see Backend Development)
 
 # Frontend
 cd frontend
@@ -601,6 +664,6 @@ psql $DB_CONNECTION                     # Connect to database
 
 ---
 
-**Last Updated**: 2025-01-11
+**Last Updated**: 2026-09-19
 **Maintainer**: Project team
 **Questions?** Check the README.md or ask in team chat
