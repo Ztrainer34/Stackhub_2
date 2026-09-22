@@ -43,7 +43,7 @@ async function LandingPage() {
               </Link>
               <Link href="/playbooks" className="flex-1">
                 <Button size="lg" variant="outline" className="w-full">
-                  Explore Playbooks
+                  Explore playbooks
                 </Button>
               </Link>
             </div>
@@ -56,9 +56,9 @@ async function LandingPage() {
         <div className="container px-4 md:px-6 mx-auto">
           <div className="text-center space-y-4 mb-16">
             <Badge variant="outline">
-              Popular Content
+              Popular content
             </Badge>
-            <h2 className="text-3xl md:text-4xl font-bold">Trending Playbooks</h2>
+            <h2 className="text-3xl md:text-4xl font-bold">Trending playbooks</h2>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
               Discover the most popular marketing playbooks and tool comparisons from our community.
             </p>
@@ -131,7 +131,7 @@ async function LandingPage() {
           <div className="text-center mt-12">
             <Link href="/playbooks">
               <Button variant="outline" size="lg">
-                View All Articles
+                View all articles
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>
@@ -159,7 +159,7 @@ async function LandingPage() {
                 <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
                   <GitCompare className="h-6 w-6 text-primary" />
                 </div>
-                <CardTitle>Side-by-Side Comparisons</CardTitle>
+                <CardTitle>Side-by-side comparisons</CardTitle>
                 <CardDescription>
                   Create detailed comparisons between tools with structured templates and visual elements.
                 </CardDescription>
@@ -171,7 +171,7 @@ async function LandingPage() {
                 <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
                   <Layers className="h-6 w-6 text-primary" />
                 </div>
-                <CardTitle>Stack Explanations</CardTitle>
+                <CardTitle>Stack explanations</CardTitle>
                 <CardDescription>
                   Document and explain your entire tech stack with interactive diagrams and detailed breakdowns.
                 </CardDescription>
@@ -183,7 +183,7 @@ async function LandingPage() {
                 <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
                   <PenTool className="h-6 w-6 text-primary" />
                 </div>
-                <CardTitle>Rich Editor</CardTitle>
+                <CardTitle>Rich editor</CardTitle>
                 <CardDescription>
                   Write with our powerful editor featuring formatting options and live previews.
                 </CardDescription>
@@ -195,7 +195,7 @@ async function LandingPage() {
                 <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
                   <Search className="h-6 w-6 text-primary" />
                 </div>
-                <CardTitle>Smart Discovery</CardTitle>
+                <CardTitle>Smart discovery</CardTitle>
                 <CardDescription>
                   Find relevant comparisons and playbooks with powerful search and personalized recommendations.
                 </CardDescription>
@@ -207,7 +207,7 @@ async function LandingPage() {
                 <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
                   <Share2 className="h-6 w-6 text-primary" />
                 </div>
-                <CardTitle>Community Driven</CardTitle>
+                <CardTitle>Community driven</CardTitle>
                 <CardDescription>
                   Vote, comment, and collaborate with other marketers to improve comparisons and insights.
                 </CardDescription>
@@ -219,7 +219,7 @@ async function LandingPage() {
                 <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
                   <TrendingUp className="h-6 w-6 text-primary" />
                 </div>
-                <CardTitle>Analytics & Insights</CardTitle>
+                <CardTitle>Analytics & insights</CardTitle>
                 <CardDescription>
                   Track your article performance and understand what the community finds most valuable.
                 </CardDescription>
@@ -242,13 +242,13 @@ async function LandingPage() {
             <div className="flex flex-col sm:flex-row gap-4 justify-center max-w-md mx-auto">
               <Link href="/new" className="flex-1">
                 <Button size="lg" className="w-full">
-                  Get Started
+                  Get started
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </Link>
               <Link href="/playbooks" className="flex-1">
                 <Button size="lg" variant="outline" className="w-full">
-                  Browse Content
+                  Browse content
                 </Button>
               </Link>
             </div>

@@ -32,9 +32,7 @@ const formSchema = z.object({
   type: z.enum(["playbook", "combo", "comparison"], {
     required_error: "Please select a post type.",
   }),
-  name: z.string().min(2, {
-    message: "Playbook must be at least 2 characters.",
-  }),
+  name: z.string(),
   tools: z.array(z.string().uuid()),
   suggested_tools: z
     .array(
@@ -49,48 +47,36 @@ const formSchema = z.object({
   description: z.string().max(500, {
     message: "Goal must be at most 500 characters long.",
   }),
-}).refine((data) => {
-  const totalTools = data.tools.length + (data.suggested_tools?.length || 0);
+}).superRefine((data, ctx) => {
+  // Mirrors the "{Type} name" label above the input, so the error reads the
+  // same way the field is introduced.
+  const typeLabel = data.type.charAt(0).toUpperCase() + data.type.slice(1);
 
-  // Playbook requires at least 1 tool
-  if (data.type === "playbook") {
-    return totalTools >= 1;
+  if (data.name.length < 2) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `${typeLabel} name must be at least 2 characters.`,
+      path: ["name"],
+    });
   }
 
-  // Combo and Comparison require at least 2 tools
-  if (data.type === "combo" || data.type === "comparison") {
-    return totalTools >= 2;
-  }
-
-  return true;
-}, (data) => {
   const totalTools = data.tools.length + (data.suggested_tools?.length || 0);
 
-  if (data.type === "playbook") {
-    return {
+  if (data.type === "playbook" && totalTools < 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
       message: "A playbook requires at least 1 tool",
       path: ["tools"],
-    };
+    });
   }
 
-  if (data.type === "combo") {
-    return {
-      message: `A combo requires at least 2 tools (you have ${totalTools})`,
+  if ((data.type === "combo" || data.type === "comparison") && totalTools < 2) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `A ${data.type} requires at least 2 tools (you have ${totalTools})`,
       path: ["tools"],
-    };
+    });
   }
-
-  if (data.type === "comparison") {
-    return {
-      message: `A comparison requires at least 2 tools (you have ${totalTools})`,
-      path: ["tools"],
-    };
-  }
-
-  return {
-    message: "Not enough tools selected",
-    path: ["tools"],
-  };
 });
 
 const postTypeMetadata = {
@@ -379,7 +365,7 @@ export function PostCreationForm({
             <FormItem className="flex flex-col">
               <FormLabel>Goal of this {postType.charAt(0).toUpperCase() + postType.slice(1)}</FormLabel>
               <FormDescription>
-                Great goals are short and self explainatory
+                Great goals are short and self-explanatory
               </FormDescription>
               <FormControl>
                 <Textarea

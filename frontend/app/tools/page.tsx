@@ -262,7 +262,7 @@ export default function ToolsPage() {
             }
           </p>
           <p className="text-sm text-muted-foreground">
-            Tools are automatically added when mentioned in playbooks
+            Can&apos;t find a tool? Suggest it when you create a post.
           </p>
         </div>
       )}

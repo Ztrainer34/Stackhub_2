@@ -136,7 +136,7 @@ export function ToolSearch({
         {view === 'search' && (
           <>
             <DialogHeader className="px-4 pt-4 pb-2">
-              <DialogTitle>Search Tools</DialogTitle>
+              <DialogTitle>Search tools</DialogTitle>
             </DialogHeader>
             <div className="px-4 pb-2">
               <div className="relative">
@@ -214,7 +214,7 @@ export function ToolSearch({
                       onClick={() => setView('add-tool')}
                     >
                       <Plus className="h-4 w-4" />
-                      Add Tool
+                      Add tool
                     </Button>
                   </div>
                 </div>
