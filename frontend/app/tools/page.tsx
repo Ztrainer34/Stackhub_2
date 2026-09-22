@@ -320,8 +320,10 @@ export default function ToolsPage() {
                   ? `No tools match "${currentSearch}"`
                   : "There are no tools in this category yet"}
               </p>
+              {/* Tools arrive via tool tickets an admin resolves, not
+                  automatically — the old copy here claimed otherwise. */}
               <p className="text-sm text-muted-foreground">
-                Tools are automatically added when mentioned in playbooks
+                Can&apos;t find a tool? Suggest it when you create a post.
               </p>
             </div>
           )}

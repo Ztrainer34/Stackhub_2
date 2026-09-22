@@ -47,13 +47,13 @@ export default function HomepageContent({
           <CardHeader className="pb-3">
             <CardTitle className="text-lg flex items-center gap-2">
               <Plus className="h-5 w-5 text-primary" />
-              Create New
+              Create new
             </CardTitle>
           </CardHeader>
           <CardContent>
             <Link href="/new">
               <Button className="w-full">
-                Add Playbook
+                Add playbook
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>
@@ -70,7 +70,7 @@ export default function HomepageContent({
           <CardContent>
             <Link href="/playbooks">
               <Button variant="outline" className="w-full">
-                Browse Playbooks
+                Browse playbooks
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>
@@ -87,7 +87,7 @@ export default function HomepageContent({
           <CardContent>
             <Link href="/community">
               <Button variant="outline" className="w-full">
-                Find People
+                Find people
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>
@@ -104,11 +104,11 @@ export default function HomepageContent({
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-2xl font-bold flex items-center gap-2">
               <TrendingUp className="h-6 w-6" />
-              Latest Playbooks
+              Latest playbooks
             </h2>
             <Link href="/playbooks">
               <Button variant="outline" size="sm">
-                View All
+                View all
               </Button>
             </Link>
           </div>
@@ -127,11 +127,11 @@ export default function HomepageContent({
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-2xl font-bold flex items-center gap-2">
               <Users className="h-6 w-6" />
-              Popular Categories
+              Popular categories
             </h2>
             <Link href="/tools">
               <Button variant="outline" size="sm">
-                Browse Tools
+                Browse tools
               </Button>
             </Link>
           </div>

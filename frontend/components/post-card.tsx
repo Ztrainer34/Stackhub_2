@@ -59,13 +59,13 @@ function ConfirmationDialog({
 
   const dialogConfig = {
     delete: {
-      title: "Delete Post",
+      title: "Delete post",
       description: "Are you sure you want to delete this post? This action cannot be undone and all data associated with this post will be permanently removed.",
       confirmText: "Delete",
       confirmVariant: "destructive" as const,
     },
     unpublish: {
-      title: "Unpublish Post",
+      title: "Unpublish post",
       description: "Are you sure you want to unpublish this post? It will no longer be visible to others, but you can publish it again later.",
       confirmText: "Unpublish",
       confirmVariant: "default" as const,

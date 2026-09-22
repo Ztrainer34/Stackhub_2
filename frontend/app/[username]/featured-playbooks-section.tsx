@@ -48,7 +48,7 @@ export default function FeaturedPlaybooksSection({
             onClick={() => setDialogOpen(true)}
             className="text-sm text-primary hover:underline"
           >
-            Customize Playbooks
+            Customize playbooks
           </button>
         )}
       </div>
@@ -63,7 +63,7 @@ export default function FeaturedPlaybooksSection({
         <div className="text-center py-10 border border-dashed rounded-lg">
           <p className="text-muted-foreground">
             {isOwnProfile
-              ? "No featured playbooks yet. Click “Customize Playbooks” to pick up to 6."
+              ? "No featured playbooks yet. Click “Customize playbooks” to pick up to 6."
               : "No featured playbooks yet."}
           </p>
         </div>
@@ -156,7 +156,7 @@ function CustomizePlaybooksDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Customize Playbooks</DialogTitle>
+          <DialogTitle>Customize playbooks</DialogTitle>
           <DialogDescription>
             Pick up to {MAX_KEY_PLAYBOOKS} of your playbooks to feature on your
             profile. Selected {selected.length}/{MAX_KEY_PLAYBOOKS}.

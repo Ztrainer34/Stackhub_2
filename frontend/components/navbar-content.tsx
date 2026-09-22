@@ -149,7 +149,7 @@ export default function NavBarContent({ user }: NavBarContentProps) {
             ) : (
               <Dialog>
                 <DialogTrigger asChild>
-                  <Button variant="outline">Log In</Button>
+                  <Button variant="outline">Login</Button>
                 </DialogTrigger>
                 <DialogContent className="p-10">
                   {!hideDialogTitle && (

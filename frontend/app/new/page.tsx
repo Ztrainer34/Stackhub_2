@@ -30,7 +30,8 @@ export default async function New() {
       <TypographyH1>Create a new Post</TypographyH1>
       <TypographyP>
         A playbook explains how to use a tool to achieve a particular goal. A
-        combo does the same; with multiple tools.
+        combo does the same with several tools, and a comparison weighs
+        tools against each other.
       </TypographyP>
 
       <Separator className="my-5" />

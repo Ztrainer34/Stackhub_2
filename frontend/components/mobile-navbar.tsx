@@ -59,7 +59,7 @@ export function MobileNavbar({ user }: MobileNavbarProps) {
                   onClick={() => setIsOpen(false)}
                 >
                   <Plus className="h-4 w-4" />
-                  <span>Create Post</span>
+                  <span>Create post</span>
                 </Link>
               </div>
               
@@ -155,7 +155,7 @@ export function MobileNavbar({ user }: MobileNavbarProps) {
                     className="flex items-center justify-center p-3 rounded-lg border border-input hover:bg-accent transition-colors"
                     onClick={() => setIsOpen(false)}
                   >
-                    <span>Log In</span>
+                    <span>Login</span>
                   </Link>
                 </div>
               )}

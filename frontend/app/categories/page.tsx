@@ -74,7 +74,7 @@ function CategoryCard({ category }: { category: CategoryItem }) {
           </p>
           <div className="mt-3">
             <Badge variant="secondary" className="text-xs">
-              Browse Tools
+              Browse tools
             </Badge>
           </div>
         </CardContent>
@@ -168,7 +168,7 @@ export default function CategoriesPage() {
             <Grid3X3 className="w-8 h-8 text-primary" />
           </div>
         </div>
-        <h1 className="text-3xl font-bold mb-4">Tool Categories</h1>
+        <h1 className="text-3xl font-bold mb-4">Tool categories</h1>
         <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
           Explore our comprehensive collection of {totalCount}+ software tool categories. 
           Find the perfect tools for your specific needs and workflows.
@@ -227,7 +227,7 @@ export default function CategoriesPage() {
             </p>
             <Link href="/tools">
               <Badge variant="outline" className="px-4 py-2 text-sm hover:bg-primary hover:text-primary-foreground transition-colors">
-                Browse All Tools
+                Browse all tools
               </Badge>
             </Link>
           </CardContent>
