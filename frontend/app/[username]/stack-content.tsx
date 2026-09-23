@@ -298,7 +298,7 @@ export default function StackContent({
   return (
     <div>
       <ToolSection
-        title="Active Stack"
+        title="Active stack"
         icon={<Layers className="w-5 h-5 text-foreground" />}
         tools={stackQuery.data?.tools || []}
         isLoading={stackQuery.isLoading}
@@ -310,7 +310,7 @@ export default function StackContent({
       />
 
       <ToolSection
-        title="Old Stack"
+        title="Old stack"
         icon={<Archive className="w-5 h-5 text-foreground" />}
         subtitle="Tools you used before but no longer actively use"
         tools={oldStackQuery.data?.tools || []}

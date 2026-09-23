@@ -306,7 +306,7 @@ export default function Editor({
 
     if (!resp.ok) {
       // FIXME
-      toast("Error", {});
+      toast("Something went wrong", {});
       return;
     }
 
@@ -350,7 +350,7 @@ export default function Editor({
 
     if (!resp.ok) {
       // FIXME
-      toast("Error", {});
+      toast("Something went wrong", {});
       return;
     }
 
