@@ -76,7 +76,7 @@ export function ToolPageCategories({ tool }: { tool: Tool }) {
     <Card>
       <CardHeader className="flex flex-row items-start justify-between space-y-0">
         <div className="space-y-1.5">
-          <CardTitle>Tool Categories</CardTitle>
+          <CardTitle>Tool categories</CardTitle>
           <CardDescription>
             This tool belongs to the following categories
           </CardDescription>

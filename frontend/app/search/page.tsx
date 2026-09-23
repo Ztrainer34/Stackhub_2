@@ -115,7 +115,7 @@ function ToolCard({ tool }: ToolCardProps) {
             }}
           >
             <ExternalLink className="w-3 h-3 mr-1" />
-            Visit Website
+            Visit website
           </Button>
         )}
       </CardContent>
