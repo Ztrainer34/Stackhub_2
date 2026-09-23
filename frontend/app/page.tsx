@@ -27,11 +27,11 @@ async function LandingPage() {
         <div className="container px-4 md:px-6">
           <div className="flex flex-col items-center text-center space-y-8 max-w-4xl mx-auto">
             <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight">
-              Discover the world&apos;s best tools and playbooks
+              Discover GTMs&apos; best tools and playbooks
             </h1>
 
             <p className="text-xl text-muted-foreground max-w-2xl leading-relaxed">
-              Explore how builders, marketers and product pros make the most of modern tools.
+              Explore how GTMs, marketers and sales make the most of modern tools.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md">
@@ -60,7 +60,7 @@ async function LandingPage() {
             </Badge>
             <h2 className="text-3xl md:text-4xl font-bold">Trending playbooks</h2>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Discover the most popular marketing playbooks and tool comparisons from our community.
+              Discover the most popular GTM playbooks and tool comparisons from our community.
             </p>
           </div>
 
