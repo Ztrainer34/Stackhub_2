@@ -228,14 +228,15 @@ function ToolSection({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-10"
-              // Plain text still works; the title is where the operators are
-              // discoverable without cluttering the placeholder.
+              // One word still works as before; the title is where searching
+              // for several at once is discoverable without cluttering the
+              // placeholder.
               title={
-                'Search supports operators:\n' +
-                '  adobe content    both words\n' +
-                '  adobe|content    either word\n' +
-                '  adobe -cloud     adobe but not cloud\n' +
-                '  "adobe cloud"    that exact phrase'
+                'Search for several things at once — anything matching any ' +
+                'of them is shown:\n' +
+                '  adobe|content\n' +
+                '  adobe content\n' +
+                '  adobe, content'
               }
             />
           </div>

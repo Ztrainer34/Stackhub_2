@@ -1,97 +1,61 @@
 /**
- * A small search language for the client-side filters.
+ * Multi-search for the client-side tool filters.
  *
- * Plain text still behaves the way it always did — `adobe` matches anything
- * containing "adobe" — so nobody has to learn this to keep working. The
- * operators are there when a plain substring is not enough:
+ * One idea only: you can look for several things at once, and anything matching
+ * ANY of them is shown. Typing more terms always widens the result set, never
+ * narrows it.
  *
- *   adobe content      both words, anywhere      (AND — the default)
- *   adobe|content      either word               (OR; `or` also works)
- *   adobe -cloud       "adobe" but not "cloud"   (NOT; `!` also works)
- *   "adobe cloud"      that exact phrase
+ *   adobe|content|a     anything matching adobe, or content, or a
+ *   adobe content       the same — a space is just another separator
+ *   adobe, content      the same again
  *
- * OR binds loosest, so `a b | c` reads as `(a AND b) OR c`.
+ * A single word behaves exactly as it always did, so nobody has to learn this
+ * to keep working.
  *
- * Parsing is deliberately forgiving. This runs on every keystroke against a
- * half-typed query, so a trailing `|`, a lone `-` or an unclosed quote has to
- * mean something sensible rather than throwing or silently matching nothing.
+ * There is deliberately no AND, no negation and no phrase matching. An earlier
+ * version had all three; it turned a search box into a query language, and the
+ * thing people actually wanted was to check several tools in one go.
+ *
+ * Parsing is forgiving, because this runs on every keystroke against a
+ * half-typed query: stray separators, quotes and a leading minus left over from
+ * the old syntax are all dropped rather than matched literally, since matching
+ * them literally would silently return nothing.
  */
 
-/** One term. `negated` means the field must NOT contain it. */
-export interface SearchTerm {
-  text: string;
-  negated: boolean;
-}
+/** The terms to look for, lowercased. Empty means "match everything". */
+export type SearchQuery = string[];
+
+/** `|`, `,` and any whitespace all separate terms; they mean the same thing. */
+const SEPARATORS = /[|,\s]+/;
 
 /**
- * OR of ANDs: the outer array is alternatives, the inner one is terms that must
- * all hold. An empty outer array matches everything — that is how a blank or
- * operator-only query behaves.
+ * Characters that carried meaning in the old operator syntax and carry none
+ * now. Quotes are dropped wherever they appear; `-` and `!` only at the start
+ * of a term, since a hyphen inside a word is part of names like "t-mobile".
  */
-export type SearchQuery = SearchTerm[][];
-
-/** Splits on whitespace, keeping "quoted phrases" whole. */
-function tokenize(input: string): string[] {
-  const tokens: string[] = [];
-  const pattern = /"([^"]*)"|(\S+)/g;
-
-  let match: RegExpExecArray | null;
-  while ((match = pattern.exec(input)) !== null) {
-    // An unclosed quote never matches group 1, so its text falls through to
-    // group 2 and is treated as ordinary words. Half-typed input still filters.
-    tokens.push(match[1] !== undefined ? match[1] : match[2]);
-  }
-
-  return tokens;
-}
+const stripLeftovers = (token: string): string =>
+  token.replace(/"/g, "").replace(/^[-!]+/, "");
 
 export function parseSearchQuery(input: string): SearchQuery {
-  const groups: SearchTerm[][] = [];
-  let current: SearchTerm[] = [];
+  const terms: string[] = [];
 
-  const endGroup = () => {
-    if (current.length > 0) groups.push(current);
-    current = [];
-  };
-
-  for (const raw of tokenize(input)) {
-    // `|` is also accepted glued to words, so "adobe|content" splits here
-    // rather than being read as one odd term.
-    const pieces = raw.split("|");
-
-    pieces.forEach((piece, index) => {
-      if (index > 0) endGroup();
-
-      const token = piece.trim();
-      if (token === "") return;
-
-      // Bare operators from a half-typed query carry no meaning on their own.
-      const lower = token.toLowerCase();
-      if (lower === "or") {
-        endGroup();
-        return;
-      }
-      if (lower === "and" || token === "-" || token === "!") return;
-
-      const negated = token.startsWith("-") || token.startsWith("!");
-      const text = (negated ? token.slice(1) : token).toLowerCase();
-      if (text === "") return;
-
-      current.push({ text, negated });
-    });
+  for (const raw of input.split(SEPARATORS)) {
+    const term = stripLeftovers(raw).toLowerCase();
+    // Duplicates would only make the same comparison twice.
+    if (term !== "" && !terms.includes(term)) {
+      terms.push(term);
+    }
   }
 
-  endGroup();
-  return groups;
+  return terms;
 }
 
 /**
- * True when `fields` satisfies the query. A tool matches if ANY group matches,
- * and a group matches when every one of its terms does.
+ * True when `fields` matches the query — that is, when it contains at least one
+ * of the terms.
  *
- * A term is checked against the fields joined together, so `adobe content`
- * matches a tool named "Adobe" described as "content tooling" — the words do
- * not have to share a field.
+ * Terms are checked against the fields joined together, so a tool named "Adobe"
+ * described as "content tooling" matches either word.
  */
 export function matchesSearchQuery(
   query: SearchQuery,
@@ -104,11 +68,7 @@ export function matchesSearchQuery(
     .join(" ")
     .toLowerCase();
 
-  return query.some((group) =>
-    group.every(({ text, negated }) =>
-      negated ? !haystack.includes(text) : haystack.includes(text)
-    )
-  );
+  return query.some((term) => haystack.includes(term));
 }
 
 /** Parse and match in one step, for callers filtering a list. */

@@ -2,140 +2,97 @@ import { describe, it, expect } from "vitest";
 import { parseSearchQuery, matchesSearchQuery, makeSearchMatcher } from "@/lib/search-query";
 
 /**
- * Small search language for the client-side tool filters. It runs on every
- * keystroke against a half-typed query, so a trailing "|", a lone "-", or an
- * unclosed quote must all parse into *something* sensible - never throw, and
- * never silently produce a query that matches nothing. OR (`|` / `or`) binds
- * loosest, so `a b | c` reads as `(a AND b) OR c`.
+ * Small search language for the client-side tool filters. It is OR-only: there
+ * is no AND, no negation, no phrase matching. Anything matching ANY term is
+ * shown, so typing more terms always WIDENS the result set - the exact
+ * opposite of the older AND/OR/NOT grammar this module used to implement. It
+ * also runs on every keystroke against a half-typed query, so a trailing "|"
+ * or a lone "," must parse into something sensible and never throw.
  */
 
 describe("parseSearchQuery", () => {
-  it("parses a single word into one group with one un-negated term", () => {
-    expect(parseSearchQuery("adobe")).toEqual([[{ text: "adobe", negated: false }]]);
+  it("parses a single word into a one-term query", () => {
+    expect(parseSearchQuery("adobe")).toEqual(["adobe"]);
   });
 
-  it("lowercases term text", () => {
-    expect(parseSearchQuery("Adobe")).toEqual([[{ text: "adobe", negated: false }]]);
+  it("lowercases terms", () => {
+    expect(parseSearchQuery("Adobe")).toEqual(["adobe"]);
   });
 
-  it("treats space-separated words as one AND group", () => {
-    expect(parseSearchQuery("adobe content")).toEqual([
-      [
-        { text: "adobe", negated: false },
-        { text: "content", negated: false },
-      ],
-    ]);
+  it("splits on |, comma and whitespace identically", () => {
+    const expected = ["adobe", "content"];
+    expect(parseSearchQuery("adobe|content")).toEqual(expected);
+    expect(parseSearchQuery("adobe content")).toEqual(expected);
+    expect(parseSearchQuery("adobe, content")).toEqual(expected);
+    expect(parseSearchQuery("adobe,content")).toEqual(expected);
   });
 
-  it("splits into separate OR groups on |", () => {
-    expect(parseSearchQuery("adobe|content")).toEqual([
-      [{ text: "adobe", negated: false }],
-      [{ text: "content", negated: false }],
-    ]);
+  it("matches the product-spec example of three OR'd terms", () => {
+    expect(parseSearchQuery("adobe|content|a")).toEqual(["adobe", "content", "a"]);
   });
 
-  it("splits on | even when glued to a word with no surrounding spaces", () => {
-    // A user rarely types spaces around the pipe.
-    expect(parseSearchQuery("adobe|content")).toHaveLength(2);
+  it("drops duplicate terms", () => {
+    expect(parseSearchQuery("adobe adobe|adobe")).toEqual(["adobe"]);
   });
 
-  it("accepts the word 'or' (any case) as equivalent to |", () => {
-    expect(parseSearchQuery("adobe or content")).toEqual(parseSearchQuery("adobe|content"));
-    expect(parseSearchQuery("adobe OR content")).toEqual(parseSearchQuery("adobe|content"));
+  it("never emits empty terms for runs of separators", () => {
+    expect(parseSearchQuery("adobe||content")).toEqual(["adobe", "content"]);
+    expect(parseSearchQuery("adobe ,  content")).toEqual(["adobe", "content"]);
   });
 
-  it("marks a term negated when prefixed with -", () => {
-    expect(parseSearchQuery("-cloud")).toEqual([[{ text: "cloud", negated: true }]]);
-  });
-
-  it("marks a term negated when prefixed with !", () => {
-    expect(parseSearchQuery("!cloud")).toEqual([[{ text: "cloud", negated: true }]]);
-  });
-
-  it("keeps a quoted phrase as a single term, spaces included, and lowercases it", () => {
-    expect(parseSearchQuery('"Adobe Cloud"')).toEqual([[{ text: "adobe cloud", negated: false }]]);
-  });
-
-  it("gives OR the loosest precedence: 'a b | c' is (a AND b) OR c", () => {
-    expect(parseSearchQuery("a b | c")).toEqual([
-      [
-        { text: "a", negated: false },
-        { text: "b", negated: false },
-      ],
-      [{ text: "c", negated: false }],
-    ]);
-  });
-
-  it("returns no groups for empty input", () => {
+  it("returns an empty array for empty input", () => {
     expect(parseSearchQuery("")).toEqual([]);
   });
 
-  it("returns no groups for whitespace-only input", () => {
+  it("returns an empty array for whitespace-only input", () => {
     expect(parseSearchQuery("   ")).toEqual([]);
   });
 
-  it("returns no groups when the input is only a |", () => {
+  it("returns an empty array for separator-only input", () => {
     expect(parseSearchQuery("|")).toEqual([]);
+    expect(parseSearchQuery(",")).toEqual([]);
+    expect(parseSearchQuery("|||")).toEqual([]);
   });
 
-  it("returns no groups when the input is only a -", () => {
+  it("strips double quotes wherever they appear, with no phrase meaning", () => {
+    // A quoted "phrase" is not a unit here - it parses exactly as if the
+    // quotes were never typed.
+    expect(parseSearchQuery('"adobe cloud"')).toEqual(["adobe", "cloud"]);
+    expect(parseSearchQuery('"adobe" "cloud"')).toEqual(["adobe", "cloud"]);
+  });
+
+  it("strips a leading - or ! from a term", () => {
+    expect(parseSearchQuery("-cloud")).toEqual(["cloud"]);
+    expect(parseSearchQuery("!cloud")).toEqual(["cloud"]);
+  });
+
+  it("keeps a hyphen that is inside a word, since tool names contain them", () => {
+    expect(parseSearchQuery("t-mobile")).toEqual(["t-mobile"]);
+  });
+
+  it("drops a term that is only leading -/!/quotes, leaving nothing behind", () => {
     expect(parseSearchQuery("-")).toEqual([]);
-  });
-
-  it("returns no groups when the input is only a !", () => {
     expect(parseSearchQuery("!")).toEqual([]);
+    expect(parseSearchQuery('""')).toEqual([]);
+    expect(parseSearchQuery('adobe -')).toEqual(["adobe"]);
   });
 
-  it("returns no groups when the input is only 'or'", () => {
-    expect(parseSearchQuery("or")).toEqual([]);
-  });
-
-  it("drops a bare 'and' token without starting a new group", () => {
-    // Space is already AND, so a literal "and" should be a no-op, not a
-    // third kind of separator.
-    expect(parseSearchQuery("adobe and content")).toEqual(parseSearchQuery("adobe content"));
-  });
-
-  it("drops a bare '-' token in the middle of a query", () => {
-    expect(parseSearchQuery("adobe - content")).toEqual(parseSearchQuery("adobe content"));
-  });
-
-  it("drops a bare '!' token in the middle of a query", () => {
-    expect(parseSearchQuery("adobe ! content")).toEqual(parseSearchQuery("adobe content"));
-  });
-
-  it("never emits an empty group for consecutive separators", () => {
-    // "a||b" must give two groups, not three with a hole in the middle.
-    expect(parseSearchQuery("a||b")).toEqual([
-      [{ text: "a", negated: false }],
-      [{ text: "b", negated: false }],
-    ]);
-  });
-
-  it("does not throw on a trailing lone | and drops it", () => {
-    // Happens on literally every keystroke right after typing a pipe.
+  it("parses half-typed input without throwing, dropping the trailing separator", () => {
+    // These are exactly the strings a text box holds mid-keystroke.
     expect(() => parseSearchQuery("adobe|")).not.toThrow();
-    expect(parseSearchQuery("adobe|")).toEqual([[{ text: "adobe", negated: false }]]);
-  });
+    expect(parseSearchQuery("adobe|")).toEqual(["adobe"]);
 
-  it("does not throw on a trailing lone - and drops it", () => {
-    expect(() => parseSearchQuery("adobe -")).not.toThrow();
-    expect(parseSearchQuery("adobe -")).toEqual([[{ text: "adobe", negated: false }]]);
-  });
+    expect(() => parseSearchQuery("adobe,")).not.toThrow();
+    expect(parseSearchQuery("adobe,")).toEqual(["adobe"]);
 
-  it("does not throw on an unclosed quote", () => {
-    expect(() => parseSearchQuery('"adobe')).not.toThrow();
-  });
+    expect(() => parseSearchQuery("adobe |")).not.toThrow();
+    expect(parseSearchQuery("adobe |")).toEqual(["adobe"]);
 
-  it("treats an unclosed quote as ordinary words, not a phrase still waiting to close", () => {
-    // A genuinely closed two-word phrase is one term. An unclosed quote in
-    // front of the same two words must not collapse to that same single
-    // "adobe cloud" phrase term - it has nothing to close it into a phrase.
-    const closed = parseSearchQuery('"adobe cloud"');
-    const unclosed = parseSearchQuery('"adobe cloud');
+    expect(() => parseSearchQuery("|")).not.toThrow();
+    expect(parseSearchQuery("|")).toEqual([]);
 
-    expect(closed).toEqual([[{ text: "adobe cloud", negated: false }]]);
-    expect(unclosed).not.toEqual(closed);
+    expect(() => parseSearchQuery(",")).not.toThrow();
+    expect(parseSearchQuery(",")).toEqual([]);
   });
 });
 
@@ -147,40 +104,37 @@ describe("matchesSearchQuery", () => {
     expect(matchesSearchQuery([], [null, undefined])).toBe(true);
   });
 
-  it("matches terms against fields joined together, not field-by-field", () => {
-    // "adobe content" should match a tool named "Adobe" described as
-    // "content tooling" - neither field alone contains both words.
-    const query = parseSearchQuery("adobe content");
+  it("matches when at least one term is found as a substring", () => {
+    expect(matchesSearchQuery(["adobe"], ["Adobe Express"])).toBe(true);
+  });
+
+  it("does not match when no term is found", () => {
+    expect(matchesSearchQuery(["notion"], ["Adobe Express"])).toBe(false);
+  });
+
+  it("adding a second term widens matches rather than narrowing them", () => {
+    // This is the core OR-only property: a field that only satisfies the
+    // SECOND term must still match once that term is added to the query.
+    // Under the old AND semantics this would have failed.
+    const oneTerm = ["adobe"];
+    const twoTerms = ["adobe", "notion"];
+
+    expect(matchesSearchQuery(oneTerm, ["Notion"])).toBe(false);
+    expect(matchesSearchQuery(twoTerms, ["Notion"])).toBe(true);
+  });
+
+  it("matches fields joined together, not field-by-field", () => {
+    // "content" is in neither field alone but is in the join of the two.
+    const query = parseSearchQuery("content");
+    expect(matchesSearchQuery(query, ["Adobe", "cloud tooling"])).toBe(false);
     expect(matchesSearchQuery(query, ["Adobe", "content tooling"])).toBe(true);
   });
 
-  it("ignores null and undefined entries in fields", () => {
+  it("ignores null and undefined entries in fields without throwing", () => {
     const query = parseSearchQuery("adobe");
+    expect(() => matchesSearchQuery(query, [null, undefined])).not.toThrow();
     expect(matchesSearchQuery(query, [null, "Adobe", undefined])).toBe(true);
-  });
-
-  it("requires every term in a group to match (AND)", () => {
-    const query = parseSearchQuery("adobe content");
-    expect(matchesSearchQuery(query, ["Adobe Express"])).toBe(false);
-  });
-
-  it("matches when any group matches (OR)", () => {
-    const query = parseSearchQuery("adobe|content");
-    expect(matchesSearchQuery(query, ["content tooling"])).toBe(true);
-    expect(matchesSearchQuery(query, ["Adobe Express"])).toBe(true);
-    expect(matchesSearchQuery(query, ["Notion"])).toBe(false);
-  });
-
-  it("excludes fields containing a negated term", () => {
-    const query = parseSearchQuery("adobe -cloud");
-    expect(matchesSearchQuery(query, ["Adobe Express"])).toBe(true);
-    expect(matchesSearchQuery(query, ["Adobe Cloud"])).toBe(false);
-  });
-
-  it("matches a group of only negations against anything lacking that text", () => {
-    const query = parseSearchQuery("-adobe");
-    expect(matchesSearchQuery(query, ["Notion"])).toBe(true);
-    expect(matchesSearchQuery(query, ["Adobe Express"])).toBe(false);
+    expect(matchesSearchQuery(query, [null, undefined])).toBe(false);
   });
 
   it("is case-insensitive regardless of which side has the different case", () => {
@@ -188,25 +142,30 @@ describe("matchesSearchQuery", () => {
     expect(matchesSearchQuery(parseSearchQuery("adobe"), ["ADOBE EXPRESS"])).toBe(true);
   });
 
-  it("matches a quoted phrase only when its words are adjacent in order", () => {
-    const query = parseSearchQuery('"adobe cloud"');
-    expect(matchesSearchQuery(query, ["Adobe Cloud Suite"])).toBe(true);
-    // Both words are present but not adjacent as "adobe cloud" - the phrase
-    // must not silently degrade into an AND of its words.
-    expect(matchesSearchQuery(query, ["cloud storage", "Adobe suite"])).toBe(false);
+  it("matches as a substring rather than requiring a whole word", () => {
+    expect(matchesSearchQuery(["dob"], ["Adobe"])).toBe(true);
+  });
+
+  it("matches the product-spec example against fields hitting only the last term", () => {
+    const query = parseSearchQuery("adobe|content|a");
+    // "Canva" contains none of "adobe"/"content" but does contain the
+    // letter "a" - which is enough to match under OR-only semantics.
+    expect(matchesSearchQuery(query, ["Canva"])).toBe(true);
+    expect(matchesSearchQuery(query, ["Figma"])).toBe(true);
+    // "Intercom" contains none of "adobe", "content" or "a".
+    expect(matchesSearchQuery(query, ["Intercom"])).toBe(false);
   });
 });
 
 describe("makeSearchMatcher", () => {
   it("agrees with parsing then matching separately, for a normal query", () => {
-    const input = "adobe -cloud|content";
+    const input = "adobe|content";
     const fields = ["Adobe Express"];
     expect(makeSearchMatcher(input)(fields)).toBe(matchesSearchQuery(parseSearchQuery(input), fields));
   });
 
   it("agrees with parsing then matching separately, for half-typed edge cases", () => {
-    // These are exactly the strings a text box holds mid-keystroke.
-    const halfTyped = ["", " ", "adobe|", "adobe -", '"adobe', "|", "-", "!", "or"];
+    const halfTyped = ["", " ", "adobe|", "adobe,", "adobe |", "|", ",", '"adobe', "-"];
     const fields = ["Adobe Express", null, "content tooling"];
 
     for (const input of halfTyped) {
@@ -219,10 +178,11 @@ describe("makeSearchMatcher", () => {
     expect(makeSearchMatcher("   ")([])).toBe(true);
   });
 
-  it("filters using AND and NOT together", () => {
-    const matcher = makeSearchMatcher("adobe -cloud");
-    expect(matcher(["Adobe Express"])).toBe(true);
-    expect(matcher(["Adobe Cloud"])).toBe(false);
-    expect(matcher(["Notion"])).toBe(false);
+  it("widens results as more OR terms are typed", () => {
+    const narrow = makeSearchMatcher("adobe");
+    const wide = makeSearchMatcher("adobe|notion");
+
+    expect(narrow(["Notion"])).toBe(false);
+    expect(wide(["Notion"])).toBe(true);
   });
 });

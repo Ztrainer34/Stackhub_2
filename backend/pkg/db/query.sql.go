@@ -3680,7 +3680,18 @@ const getUserFeed = `-- name: GetUserFeed :many
 -- actually run always outranks a post about something you are only watching.
 -- Tools in the old stack are absent entirely — archiving unfollows them.
 --
--- Within a tier the newest event wins. Every branch carries an event_key so a
+-- Recency outranks the tiers. Events from the last 3 days form a "fresh" band
+-- that sorts above everything older, and the tiers order events *within* each
+-- band. Tier alone used to decide absolutely, which let a three-week-old post
+-- from someone you follow sit above a post from this morning about a tool you
+-- run — the feed read as stale even when the site was busy.
+--
+-- The tiers still matter, which is the point of banding rather than sorting by
+-- time alone: among today's events you still see people you follow before
+-- watchlist chatter. Only once an event ages out of the band does recency stop
+-- protecting it.
+--
+-- Within a band and tier the newest event wins. Every branch carries an event_key so a
 -- post matching several reasons appears once, keeping its strongest reason —
 -- which is also what makes a post about both a stack tool and a watchlist tool
 -- rank as a stack post.
