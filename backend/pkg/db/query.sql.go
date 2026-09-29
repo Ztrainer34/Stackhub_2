@@ -3771,7 +3771,9 @@ LEFT JOIN tools t ON t.id = r.tool_id
 WHERE r.rn = 1
   -- A feed is what other people did; your own activity is not news to you.
   AND r.actor_id <> $1
-ORDER BY r.tier, r.occurred_at DESC
+-- 0 for the last 3 days, 1 for everything older: the outermost sort key, so a
+-- fresh event of any tier outranks a stale one of every tier.
+ORDER BY (r.occurred_at < now() - interval '3 days')::int, r.tier, r.occurred_at DESC
 LIMIT $2 OFFSET $3
 `
 

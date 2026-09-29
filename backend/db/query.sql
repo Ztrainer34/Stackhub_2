@@ -1087,7 +1087,18 @@ WHERE id = $1 AND recipient_id = $2;
 -- actually run always outranks a post about something you are only watching.
 -- Tools in the old stack are absent entirely — archiving unfollows them.
 --
--- Within a tier the newest event wins. Every branch carries an event_key so a
+-- Recency outranks the tiers. Events from the last 3 days form a "fresh" band
+-- that sorts above everything older, and the tiers order events *within* each
+-- band. Tier alone used to decide absolutely, which let a three-week-old post
+-- from someone you follow sit above a post from this morning about a tool you
+-- run — the feed read as stale even when the site was busy.
+--
+-- The tiers still matter, which is the point of banding rather than sorting by
+-- time alone: among today's events you still see people you follow before
+-- watchlist chatter. Only once an event ages out of the band does recency stop
+-- protecting it.
+--
+-- Within a band and tier the newest event wins. Every branch carries an event_key so a
 -- post matching several reasons appears once, keeping its strongest reason —
 -- which is also what makes a post about both a stack tool and a watchlist tool
 -- rank as a stack post.
@@ -1178,7 +1189,9 @@ LEFT JOIN tools t ON t.id = r.tool_id
 WHERE r.rn = 1
   -- A feed is what other people did; your own activity is not news to you.
   AND r.actor_id <> sqlc.arg(viewer_id)
-ORDER BY r.tier, r.occurred_at DESC
+-- 0 for the last 3 days, 1 for everything older: the outermost sort key, so a
+-- fresh event of any tier outranks a stale one of every tier.
+ORDER BY (r.occurred_at < now() - interval '3 days')::int, r.tier, r.occurred_at DESC
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
 -- name: SetProfileAvatar :exec
