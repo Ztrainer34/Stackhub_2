@@ -227,15 +227,19 @@ export function ToolSearch({
           <div className="flex flex-col max-h-[70vh]">
             <div className="p-4 pb-2">
               <DialogHeader>
-                <DialogTitle>Add tool</DialogTitle>
+                <DialogTitle>Suggest a tool to add to StackHub</DialogTitle>
                 <DialogDescription className="text-sm space-y-2 pt-1">
                   <span className="block">
-                    Couldn&apos;t find a tool and want to add it? Amazing! Thank
-                    you for your contribution 🙏
+                    Couldn&apos;t find a tool and want to add it?
+                    <br />
+                    Amazing! Thank you for your contribution 🙏
                   </span>
                   <span className="block">
                     Other users will rely on the information you fill in. So
                     please double check its accuracy 🔍
+                    <br />
+                    If our team rejects the info you entered, the tool
+                    won&apos;t be added.
                   </span>
                 </DialogDescription>
               </DialogHeader>
@@ -246,7 +250,7 @@ export function ToolSearch({
                 <SuggestedToolForm
                   onSubmit={handleSuggestTool}
                   onCancel={() => setView('search')}
-                  submitLabel="Add tool"
+                  submitLabel="Suggest tool"
                 />
               </div>
             </ScrollArea>
