@@ -16,30 +16,9 @@ import {
 } from "lucide-react";
 import { useFeed } from "@/lib/queries/use-feed";
 import { FeedItem } from "@/lib/feed";
+import { timeAgo } from "@/lib/time-ago";
 
 /** "3 hours ago" / "2 days ago" — compact relative time for feed entries. */
-function timeAgo(iso: string): string {
-  const seconds = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
-  const units: [number, Intl.RelativeTimeFormatUnit][] = [
-    [60, "second"],
-    [60, "minute"],
-    [24, "hour"],
-    [7, "day"],
-    [4.35, "week"],
-    [12, "month"],
-  ];
-  let value = seconds;
-  let unit: Intl.RelativeTimeFormatUnit = "second";
-  for (const [step, next] of units) {
-    if (Math.abs(value) < step) break;
-    value /= step;
-    unit = next;
-  }
-  return new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(
-    -Math.round(value),
-    unit
-  );
-}
 
 function ActorLink({ username }: { username: string }) {
   return (
@@ -127,9 +106,14 @@ function FeedRow({ item }: { item: FeedItem }) {
             · {timeAgo(item.occurred_at)}
           </span>
 
-          {item.reason === "following_tool" && (
+          {item.reason === "stack_tool" && (
             <Badge variant="outline" className="text-[10px] font-normal">
-              tool you follow
+              in your stack
+            </Badge>
+          )}
+          {item.reason === "watchlist_tool" && (
+            <Badge variant="outline" className="text-[10px] font-normal">
+              saved for later
             </Badge>
           )}
           {item.reason === "latest" && (

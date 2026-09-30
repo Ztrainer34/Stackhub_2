@@ -103,7 +103,7 @@ export function RenamePostDialog({ post }: RenamePostDialogProps) {
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Rename Post</DialogTitle>
+          <DialogTitle>Rename post</DialogTitle>
           <DialogDescription>
             Update the title and description of your post. The URL will automatically update if you change the title.
           </DialogDescription>
@@ -165,7 +165,7 @@ export function RenamePostDialog({ post }: RenamePostDialogProps) {
             </Button>
             <Button type="submit" disabled={isLoading || !name.trim()}>
               {isLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Save Changes
+              Save changes
             </Button>
           </div>
         </form>

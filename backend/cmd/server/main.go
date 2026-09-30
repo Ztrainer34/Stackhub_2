@@ -3089,6 +3089,19 @@ func (app *App) addToWatchlist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Saving a tool for later implies wanting its updates, same as adding it to
+	// the stack. The feed ranks these below stack tools rather than treating the
+	// two follows as equal — see the tiers in GetUserFeed.
+	err = qtx.FollowTool(r.Context(), db.FollowToolParams{
+		ProfileID: userID,
+		ToolID:    toolID,
+	})
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to add to watchlist", http.StatusInternalServerError)
+		return
+	}
+
 	err = qtx.RemoveFromStack(r.Context(), db.RemoveFromStackParams{
 		ProfileID: userID,
 		ToolID:    toolID,
@@ -3170,6 +3183,20 @@ func (app *App) addToOldStack(w http.ResponseWriter, r *http.Request) {
 	qtx := app.queries.WithTx(tx)
 
 	err = qtx.AddToOldStack(r.Context(), db.AddToOldStackParams{
+		ProfileID: userID,
+		ToolID:    toolID,
+	})
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to add to old stack", http.StatusInternalServerError)
+		return
+	}
+
+	// Archiving a tool means you have stopped using it, so stop following it
+	// too — the inverse of the auto-follow on stack and watchlist. This is the
+	// one place a follow is removed automatically; unfollowing is otherwise a
+	// deliberate act.
+	err = qtx.UnfollowTool(r.Context(), db.UnfollowToolParams{
 		ProfileID: userID,
 		ToolID:    toolID,
 	})

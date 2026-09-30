@@ -83,7 +83,7 @@ export function ToolPageVendor({ tool }: { tool: Tool }) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
-        <CardTitle>Vendor Information</CardTitle>
+        <CardTitle>Vendor information</CardTitle>
         {current.is_owner && (
           <EditButton label="Edit vendor information" onClick={openDialog} />
         )}
@@ -114,7 +114,7 @@ export function ToolPageVendor({ tool }: { tool: Tool }) {
                 rel="noopener noreferrer"
                 className="text-sm text-primary hover:underline flex items-center gap-1"
               >
-                LinkedIn Profile
+                LinkedIn profile
                 <ExternalLink className="w-3 h-3" />
               </a>
             </div>

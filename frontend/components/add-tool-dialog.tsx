@@ -65,22 +65,26 @@ export function AddToolDialog() {
       <DialogTrigger asChild>
         <Button>
           <Plus className="h-4 w-4 mr-2" />
-          Add tool
+          Add a tool
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[550px] max-h-[85vh] overflow-y-auto">
         {view === "form" ? (
           <>
             <DialogHeader>
-              <DialogTitle>Add tool</DialogTitle>
+              <DialogTitle>Suggest a tool to add to StackHub</DialogTitle>
               <DialogDescription className="text-sm space-y-2 pt-1">
                 <span className="block">
-                  Couldn&apos;t find a tool and want to add it? Amazing! Thank
-                  you for your contribution 🙏
+                  Couldn&apos;t find a tool and want to add it?
+                  <br />
+                  Amazing! Thank you for your contribution 🙏
                 </span>
                 <span className="block">
                   Other users will rely on the information you fill in. So
                   please double check its accuracy 🔍
+                  <br />
+                  If our team rejects the info you entered, the tool
+                  won&apos;t be added.
                 </span>
               </DialogDescription>
             </DialogHeader>
@@ -88,14 +92,14 @@ export function AddToolDialog() {
             <SuggestedToolForm
               onSubmit={handleSubmit}
               onCancel={() => setOpen(false)}
-              submitLabel={isSubmitting ? "Submitting..." : "Add tool"}
+              submitLabel={isSubmitting ? "Submitting..." : "Suggest tool"}
             />
           </>
         ) : (
           <div className="p-2 text-center">
             <DialogHeader className="mb-4">
               <DialogTitle className="text-center">
-                Thank you for adding a new tool!
+                Thanks for suggesting a tool!
               </DialogTitle>
               <DialogDescription className="text-sm pt-3 text-center">
                 Once we&apos;ve reviewed the information, we&apos;ll add your

@@ -7,7 +7,8 @@ import { fetchApiAuthenticated } from "./api";
  */
 export type FeedReason =
   | "following_user"
-  | "following_tool"
+  | "stack_tool"
+  | "watchlist_tool"
   | "latest"
   | "post_star"
   | "post_comment"
@@ -21,8 +22,17 @@ export interface FeedItem {
   reason: FeedReason;
   /**
    * How closely the event concerns the viewer: 0 things about you, 1 people you
-   * follow, 2 tools you follow, 3 discovery filler. The server sorts by this
-   * first, then by recency within the tier.
+   * follow, 2 tools in your stack, 3 other followed tools (watchlist and manual
+   * follows), 4 discovery filler.
+   *
+   * Tier is the *second* sort key, not the first. The server bands events by
+   * age — the last 3 days above everything older — and sorts by tier within
+   * each band. So a fresh tier 3 outranks a stale tier 1, while among today's
+   * events a stack tool still outranks a watchlisted one.
+   *
+   * The list therefore is NOT globally ordered by tier: the same tier appears
+   * twice, once in each band. Do not group rows by tier assuming they are
+   * contiguous.
    */
   tier: number;
   occurred_at: string;

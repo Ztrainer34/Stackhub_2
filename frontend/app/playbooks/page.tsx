@@ -120,7 +120,7 @@ export default function PlaybooksPage() {
       <div className="flex items-center gap-3 mb-6">
         <BookOpen className="w-7 h-7 text-primary" />
         <div>
-          <h1 className="text-2xl font-bold">Explore Playbooks</h1>
+          <h1 className="text-2xl font-bold">Explore playbooks</h1>
           <p className="text-sm text-muted-foreground">
             Step-by-step guides for using tools effectively
           </p>
