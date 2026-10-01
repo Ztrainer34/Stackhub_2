@@ -4,17 +4,41 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 
+/**
+ * Where Supabase sends someone back to after they follow a login link.
+ *
+ * It has to be the origin they are actually on. Hardcoding the production URL
+ * meant every Vercel preview bounced people to stackhub.me the moment they
+ * logged in, so a preview could never be used signed in — which is the one
+ * thing a preview is for.
+ *
+ * VERCEL_URL is set by Vercel per deployment and holds that deployment's own
+ * hostname, preview or production alike. This is a server action, so it is read
+ * at runtime and needs no NEXT_PUBLIC_ prefix. The final fallback covers a
+ * production build running anywhere that is not Vercel.
+ *
+ * Supabase REJECTS a redirect that is not allow-listed, so the preview hostname
+ * pattern must also exist under Authentication -> URL Configuration -> Redirect
+ * URLs. Without that entry the exchange fails and the user lands on
+ * /auth/auth-code-error.
+ */
+function authCallbackUrl(): string {
+  if (process.env.NODE_ENV === "development") {
+    return "http://localhost:3000/auth/callback";
+  }
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}/auth/callback`;
+  }
+  return "https://stackhub.me/auth/callback";
+}
+
 export async function googleLogin() {
   const supabase = await createClient();
-
-  const isDev = process.env.NODE_ENV === "development";
 
   const resp = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
-      redirectTo: isDev
-        ? "http://localhost:3000/auth/callback"
-        : "https://stackhub.me/auth/callback",
+      redirectTo: authCallbackUrl(),
     },
   });
 
@@ -28,15 +52,11 @@ export async function googleLogin() {
 export async function sendMagicLink(email: string) {
   const supabase = await createClient();
 
-  const isDev = process.env.NODE_ENV === "development";
-
   const { error } = await supabase.auth.signInWithOtp({
     email,
     options: {
       shouldCreateUser: true,
-      emailRedirectTo: isDev
-        ? "http://localhost:3000/auth/callback"
-        : "https://stackhub.me/auth/callback",
+      emailRedirectTo: authCallbackUrl(),
     },
   });
 
