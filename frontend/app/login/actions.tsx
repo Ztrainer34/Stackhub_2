@@ -26,9 +26,16 @@ function authCallbackUrl(): string {
   if (process.env.NODE_ENV === "development") {
     return "http://localhost:3000/auth/callback";
   }
-  if (process.env.VERCEL_URL) {
+
+  // PREVIEW ONLY. VERCEL_URL holds the deployment's own generated hostname
+  // (stackhub-2-...vercel.app) on EVERY deployment, production included — it is
+  // never the custom domain. Using it unconditionally would send production
+  // logins to a vercel.app URL instead of stackhub.me, so this is gated on
+  // VERCEL_ENV and production keeps the literal below.
+  if (process.env.VERCEL_ENV === "preview" && process.env.VERCEL_URL) {
     return `https://${process.env.VERCEL_URL}/auth/callback`;
   }
+
   return "https://stackhub.me/auth/callback";
 }
 
