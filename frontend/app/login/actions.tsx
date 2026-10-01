@@ -27,13 +27,26 @@ function authCallbackUrl(): string {
     return "http://localhost:3000/auth/callback";
   }
 
-  // PREVIEW ONLY. VERCEL_URL holds the deployment's own generated hostname
-  // (stackhub-2-...vercel.app) on EVERY deployment, production included — it is
-  // never the custom domain. Using it unconditionally would send production
-  // logins to a vercel.app URL instead of stackhub.me, so this is gated on
-  // VERCEL_ENV and production keeps the literal below.
-  if (process.env.VERCEL_ENV === "preview" && process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}/auth/callback`;
+  // PREVIEW ONLY, and VERCEL_BRANCH_URL rather than VERCEL_URL.
+  //
+  // Vercel gives a deployment two hostnames. VERCEL_URL is the per-deployment
+  // one and carries a build hash that changes on every push, so it can never be
+  // allow-listed in Supabase by hand. VERCEL_BRANCH_URL is the branch alias —
+  // stackhub-2-...-git-<branch>-<scope>.vercel.app — which is stable for the
+  // life of the branch and is the link people actually share.
+  //
+  // Supabase silently substitutes the Site URL for a redirect it does not
+  // allow, so getting this wrong looks like a redirect to production with the
+  // code stranded in the query string, not like an error.
+  //
+  // Gated on VERCEL_ENV because VERCEL_URL and VERCEL_BRANCH_URL are both set on
+  // production deployments too, where they hold a vercel.app hostname and never
+  // the custom domain.
+  if (process.env.VERCEL_ENV === "preview") {
+    const previewHost = process.env.VERCEL_BRANCH_URL || process.env.VERCEL_URL;
+    if (previewHost) {
+      return `https://${previewHost}/auth/callback`;
+    }
   }
 
   return "https://stackhub.me/auth/callback";
