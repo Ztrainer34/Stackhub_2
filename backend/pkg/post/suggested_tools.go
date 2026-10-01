@@ -15,6 +15,9 @@ type CreatePostWithSuggestedToolsForm struct {
 	Description    string                    `json:"description"`
 	Tools          []uuid.UUID               `json:"tools"`
 	SuggestedTools []CreateSuggestedToolForm `json:"suggested_tools"`
+	// Optional. Empty string means "not answered" and is stored as NULL.
+	// See ValidExperienceLevels in post.go for the accepted values.
+	ExperienceLevel string `json:"experience_level"`
 }
 
 type ApproveSuggestedToolForm struct {

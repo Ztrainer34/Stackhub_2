@@ -1,5 +1,5 @@
 {
-  "//": "Tools are looked up by name in the existing catalog (never created). Names must match real tools.",
+  "//": "Tools are looked up by name in the existing catalog. Names must match real tools.",
 
   "users": [
     {

@@ -21,6 +21,11 @@ interface CreatePostData {
     categories: number[];
   }>;
   description: string;
+  /**
+   * Optional. "" or omitted means "not answered" and the backend stores NULL.
+   * Anything other than the three levels is rejected with a 400.
+   */
+  experience_level?: "" | "beginner" | "intermediate" | "advanced";
 }
 
 interface CreatePostResponse {

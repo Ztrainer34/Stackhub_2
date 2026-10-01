@@ -1,5 +1,5 @@
 import { getServerAuthState } from "@/lib/auth-server";
-import { getRecommendedTopPosts, getTopCategories } from "@/lib/homepage";
+import { getRecommendedTopPosts, getPopularTools } from "@/lib/homepage";
 import Link from "next/link";
 import HomepageContent from "@/components/homepage-content";
 import { createClient } from "@/utils/supabase/server";
@@ -266,17 +266,18 @@ export default async function HomePage() {
     return LandingPage();
   }
 
-  // Pre-fetch data for authenticated users
+  // Pre-fetch data for authenticated users. Six of each — the dashboard shows
+  // two rows of three, and fetching more would only be discarded client-side.
   const supabase = await createClient();
-  const [topPosts, topCategories] = await Promise.all([
-    getRecommendedTopPosts(12, supabase),
-    getTopCategories(8),
+  const [topPosts, popularTools] = await Promise.all([
+    getRecommendedTopPosts(6, supabase),
+    getPopularTools(6),
   ]);
 
   return (
     <HomepageContent
       initialTopPosts={topPosts}
-      initialTopCategories={topCategories}
+      initialPopularTools={popularTools}
       user={authState.user}
     />
   );

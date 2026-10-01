@@ -27,6 +27,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ToolLogo } from "@/components/tool-logo";
 import { toast } from "sonner";
 import { useCreatePost } from "@/lib/queries/use-post-actions";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const formSchema = z.object({
   type: z.enum(["playbook", "combo", "comparison"], {
@@ -47,6 +54,12 @@ const formSchema = z.object({
   description: z.string().max(500, {
     message: "Goal must be at most 500 characters long.",
   }),
+  // Optional. "" is the "not answered" value the Select starts on, and the
+  // backend stores it as NULL. The three levels mirror the CHECK constraint on
+  // posts.experience_level.
+  experience_level: z
+    .enum(["", "beginner", "intermediate", "advanced"])
+    .optional(),
 }).superRefine((data, ctx) => {
   // Mirrors the "{Type} name" label above the input, so the error reads the
   // same way the field is introduced.
@@ -119,6 +132,7 @@ export function PostCreationForm({
       tools: [],
       suggested_tools: [],
       description: "",
+      experience_level: "",
     },
   });
 
@@ -374,6 +388,43 @@ export function PostCreationForm({
                   {...field}
                 />
               </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        {/* Optional on purpose: this screen already asks a lot before anyone
+            can publish, and a required dropdown here is friction on the step
+            with the highest drop-off. */}
+        <FormField
+          control={form.control}
+          name="experience_level"
+          render={({ field }) => (
+            <FormItem className="flex flex-col">
+              <FormLabel>
+                Experience level{" "}
+                <span className="font-normal text-muted-foreground">
+                  Optional
+                </span>
+              </FormLabel>
+              <FormDescription>
+                What experience level should someone have to get the most out of
+                this {postType}?
+              </FormDescription>
+              <Select
+                onValueChange={field.onChange}
+                value={field.value ?? ""}
+              >
+                <FormControl>
+                  <SelectTrigger className="sm:w-64">
+                    <SelectValue placeholder="Select a level" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="beginner">Beginner</SelectItem>
+                  <SelectItem value="intermediate">Intermediate</SelectItem>
+                  <SelectItem value="advanced">Advanced</SelectItem>
+                </SelectContent>
+              </Select>
               <FormMessage />
             </FormItem>
           )}

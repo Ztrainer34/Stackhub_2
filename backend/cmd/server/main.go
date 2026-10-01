@@ -161,12 +161,25 @@ func (app *App) createPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Optional, so an empty string is "not answered" and stores NULL. Anything
+	// else must be one of the three levels; rejecting it here turns a CHECK
+	// constraint violation into a 400 that names the field.
+	experienceLevel := pgtype.Text{}
+	if trimmed := strings.TrimSpace(strings.ToLower(form.ExperienceLevel)); trimmed != "" {
+		if !post.ValidExperienceLevels[trimmed] {
+			http.Error(w, "Unknown experience level", http.StatusBadRequest)
+			return
+		}
+		experienceLevel = pgtype.Text{String: trimmed, Valid: true}
+	}
+
 	createPostParams := db.CreatePostParams{
-		AuthorID:    userID,
-		Type:        form.Type,
-		Name:        form.Name,
-		Slug:        post.NameToSlug(form.Name),
-		Description: form.Description,
+		AuthorID:        userID,
+		Type:            form.Type,
+		Name:            form.Name,
+		Slug:            post.NameToSlug(form.Name),
+		Description:     form.Description,
+		ExperienceLevel: experienceLevel,
 	}
 
 	tx, err := app.db.Begin(r.Context())
@@ -2359,21 +2372,36 @@ func (app *App) getTopPosts(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(posts)
 	} else {
-		params := db.GetTopRecommendedPostsParams{
-			LikerID:         userID,
-			Limit:           100,
-			IsAuthenticated: true,
-		}
-
-		posts, err := app.queries.GetTopRecommendedPosts(r.Context(), params)
+		// Ranked against the viewer's own tool graph — stack, follows, starred
+		// playbooks, then people they follow. This replaced an embedding
+		// similarity ranking that returned nothing at all for anyone whose
+		// profile embedding was still null, i.e. every new account.
+		posts, err := app.queries.GetTrendingPlaybooksForUser(r.Context(), db.GetTrendingPlaybooksForUserParams{
+			ViewerID:  userID,
+			PageLimit: limit,
+		})
 		if err != nil {
 			log.Println(err)
 			http.Error(w, "Could not get top posts", http.StatusInternalServerError)
 			return
 		}
 
-		if posts == nil {
-			posts = []db.GetTopRecommendedPostsRow{}
+		// A viewer with an empty tool graph — no stack, no follows, no stars —
+		// matches no tier at all. Fall back to the public listing rather than
+		// showing them an empty dashboard.
+		if len(posts) == 0 {
+			fallback, err := app.queries.GetTopPosts(r.Context(), limit)
+			if err != nil {
+				log.Println(err)
+				http.Error(w, "Could not get top posts", http.StatusInternalServerError)
+				return
+			}
+			if fallback == nil {
+				fallback = []db.PostsWithTool{}
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(fallback)
+			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -2407,6 +2435,35 @@ func (app *App) getTopCategories(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(categories)
+}
+
+// getPopularTools backs the dashboard's "Popular tools" section. Public: the
+// ranking is the same for everyone, so it needs no viewer.
+func (app *App) getPopularTools(w http.ResponseWriter, r *http.Request) {
+	limit := int32(6) // The dashboard shows six.
+
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if parsedLimit, err := strconv.ParseInt(limitStr, 10, 32); err == nil && parsedLimit > 0 {
+			limit = int32(parsedLimit)
+			if limit > 100 { // Upper bound
+				limit = 100
+			}
+		}
+	}
+
+	tools, err := app.queries.GetPopularTools(r.Context(), limit)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Could not get popular tools", http.StatusInternalServerError)
+		return
+	}
+
+	if tools == nil {
+		tools = []db.GetPopularToolsRow{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(tools)
 }
 
 func (app *App) facets(w http.ResponseWriter, r *http.Request) {
@@ -4633,6 +4690,7 @@ func main() {
 		r.Get("/post/{slug}/content", app.getPostContent)
 		r.Get("/post/{id}/comment", app.listPostComments)
 		r.Get("/homepage/top-posts", app.getTopPosts)
+		r.Get("/homepage/popular-tools", app.getPopularTools)
 
 		r.Get("/user/{slug}/posts", app.listUserPosts)
 		r.Get("/user/{slug}/followers", app.listFollowers)

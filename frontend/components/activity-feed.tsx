@@ -162,13 +162,12 @@ export default function ActivityFeed({ limit = 20 }: { limit?: number }) {
 
   return (
     <section className="mb-10">
-      <div className="flex items-center gap-2 mb-2">
+      {/* No subtitle: the rows explain themselves, and a line of prose under
+          every heading pushed the actual feed below the fold. */}
+      <div className="flex items-center gap-2 mb-4">
         <Activity className="h-5 w-5 text-primary" />
         <h2 className="text-2xl font-semibold">Your feed</h2>
       </div>
-      <p className="text-muted-foreground mb-4">
-        What happened to you, then playbooks from the people and tools you follow
-      </p>
 
       {isLoading ? (
         <div className="space-y-4">

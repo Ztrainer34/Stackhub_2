@@ -112,10 +112,13 @@ ORDER BY name
 LIMIT 5; -- FIXME
 
 -- name: CreatePost :one
+-- experience_level is optional; sqlc.narg gives a nullable parameter so an
+-- unanswered dropdown stores NULL rather than an empty string that would fail
+-- the CHECK constraint.
 INSERT INTO posts (
-  author_id, type, name, slug, description
+  author_id, type, name, slug, description, experience_level
 ) VALUES (
-  $1, $2, $3, $4, $5
+  $1, $2, $3, $4, $5, sqlc.narg(experience_level)
 )
 RETURNING id, slug;
 
@@ -1292,3 +1295,112 @@ DELETE FROM tool_categories WHERE tool_id = $1;
 INSERT INTO tool_categories (tool_id, category_id)
 SELECT $1, unnest($2::int[])
 ON CONFLICT DO NOTHING;
+
+-- name: GetTrendingPlaybooksForUser :many
+-- Personalised "Trending playbooks" for the dashboard, ranked by how close a
+-- playbook's tools sit to the viewer's own tool graph:
+--
+--   tier 1  a tool in the viewer's active stack
+--   tier 2  a tool the viewer follows (watchlist plus manual follows)
+--   tier 3  a tool appearing in a playbook the viewer starred
+--   tier 4  a tool used by someone the viewer follows, in one of their playbooks
+--
+-- A playbook matching several tiers keeps its STRONGEST (lowest) one, via
+-- MIN(tier) — so a post about a stack tool never sinks to tier 4 merely because
+-- someone the viewer follows also uses that tool. Within a tier the most
+-- recently published wins.
+--
+-- Posts the viewer already starred are excluded: this section exists to surface
+-- things they have not seen, and a starred post is already saved. is_starred is
+-- therefore always false, and is kept only so the JSON shape matches the other
+-- post listings the frontend consumes.
+--
+-- This replaces an embedding cosine-similarity ranking that returned NOTHING at
+-- all when a viewer's profile embedding was still null — a silently empty
+-- section for every new account.
+WITH
+  stack_tools AS (
+    SELECT tool_id FROM stack_items WHERE profile_id = sqlc.arg(viewer_id)
+  ),
+  followed_tools AS (
+    SELECT tool_id FROM tool_follows WHERE profile_id = sqlc.arg(viewer_id)
+  ),
+  starred_tools AS (
+    SELECT DISTINCT pt.tool_id
+    FROM post_stars ps
+    JOIN post_tools pt ON pt.post_id = ps.post_id
+    WHERE ps.liker_id = sqlc.arg(viewer_id)
+  ),
+  followed_people_tools AS (
+    SELECT DISTINCT pt.tool_id
+    FROM user_follows uf
+    JOIN posts fp ON fp.author_id = uf.followee_id AND fp.is_published
+    JOIN post_tools pt ON pt.post_id = fp.id
+    WHERE uf.follower_id = sqlc.arg(viewer_id)
+  ),
+  candidates AS (
+    SELECT pt.post_id, 1 AS tier FROM post_tools pt
+      WHERE pt.tool_id IN (SELECT tool_id FROM stack_tools)
+    UNION ALL
+    SELECT pt.post_id, 2 FROM post_tools pt
+      WHERE pt.tool_id IN (SELECT tool_id FROM followed_tools)
+    UNION ALL
+    SELECT pt.post_id, 3 FROM post_tools pt
+      WHERE pt.tool_id IN (SELECT tool_id FROM starred_tools)
+    UNION ALL
+    SELECT pt.post_id, 4 FROM post_tools pt
+      WHERE pt.tool_id IN (SELECT tool_id FROM followed_people_tools)
+  ),
+  ranked AS (
+    SELECT post_id, MIN(tier) AS tier FROM candidates GROUP BY post_id
+  )
+SELECT
+  pwt.id, pwt.type, pwt.name, pwt.slug, pwt.description,
+  pwt.updated_at, pwt.created_at, pwt.last_draft_update, pwt.last_publish,
+  pwt.author_id, pwt.is_published, pwt.author_username, pwt.tools,
+  r.tier::int AS tier,
+  false AS is_starred
+FROM ranked r
+JOIN posts_with_tools_and_tickets pwt ON pwt.id = r.post_id
+JOIN posts p ON p.id = r.post_id
+WHERE p.is_published
+  AND p.last_publish IS NOT NULL
+  AND p.author_id <> sqlc.arg(viewer_id)
+  AND NOT EXISTS (
+    SELECT 1 FROM post_stars ps
+    WHERE ps.post_id = p.id AND ps.liker_id = sqlc.arg(viewer_id)
+  )
+ORDER BY r.tier, p.last_publish DESC
+LIMIT sqlc.arg(page_limit);
+
+-- name: GetPopularTools :many
+-- Tools "rising this week", for the dashboard shelf.
+--
+-- The weekly signal is how many playbooks published in the last 7 days mention
+-- the tool — people writing about it right now. Stack membership CANNOT provide
+-- this: stack_items is (profile_id, tool_id) with no timestamp, so there is no
+-- way to know when a tool was added to anyone's stack. Publishing activity is
+-- the only "this week" the schema can actually answer.
+--
+-- All-time stack count breaks ties, so a quiet week falls back to the tools
+-- most people run rather than emptying the shelf. Name breaks the remaining
+-- ties, keeping the order stable between loads instead of shuffling.
+SELECT
+  twd.id, twd.name, twd.description, twd.logo_url,
+  twd.created_at, twd.updated_at, twd.categories, twd.vendor,
+  COUNT(DISTINCT si.profile_id) AS stack_count,
+  COUNT(DISTINCT recent.post_id) AS recent_mentions
+FROM tools_with_details twd
+LEFT JOIN stack_items si ON si.tool_id = twd.id
+LEFT JOIN (
+  SELECT pt.tool_id, pt.post_id
+  FROM post_tools pt
+  JOIN posts p ON p.id = pt.post_id
+  WHERE p.is_published
+    AND p.last_publish IS NOT NULL
+    AND p.last_publish >= now() - interval '7 days'
+) recent ON recent.tool_id = twd.id
+GROUP BY twd.id, twd.name, twd.description, twd.logo_url,
+         twd.created_at, twd.updated_at, twd.categories, twd.vendor
+ORDER BY recent_mentions DESC, stack_count DESC, twd.name ASC
+LIMIT sqlc.arg(page_limit);

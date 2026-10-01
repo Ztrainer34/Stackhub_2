@@ -297,86 +297,51 @@ func TestFeedExcludesOwnPostsIntegration(t *testing.T) {
 	}
 }
 
-// twoPostsDistinctAuthors finds two published posts by two different authors,
-// neither of them the viewer, where the first has a tool the second does not
-// carry. That shape is what lets the caller drive one post to tier 3 (a followed
-// tool) and the other to tier 1 (a followed author) independently.
-func twoPostsDistinctAuthors(t *testing.T, tx pgx.Tx, viewer uuid.UUID) (freshPost, freshTool, stalePost, staleAuthor uuid.UUID) {
+// postCarrying finds a published post that uses the given tool and was written
+// by somebody other than the viewer.
+func postCarrying(t *testing.T, tx pgx.Tx, viewer, tool uuid.UUID) uuid.UUID {
 	t.Helper()
-	ctx := context.Background()
 
-	type candidate struct {
-		post, author uuid.UUID
-		tools        map[uuid.UUID]bool
-	}
-
-	rows, err := tx.Query(ctx, `
-		SELECT p.id, p.author_id, pt.tool_id
+	var post uuid.UUID
+	err := tx.QueryRow(context.Background(), `
+		SELECT p.id
 		FROM posts p
 		JOIN post_tools pt ON pt.post_id = p.id
-		WHERE p.is_published AND p.last_publish IS NOT NULL AND p.author_id <> $1`, viewer)
+		WHERE pt.tool_id = $1
+		  AND p.is_published AND p.last_publish IS NOT NULL
+		  AND p.author_id <> $2
+		LIMIT 1`, tool, viewer).Scan(&post)
 	if err != nil {
-		t.Fatalf("select candidate posts: %v", err)
+		t.Skipf("no published post by another author uses this tool (%v)", err)
 	}
-	defer rows.Close()
-
-	byPost := map[uuid.UUID]*candidate{}
-	var order []uuid.UUID
-	for rows.Next() {
-		var post, author, tool uuid.UUID
-		if err := rows.Scan(&post, &author, &tool); err != nil {
-			t.Fatalf("scan: %v", err)
-		}
-		if byPost[post] == nil {
-			byPost[post] = &candidate{post: post, author: author, tools: map[uuid.UUID]bool{}}
-			order = append(order, post)
-		}
-		byPost[post].tools[tool] = true
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate candidates: %v", err)
-	}
-
-	// Different authors, and a tool on the first that the second does not share.
-	// A shared tool would give the stale post a tool reason too, and the feed
-	// keeps a post's strongest reason — so the pair would stop isolating the
-	// band rule from the tier rule.
-	for _, a := range order {
-		for _, b := range order {
-			if a == b || byPost[a].author == byPost[b].author {
-				continue
-			}
-			for tool := range byPost[a].tools {
-				if !byPost[b].tools[tool] {
-					return a, tool, b, byPost[b].author
-				}
-			}
-		}
-	}
-
-	t.Skip("need two published posts by different authors with an unshared tool")
-	return uuid.Nil, uuid.Nil, uuid.Nil, uuid.Nil
+	return post
 }
 
 // TestFeedRecencyBandIntegration is the test for the ordering rule itself:
 // events from the last 3 days band above everything older, and tier only orders
 // events *within* a band.
 //
-// The adversarial case is the one that inverted: a FRESH tier 3 (a post about a
-// tool you merely follow) must now outrank a STALE tier 1 (a post by someone you
-// follow). Under the old ordering tier decided absolutely and the stale post
-// came first, which is what made the feed read as weeks out of date.
+// The adversarial pair is built from TOOL tiers rather than from two authors,
+// because a seeded database may well have only one other author posting:
+//
+//	a FRESH tier 3 — a post about a tool the viewer merely follows
+//	a STALE tier 2 — a post about a tool the viewer actually runs
+//
+// Under the old ordering tier decided absolutely and the stale post came first,
+// which is what made the feed read as weeks out of date.
 func TestFeedRecencyBandIntegration(t *testing.T) {
 	conn := testDB(t)
 	tx := beginRollback(t, conn)
 	ctx := context.Background()
 
-	var viewer uuid.UUID
-	if err := tx.QueryRow(ctx, `SELECT id FROM profiles ORDER BY created_at LIMIT 1`).Scan(&viewer); err != nil {
-		t.Skipf("no profiles in the database — seed it first (%v)", err)
-	}
+	viewer, tools := oneProfileAndTools(t, tx)
+	stackTool, followedTool := tools[0], tools[1]
 
-	freshPost, freshTool, stalePost, staleAuthor := twoPostsDistinctAuthors(t, tx, viewer)
+	stalePost := postCarrying(t, tx, viewer, stackTool)
+	freshPost := postCarrying(t, tx, viewer, followedTool)
+	if stalePost == freshPost {
+		t.Skip("both tools resolve to the same post — cannot separate the tiers")
+	}
 
 	for _, q := range []string{
 		`DELETE FROM stack_items WHERE profile_id = $1`,
@@ -390,16 +355,15 @@ func TestFeedRecencyBandIntegration(t *testing.T) {
 		}
 	}
 
-	// Follow the tool but do NOT stack it — that is tier 3, the weakest tier
-	// that still appears for a viewer who follows things.
+	// Stacked -> tier 2. Followed but not stacked -> tier 3.
 	if _, err := tx.Exec(ctx,
-		`INSERT INTO tool_follows (profile_id, tool_id) VALUES ($1, $2)`, viewer, freshTool); err != nil {
-		t.Fatalf("follow tool: %v", err)
+		`INSERT INTO stack_items (profile_id, tool_id) VALUES ($1, $2)`, viewer, stackTool); err != nil {
+		t.Fatalf("stack insert: %v", err)
 	}
-	// Follow the other post's author — that is tier 1.
 	if _, err := tx.Exec(ctx,
-		`INSERT INTO user_follows (follower_id, following_id) VALUES ($1, $2)`, viewer, staleAuthor); err != nil {
-		t.Fatalf("follow user: %v", err)
+		`INSERT INTO tool_follows (profile_id, tool_id) VALUES ($1, $2), ($1, $3)`,
+		viewer, stackTool, followedTool); err != nil {
+		t.Fatalf("follow insert: %v", err)
 	}
 
 	// Drive the two posts to opposite sides of the 3-day boundary.
@@ -442,7 +406,7 @@ func TestFeedRecencyBandIntegration(t *testing.T) {
 		t.Fatal("the fresh post about a followed tool is missing from the feed entirely")
 	}
 	if staleIdx == -1 {
-		t.Fatal("the stale post by a followed author is missing from the feed entirely")
+		t.Fatal("the stale post about a stacked tool is missing from the feed entirely")
 	}
 
 	// Without this the test could pass for the wrong reason — two posts at the
@@ -454,9 +418,181 @@ func TestFeedRecencyBandIntegration(t *testing.T) {
 	}
 
 	if freshIdx > staleIdx {
-		t.Errorf("a %d-day-old tier %d event outranked a fresh tier %d one (positions %d and %d). "+
+		t.Errorf("a 30-day-old tier %d event outranked a fresh tier %d one (positions %d and %d). "+
 			"Recency bands above tier: anything from the last 3 days must come before everything older, "+
 			"whatever its tier",
-			30, staleTier, freshTier, staleIdx, freshIdx)
+			staleTier, freshTier, staleIdx, freshIdx)
+	}
+}
+
+
+// TestTrendingTiersIntegration covers the dashboard's "Trending playbooks"
+// ranking: a playbook is scored by how close its tools sit to the viewer's own
+// tool graph, strongest tier winning.
+//
+//	tier 1  a tool in the viewer's stack
+//	tier 2  a tool the viewer follows but does not run
+//	tier 3  a tool from a playbook the viewer starred
+//	tier 4  a tool used by someone the viewer follows
+//
+// The case worth pinning is a playbook that qualifies under SEVERAL tiers. It
+// must keep the strongest, via MIN(tier) — a post about a stack tool sinking to
+// tier 4 because someone the viewer follows also uses that tool would push the
+// most relevant results to the bottom of the section.
+func TestTrendingTiersIntegration(t *testing.T) {
+	conn := testDB(t)
+	tx := beginRollback(t, conn)
+	ctx := context.Background()
+
+	viewer, tools := oneProfileAndTools(t, tx)
+	stackTool, followedTool := tools[0], tools[1]
+
+	for _, q := range []string{
+		`DELETE FROM stack_items WHERE profile_id = $1`,
+		`DELETE FROM watchlist_items WHERE profile_id = $1`,
+		`DELETE FROM old_stack_items WHERE profile_id = $1`,
+		`DELETE FROM tool_follows WHERE profile_id = $1`,
+		`DELETE FROM user_follows WHERE follower_id = $1`,
+		`DELETE FROM post_stars WHERE liker_id = $1`,
+	} {
+		if _, err := tx.Exec(ctx, q, viewer); err != nil {
+			t.Fatalf("reset (%s): %v", q, err)
+		}
+	}
+
+	// Stack one tool, follow the other WITHOUT stacking it. The first must
+	// outrank the second.
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO stack_items (profile_id, tool_id) VALUES ($1, $2)`, viewer, stackTool); err != nil {
+		t.Fatalf("stack insert: %v", err)
+	}
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO tool_follows (profile_id, tool_id) VALUES ($1, $2), ($1, $3)`,
+		viewer, stackTool, followedTool); err != nil {
+		t.Fatalf("follow insert: %v", err)
+	}
+
+	qtx := db.New(tx)
+	rows, err := qtx.GetTrendingPlaybooksForUser(ctx, db.GetTrendingPlaybooksForUserParams{
+		ViewerID: viewer, PageLimit: 50,
+	})
+	if err != nil {
+		// A malformed query compiles fine and fails exactly here.
+		t.Fatalf("GetTrendingPlaybooksForUser: %v", err)
+	}
+	if len(rows) == 0 {
+		t.Skip("no playbooks matched the viewer's tools — seed more data")
+	}
+
+	// Which tier each tool's posts came back at.
+	tierFor := map[uuid.UUID]int32{}
+	for _, row := range rows {
+		postTools, err := tx.Query(ctx, `SELECT tool_id FROM post_tools WHERE post_id = $1`, row.ID)
+		if err != nil {
+			t.Fatalf("post tools: %v", err)
+		}
+		for postTools.Next() {
+			var tool uuid.UUID
+			if err := postTools.Scan(&tool); err != nil {
+				postTools.Close()
+				t.Fatalf("scan: %v", err)
+			}
+			if cur, seen := tierFor[tool]; !seen || row.Tier < cur {
+				tierFor[tool] = row.Tier
+			}
+		}
+		postTools.Close()
+	}
+
+	if tier, ok := tierFor[stackTool]; ok && tier != 1 {
+		t.Errorf("a playbook using a tool in the viewer's STACK came back at tier %d, want 1. "+
+			"A post keeps its strongest tier, so stack membership must win over every weaker match",
+			tier)
+	}
+	if tier, ok := tierFor[followedTool]; ok && tier == 1 {
+		t.Errorf("a playbook using a merely FOLLOWED tool came back at tier 1, which is reserved " +
+			"for tools the viewer actually runs")
+	}
+
+	// The section is ordered, so tiers must not interleave.
+	for i := 1; i < len(rows); i++ {
+		if rows[i].Tier < rows[i-1].Tier {
+			t.Fatalf("results are not ordered by tier: position %d is tier %d, after tier %d",
+				i, rows[i].Tier, rows[i-1].Tier)
+		}
+	}
+
+	// Recommending something the viewer already saved is noise.
+	for _, row := range rows {
+		var starred bool
+		if err := tx.QueryRow(ctx,
+			`SELECT EXISTS(SELECT 1 FROM post_stars WHERE post_id = $1 AND liker_id = $2)`,
+			row.ID, viewer).Scan(&starred); err != nil {
+			t.Fatalf("star check: %v", err)
+		}
+		if starred {
+			t.Errorf("playbook %q is already starred by the viewer and must not be recommended", row.Name)
+		}
+		if row.AuthorID == viewer {
+			t.Errorf("playbook %q is the viewer's own and must not be recommended", row.Name)
+		}
+	}
+}
+
+// TestPopularToolsIntegration exercises the dashboard's "rising this week"
+// shelf. The ranking is weekly publishing activity, falling back to all-time
+// stack membership, and both counts come from aggregates over outer joins —
+// the shape where a missing GROUP BY column or a join that multiplies rows
+// compiles perfectly and returns quietly wrong numbers.
+func TestPopularToolsIntegration(t *testing.T) {
+	conn := testDB(t)
+	tx := beginRollback(t, conn)
+	ctx := context.Background()
+
+	qtx := db.New(tx)
+	tools, err := qtx.GetPopularTools(ctx, 6)
+	if err != nil {
+		t.Fatalf("GetPopularTools: %v", err)
+	}
+	if len(tools) == 0 {
+		t.Skip("no tools in the database — seed it first")
+	}
+
+	if len(tools) > 6 {
+		t.Errorf("asked for 6 tools, got %d", len(tools))
+	}
+
+	// Ordering: recent mentions first, then stack count, then name.
+	for i := 1; i < len(tools); i++ {
+		prev, cur := tools[i-1], tools[i]
+		if cur.RecentMentions > prev.RecentMentions {
+			t.Errorf("tool %q (%d recent mentions) sorts after %q (%d) — weekly activity ranks first",
+				cur.Name, cur.RecentMentions, prev.Name, prev.RecentMentions)
+		}
+		if cur.RecentMentions == prev.RecentMentions && cur.StackCount > prev.StackCount {
+			t.Errorf("tool %q (%d stacks) sorts after %q (%d) at equal weekly activity — "+
+				"stack count is the tiebreak",
+				cur.Name, cur.StackCount, prev.Name, prev.StackCount)
+		}
+	}
+
+	// An outer join that multiplied rows would inflate these past the number of
+	// profiles and posts that exist, which is the failure this query invites.
+	var profiles, posts int64
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM profiles`).Scan(&profiles); err != nil {
+		t.Fatalf("count profiles: %v", err)
+	}
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM posts`).Scan(&posts); err != nil {
+		t.Fatalf("count posts: %v", err)
+	}
+	for _, tool := range tools {
+		if tool.StackCount > profiles {
+			t.Errorf("tool %q claims %d stacks but only %d profiles exist — the join is multiplying rows",
+				tool.Name, tool.StackCount, profiles)
+		}
+		if tool.RecentMentions > posts {
+			t.Errorf("tool %q claims %d recent mentions but only %d posts exist",
+				tool.Name, tool.RecentMentions, posts)
+		}
 	}
 }
