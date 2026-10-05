@@ -10,6 +10,7 @@ import Link from "next/link";
 import PostCard from "./post-card";
 import ActivityFeed from "./activity-feed";
 import { ToolLogo } from "./tool-logo";
+import { ToolActions } from "./tool-actions";
 import { Post } from "@/lib/post";
 import { toolHref } from "@/lib/tool";
 
@@ -75,6 +76,12 @@ function PopularToolCard({ tool }: { tool: PopularTool }) {
                 </p>
               )}
             </div>
+
+            {/* Stack / watchlist / archive, without leaving the dashboard.
+                ToolActions stops the surrounding Link from firing itself, and
+                shares a React Query cache with every other list, so adding a
+                tool here updates it on /tools and the profile too. */}
+            <ToolActions tool={tool} variant="mini" />
           </div>
 
           <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
