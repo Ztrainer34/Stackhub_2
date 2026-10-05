@@ -26,7 +26,6 @@ import {
   Shield,
   Layers,
   BookOpen,
-  Blocks,
   GitCompare,
   Star,
   Wrench,
@@ -106,11 +105,6 @@ export default function NavBarContent({ user }: NavBarContentProps) {
                   <Link href={`/${user.username}?tab=playbooks`}>
                     <DropdownMenuItem>
                       <BookOpen /> Playbooks
-                    </DropdownMenuItem>
-                  </Link>
-                  <Link href={`/${user.username}?tab=combos`}>
-                    <DropdownMenuItem>
-                      <Blocks /> Combos
                     </DropdownMenuItem>
                   </Link>
                   <Link href={`/${user.username}?tab=comparisons`}>

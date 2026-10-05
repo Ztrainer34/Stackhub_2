@@ -109,7 +109,7 @@
     },
     {
       "author": "bob",
-      "type": "combo",
+      "type": "playbook",
       "title": "Capture visitors in HubSpot and follow up with Lemlist",
       "description": "A two-tool outbound loop.",
       "tools": ["HubSpot", "Lemlist"],

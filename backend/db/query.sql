@@ -505,10 +505,12 @@ ORDER BY post_count DESC, t.name ASC
 LIMIT $1;
 
 -- name: GetPublishedPostTypeCounts :one
+-- Counts for the /playbooks filter chips. There is no combo_count any more:
+-- the type was folded into 'playbook', so a combo column would now always
+-- read zero.
 SELECT
   COUNT(*)::int AS all_count,
   COUNT(*) FILTER (WHERE p.type = 'playbook')::int AS playbook_count,
-  COUNT(*) FILTER (WHERE p.type = 'combo')::int AS combo_count,
   COUNT(*) FILTER (WHERE p.type = 'comparison')::int AS comparison_count
 FROM posts p
 WHERE p.is_published
@@ -1078,7 +1080,7 @@ WHERE id = $1 AND recipient_id = $2;
 -- name: GetUserFeed :many
 -- Activity feed, ranked by how much each event has to do with the viewer:
 --   tier 0  about you        — unread stars, comments, new followers, tool approvals
---   tier 1  people you follow  — they published a playbook / combo / comparison
+--   tier 1  people you follow  — they published a playbook or comparison
 --   tier 2  tools in your stack — someone published about one
 --   tier 3  other followed tools — watchlist, plus anything followed by hand
 --   tier 4  discovery filler   — recent playbooks, and ONLY for a viewer who

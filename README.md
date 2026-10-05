@@ -1,6 +1,6 @@
 # StackHub - Marketing Tools Knowledge Platform
 
-**StackHub** is a comprehensive platform for marketers to share, discover, and compare marketing tools through structured content like playbooks, tool combos, and detailed comparisons. The platform enables users to create rich, collaborative content while building a knowledge base of marketing strategies and tool insights.
+**StackHub** is a comprehensive platform for marketers to share, discover, and compare marketing tools through structured content like playbooks and detailed comparisons. The platform enables users to create rich, collaborative content while building a knowledge base of marketing strategies and tool insights.
 
 ## 🏗️ Architecture Overview
 
@@ -106,7 +106,7 @@ StackHub follows a modern full-stack architecture with clear separation of conce
 
 ### Core Entities
 - **Users & Profiles**: User authentication and profile management
-- **Posts**: Content items (playbooks, combos, comparisons) with rich text support
+- **Posts**: Content items (playbooks, comparisons) with rich text support
 - **Tools**: Marketing tools with categories and metadata
 - **Social Features**: User interactions like stars, comments, and follows
 
@@ -142,7 +142,7 @@ The project uses a monorepo structure with separate frontend and backend applica
 - **Rich Text Editor**: Lexical-based editor with plugins
 - **Image Uploads**: AWS S3 integration for media storage
 - **Tool Integration**: Link posts to marketing tools
-- **Content Types**: Playbooks, combos, and comparisons
+- **Content Types**: Playbooks and comparisons
 - **Draft System**: Save and edit content before publishing
 
 ### Search & Discovery

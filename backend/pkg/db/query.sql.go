@@ -2681,7 +2681,6 @@ const getPublishedPostTypeCounts = `-- name: GetPublishedPostTypeCounts :one
 SELECT
   COUNT(*)::int AS all_count,
   COUNT(*) FILTER (WHERE p.type = 'playbook')::int AS playbook_count,
-  COUNT(*) FILTER (WHERE p.type = 'combo')::int AS combo_count,
   COUNT(*) FILTER (WHERE p.type = 'comparison')::int AS comparison_count
 FROM posts p
 WHERE p.is_published
@@ -2694,7 +2693,6 @@ WHERE p.is_published
 type GetPublishedPostTypeCountsRow struct {
 	AllCount        int32 `json:"all_count"`
 	PlaybookCount   int32 `json:"playbook_count"`
-	ComboCount      int32 `json:"combo_count"`
 	ComparisonCount int32 `json:"comparison_count"`
 }
 
@@ -2704,7 +2702,6 @@ func (q *Queries) GetPublishedPostTypeCounts(ctx context.Context) (GetPublishedP
 	err := row.Scan(
 		&i.AllCount,
 		&i.PlaybookCount,
-		&i.ComboCount,
 		&i.ComparisonCount,
 	)
 	return i, err
@@ -3670,7 +3667,7 @@ func (q *Queries) UpdateProfile(ctx context.Context, arg UpdateProfileParams) er
 const getUserFeed = `-- name: GetUserFeed :many
 -- Activity feed, ranked by how much each event has to do with the viewer:
 --   tier 0  about you        — unread stars, comments, new followers, tool approvals
---   tier 1  people you follow  — they published a playbook / combo / comparison
+--   tier 1  people you follow  — they published a playbook or comparison
 --   tier 2  tools in your stack — someone published about one
 --   tier 3  other followed tools — watchlist, plus anything followed by hand
 --   tier 4  discovery filler   — recent playbooks, and ONLY for a viewer who

@@ -35,8 +35,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const formSchema = z.object({
-  type: z.enum(["playbook", "combo", "comparison"], {
+export const formSchema = z.object({
+  type: z.enum(["playbook", "comparison"], {
     required_error: "Please select a post type.",
   }),
   name: z.string(),
@@ -51,9 +51,12 @@ const formSchema = z.object({
       })
     )
     .optional(),
-  description: z.string().max(500, {
-    message: "Goal must be at most 500 characters long.",
-  }),
+  // Length is checked in superRefine below, not here. A field-level failure
+  // makes Zod skip superRefine entirely, so a too-long goal used to hide the
+  // name and tool-count errors — people fixed one thing, resubmitted, and were
+  // shown the next. Keeping the user-reachable rules together means they all
+  // report at once.
+  description: z.string(),
   // Optional. "" is the "not answered" value the Select starts on, and the
   // backend stores it as NULL. The three levels mirror the CHECK constraint on
   // posts.experience_level.
@@ -64,6 +67,14 @@ const formSchema = z.object({
   // Mirrors the "{Type} name" label above the input, so the error reads the
   // same way the field is introduced.
   const typeLabel = data.type.charAt(0).toUpperCase() + data.type.slice(1);
+
+  if (data.description.length > 500) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Goal must be at most 500 characters long.",
+      path: ["description"],
+    });
+  }
 
   if (data.name.length < 2) {
     ctx.addIssue({
@@ -83,7 +94,7 @@ const formSchema = z.object({
     });
   }
 
-  if ((data.type === "combo" || data.type === "comparison") && totalTools < 2) {
+  if (data.type === "comparison" && totalTools < 2) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: `A ${data.type} requires at least 2 tools (you have ${totalTools})`,
@@ -92,23 +103,20 @@ const formSchema = z.object({
   }
 });
 
+// A playbook now covers one OR MORE tools — it absorbed the old "combo"
+// type, which was only ever a playbook about several of them.
 const postTypeMetadata = {
   playbook: {
-    max_tools: 1,
-  },
-  combo: {
-    max_tools: 15,
+    max_tools: 10,
   },
   comparison: {
-    max_tools: 15,
+    max_tools: 10,
   },
 } as const;
 
 const goalPlaceholders = {
   playbook:
     "e.g. Know from which company your website visitors come from thanks to Hubspot",
-  combo:
-    "e.g. Capture website visitor companies in HubSpot and auto-send them a personalized cold email via Lemlist",
   comparison:
     "e.g. Decide whether HubSpot or Pipedrive is the better CRM for a small sales team",
 } as const;
@@ -118,7 +126,7 @@ export function PostCreationForm({
   type,
 }: {
   user: User;
-  type: "playbook" | "combo" | "comparison";
+  type: "playbook" | "comparison";
 }) {
   const [, setToolName] = useState<string | undefined>(undefined);
   const [suggestedTools, setSuggestedTools] = useState<SuggestedTool[]>([]);
@@ -243,12 +251,6 @@ export function PostCreationForm({
                   </FormItem>
                   <FormItem className="flex items-center space-x-3 space-y-0">
                     <FormControl>
-                      <RadioGroupItem value="combo" />
-                    </FormControl>
-                    <FormLabel className="font-normal">Combo</FormLabel>
-                  </FormItem>
-                  <FormItem className="flex items-center space-x-3 space-y-0">
-                    <FormControl>
                       <RadioGroupItem value="comparison" />
                     </FormControl>
                     <FormLabel className="font-normal">Comparison</FormLabel>
@@ -283,10 +285,8 @@ export function PostCreationForm({
               <FormLabel>Tools featured</FormLabel>
               <FormDescription>
                 {postType === "playbook"
-                  ? "Select 1 tool for your playbook"
-                  : postType === "combo"
-                  ? "Select at least 2 tools for your combo (max 15)"
-                  : "Select at least 2 tools for your comparison (max 15)"}
+                  ? "Select one or more tools for your playbook (max 10)"
+                  : "Select at least 2 tools for your comparison (max 10)"}
               </FormDescription>
 
               {/* Regular tools */}

@@ -11,7 +11,7 @@ import { createClient } from "@/utils/supabase/client";
 import { toast } from "sonner";
 
 interface CreatePostData {
-  type: "playbook" | "combo" | "comparison";
+  type: "playbook" | "comparison";
   name: string;
   tools: string[];
   suggested_tools?: Array<{

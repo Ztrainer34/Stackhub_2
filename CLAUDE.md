@@ -5,9 +5,13 @@
 ## Project Overview
 
 **StackHub** is a collaborative knowledge-sharing platform for marketing tools. Users can create and share:
-- **Playbooks**: Guides for using specific tools
-- **Combos**: Combinations of tools that work well together
+- **Playbooks**: Guides for using one or more tools to achieve a goal
 - **Comparisons**: Detailed comparisons between different tools
+
+> A third type, **combos**, was removed in October 2026. It meant a playbook
+> about several tools, which a playbook now simply is. Existing rows were
+> reclassified by `20261005120000_drop_combo_post_type.sql`, and the
+> `posts_type_check` constraint now permits only the two above.
 
 ## Tech Stack
 
@@ -208,7 +212,7 @@ function onSubmit(data: z.infer<typeof formSchema>) {
 ### Core Tables
 
 #### `posts`
-- Primary content table for playbooks, combos, and comparisons
+- Primary content table for playbooks and comparisons
 - Contains both `content` (published) and `draft_content` (unpublished)
 - Full-text search vectors for searchability
 - Slugs with history tracking for SEO
@@ -291,8 +295,8 @@ function onSubmit(data: z.infer<typeof formSchema>) {
 ### Post Creation Flow
 1. User submits post creation form with tools (existing + suggested)
 2. Backend validates post type constraints:
-   - Playbooks: exactly 1 tool
-   - Combos/Comparisons: up to 10 tools
+   - Playbooks: 1 or more tools, up to `maxPostTools` (10)
+   - Comparisons: 2 or more tools, up to `maxPostTools` (10)
 3. Transaction creates post + links to existing tools + creates tool tickets for suggested tools
 4. Returns post with slug for redirect to edit page
 5. Frontend invalidates caches: `["posts"]`, `["top-posts"]`, `["user-posts"]`

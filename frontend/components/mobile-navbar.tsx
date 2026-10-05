@@ -13,7 +13,6 @@ import {
   LogOut,
   Layers,
   BookOpen,
-  Blocks,
   GitCompare,
   Star,
   Wrench,
@@ -98,14 +97,6 @@ export function MobileNavbar({ user }: MobileNavbarProps) {
                   >
                     <BookOpen className="h-4 w-4" />
                     <span>Playbooks</span>
-                  </Link>
-                  <Link
-                    href={`/${user.username}?tab=combos`}
-                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent transition-colors"
-                    onClick={() => setIsOpen(false)}
-                  >
-                    <Blocks className="h-4 w-4" />
-                    <span>Combos</span>
                   </Link>
                   <Link
                     href={`/${user.username}?tab=comparisons`}

@@ -29,9 +29,8 @@ export default async function New() {
     <div className="px-10 py-10 mt-10 max-w-3xl mr-auto ml-auto">
       <TypographyH1>Create a new Post</TypographyH1>
       <TypographyP>
-        A playbook explains how to use a tool to achieve a particular goal. A
-        combo does the same with several tools, and a comparison weighs
-        tools against each other.
+        A playbook explains how to use one or more tools to achieve a
+        particular goal. A comparison weighs tools against each other.
       </TypographyP>
 
       <Separator className="my-5" />

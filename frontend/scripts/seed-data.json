@@ -29,7 +29,7 @@
     },
     {
       "author": "bob",
-      "type": "combo",
+      "type": "playbook",
       "title": "Capture visitors in HubSpot and cold email them with Lemlist",
       "description": "A simple two-tool outbound loop that runs itself.",
       "tools": ["HubSpot Marketing Hub", "Lemlist"],

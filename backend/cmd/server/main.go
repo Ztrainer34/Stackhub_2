@@ -142,18 +142,21 @@ func (app *App) createPost(w http.ResponseWriter, r *http.Request) {
 
 	switch form.Type {
 	case "playbook":
-		if totalTools != 1 {
-			http.Error(w, "Playbooks require exactly one tool or tool suggestion", http.StatusBadRequest)
+		// One or more. A playbook used to mean exactly one tool and a "combo"
+		// meant several; combos were folded into playbooks because the split
+		// made authors categorise their writing before they had written it.
+		if totalTools > maxPostTools {
+			http.Error(w, fmt.Sprintf("Too many tools (maximum %d)", maxPostTools), http.StatusBadRequest)
 			return
 		}
-	case "combo", "comparison":
+	case "comparison":
+		// A comparison of one thing is not a comparison.
 		if totalTools < 2 {
-			http.Error(w, "Combos and comparisons require at least two tools or tool suggestions", http.StatusBadRequest)
+			http.Error(w, "Comparisons require at least two tools or tool suggestions", http.StatusBadRequest)
 			return
 		}
-		// FIXME: Settle on a global limit
-		if totalTools > 10 {
-			http.Error(w, "Too many tools (maximum 10)", http.StatusBadRequest)
+		if totalTools > maxPostTools {
+			http.Error(w, fmt.Sprintf("Too many tools (maximum %d)", maxPostTools), http.StatusBadRequest)
 			return
 		}
 	default:
@@ -1447,6 +1450,11 @@ func (app *App) getTool(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(tool)
 	}
 }
+
+// maxPostTools caps how many tools one post may reference. It replaced a
+// per-type limit that lived inline in createPost, where the "combo" branch
+// carried a FIXME asking for exactly this.
+const maxPostTools = 10
 
 // maxToolCategories caps what a page owner can attach, so the categories card
 // stays a short list rather than a keyword dump.
