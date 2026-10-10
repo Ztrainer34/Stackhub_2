@@ -66,10 +66,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: updateError.message }, { status: 400 });
   }
 
-  // Burn the token so the link can't be reused.
+  // Record the attempt, but do NOT set claimed_at — the claim is only final
+  // once the sign-in link is actually followed, which /auth/callback marks.
+  //
+  // This is what makes a typo survivable. Previously the token was spent here,
+  // so an address with a slip in it left the account pointing somewhere nobody
+  // could reach and the link already dead. Now the token stays live: the person
+  // can submit again with the correct address, or resend to the same one.
   await admin
     .from("account_claims")
-    .update({ claimed_at: new Date().toISOString(), claimed_email: email })
+    .update({ claimed_email: email })
     .eq("token", token);
 
   // Email them a magic link so they can sign in to the account that's now theirs.

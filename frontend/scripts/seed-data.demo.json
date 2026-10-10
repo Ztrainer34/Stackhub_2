@@ -1,0 +1,142 @@
+{
+  "_comment": [
+    "Demo accounts for handing to a client through the account-claim flow.",
+    "",
+    "  1. node scripts/seed.mjs scripts/seed-data.demo.json",
+    "  2. node scripts/claim-link.mjs demo_gtm      <- first run",
+    "     node scripts/claim-link.mjs demo_ops      <- spare, for a second run",
+    "  3. send the printed link",
+    "",
+    "TWO accounts because claiming CONSUMES one: the flow attaches the claimer's",
+    "email to the account, so a second test needs a second account.",
+    "",
+    "seed.mjs is re-run safe. An existing user is reused rather than duplicated,",
+    "and a playbook whose slug already exists for that author is skipped.",
+    "",
+    "The emails are @stackhub.invalid on purpose: .invalid is reserved by RFC 2606",
+    "and can never be registered, so nothing is delivered anywhere and nobody can",
+    "take an account over by owning the domain. The claim flow replaces the",
+    "address with the client's own, so it only has to exist, not work.",
+    "",
+    "Passwords are never usable: the login screen is magic-link only and has no",
+    "password field. seed.mjs requires one, so they are set and ignored.",
+    "",
+    "Tools are LOOKUP-ONLY in seed.mjs. All names here were checked against",
+    "production and exist. An unmatched name is reported and skipped, not created.",
+    "",
+    "Delete these when the demo is over: node scripts/delete-users.mjs"
+  ],
+  "users": [
+    {
+      "email": "demo_gtm@stackhub.invalid",
+      "password": "ReplacedByClaimFlow1!",
+      "username": "demo_gtm",
+      "display_name": "Demo Account",
+      "bio": "Demo profile for walking through StackHub. Claim it and make it yours.",
+      "company": "StackHub",
+      "location": "Remote",
+      "website": "https://stackhub.me",
+      "linkedin": "",
+      "twitter": "",
+      "stack": [
+        "Clay",
+        "HubSpot",
+        "Lemlist"
+      ],
+      "watchlist": [
+        "Apollo",
+        "Notion"
+      ],
+      "followed_tools": []
+    },
+    {
+      "email": "demo_ops@stackhub.invalid",
+      "password": "ReplacedByClaimFlow2!",
+      "username": "demo_ops",
+      "display_name": "Demo Account 2",
+      "bio": "Second demo profile. Spare, for a second run through the claim flow.",
+      "company": "StackHub",
+      "location": "Remote",
+      "website": "https://stackhub.me",
+      "linkedin": "",
+      "twitter": "",
+      "stack": [
+        "Apollo",
+        "Notion"
+      ],
+      "watchlist": [
+        "Clay"
+      ],
+      "followed_tools": []
+    }
+  ],
+  "playbooks": [
+    {
+      "author": "demo_gtm",
+      "type": "playbook",
+      "title": "Enrich inbound leads before they reach the CRM",
+      "description": "Turn a bare email address into a scored, routed lead.",
+      "tools": [
+        "Clay",
+        "HubSpot"
+      ],
+      "published": true,
+      "body": [
+        "Inbound forms give you an email and little else. Before anything reaches a rep, the record should already say who the company is, how big it is, and whether it is worth a call.",
+        "Clay watches the form submissions and enriches each one: company, headcount, funding, tech stack. Anything it cannot resolve is left blank rather than guessed, so nobody acts on invented data.",
+        "The enriched record lands in HubSpot with a score attached. Above the threshold it routes to a rep the same day. Below it, it goes to nurture and nobody spends time on it.",
+        "The point is not the enrichment. It is that a rep never opens a record and has to go and look the company up themselves."
+      ]
+    },
+    {
+      "author": "demo_gtm",
+      "type": "playbook",
+      "title": "A cold email sequence that survives a reply",
+      "description": "Most sequences break the moment someone answers. This one does not.",
+      "tools": [
+        "Lemlist",
+        "HubSpot"
+      ],
+      "published": true,
+      "body": [
+        "A four-touch sequence over twelve days, written so each message stands alone. Nobody reads the thread from the top.",
+        "Lemlist handles sending and stops the sequence the instant a reply arrives — including replies that land on a different thread, which is where most tools leak and keep emailing someone who already answered.",
+        "The reply goes to HubSpot as an activity on the contact, so the rep picking it up can see what was already sent without opening the sending tool.",
+        "What makes it work is the stop condition, not the copy. A sequence that keeps firing after a reply costs more trust than the whole campaign earns."
+      ]
+    },
+    {
+      "author": "demo_gtm",
+      "type": "comparison",
+      "title": "Apollo vs Clay for outbound data",
+      "description": "Both sell contact data. They are not solving the same problem.",
+      "tools": [
+        "Apollo",
+        "Clay"
+      ],
+      "published": true,
+      "body": [
+        "Apollo is a database with a sequencer attached. You search, filter, export, and send. It is quick to start and the data is yours on day one.",
+        "Clay is a workflow tool that happens to reach several databases. You describe the enrichment you want and it tries providers in order until one answers. Slower to set up, better coverage on anything unusual.",
+        "If the list you want is a straightforward filter — job title, headcount, region — Apollo gets you there in an afternoon. If the signal you want is not a field in anyone's database, Clay is the one that can assemble it.",
+        "Running both is common and not wasteful. They overlap less than their pricing pages suggest."
+      ]
+    },
+    {
+      "author": "demo_ops",
+      "type": "playbook",
+      "title": "Keep the CRM clean without policing anyone",
+      "description": "Rules that run on write, so nobody has to remember them.",
+      "tools": [
+        "HubSpot"
+      ],
+      "published": true,
+      "body": [
+        "Data hygiene fails when it depends on discipline. Every rep is busy and nobody enjoys tidying records, so the rules have to run without them.",
+        "Normalise on write: company names trimmed and cased consistently, phone numbers to one format, job titles mapped to a short list. None of it is clever, and all of it stops being a quarterly cleanup project.",
+        "The one rule worth enforcing hard is deduplication on email. Everything else can be fixed later; two records for the same person cannot, because the history splits and neither half is complete.",
+        "Measure it by how often someone opens a record and has to check something elsewhere. That number going down is the whole point."
+      ]
+    }
+  ]
+}
