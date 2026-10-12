@@ -240,7 +240,9 @@ func (app *App) createPost(w http.ResponseWriter, r *http.Request) {
 		for _, suggestedTool := range form.SuggestedTools {
 			// Create the suggested tool
 			toolTicketParams := db.CreateToolTicketParams{
-				PostID:          post.ID,
+				// Nullable since tickets can be filed without a post (the
+				// standalone-ticket migration); here a post always exists.
+				PostID:          pgtype.UUID{Bytes: post.ID, Valid: true},
 				RequestedBy:     userID,
 				ToolName:        suggestedTool.Name,
 				ToolDescription: pgtype.Text{String: suggestedTool.Description, Valid: true},
@@ -3947,11 +3949,11 @@ func (app *App) listUserKeyPlaybooks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if playbooks == nil {
-		playbooks = []db.ListUserKeyPlaybooksRow{}
+		playbooks = []db.PostsWithTool{}
 	}
 
 	response := struct {
-		Posts []db.ListUserKeyPlaybooksRow `json:"posts"`
+		Posts []db.PostsWithTool `json:"posts"`
 	}{
 		Posts: playbooks,
 	}
@@ -4002,21 +4004,23 @@ func parseFollowPagination(r *http.Request) (limit int, offset int) {
 	return limit, offset
 }
 
-func writeFollowList(w http.ResponseWriter, users []db.FollowUserRow, limit int) {
+// writeFollowList renders one page of followers or followees.
+//
+// Generic because sqlc emits a separate row type per query — ListFollowersRow
+// and ListFollowingRow — even though their fields and JSON are identical. A
+// type parameter cannot reach a struct field, so each caller passes the total
+// from its own first row.
+func writeFollowList[T any](w http.ResponseWriter, users []T, totalCount int64, limit int) {
 	if users == nil {
-		users = []db.FollowUserRow{}
+		users = []T{}
 	}
 
-	totalCount := int64(0)
-	if len(users) > 0 {
-		totalCount = users[0].TotalCount
-	}
 	totalPages := (totalCount + int64(limit) - 1) / int64(limit)
 
 	response := struct {
-		Users      []db.FollowUserRow `json:"users"`
-		TotalCount int64              `json:"total_count"`
-		TotalPages int64              `json:"total_pages"`
+		Users      []T   `json:"users"`
+		TotalCount int64 `json:"total_count"`
+		TotalPages int64 `json:"total_pages"`
 	}{
 		Users:      users,
 		TotalCount: totalCount,
@@ -4056,7 +4060,11 @@ func (app *App) listFollowers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeFollowList(w, users, limit)
+	var total int64
+	if len(users) > 0 {
+		total = users[0].TotalCount
+	}
+	writeFollowList(w, users, total, limit)
 }
 
 func (app *App) listFollowing(w http.ResponseWriter, r *http.Request) {
@@ -4088,7 +4096,11 @@ func (app *App) listFollowing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeFollowList(w, users, limit)
+	var total int64
+	if len(users) > 0 {
+		total = users[0].TotalCount
+	}
+	writeFollowList(w, users, total, limit)
 }
 
 func (app *App) setKeyPlaybooks(w http.ResponseWriter, r *http.Request) {

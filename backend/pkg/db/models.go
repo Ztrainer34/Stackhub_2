@@ -11,10 +11,27 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AuthUser struct {
+	ID    uuid.UUID   `json:"id"`
+	Email pgtype.Text `json:"email"`
+}
+
 type Category struct {
 	ID   int32  `json:"id"`
 	Name string `json:"name"`
 	Slug string `json:"slug"`
+}
+
+type KeyPlaybook struct {
+	ProfileID uuid.UUID `json:"profile_id"`
+	PostID    uuid.UUID `json:"post_id"`
+	Position  int32     `json:"position"`
+}
+
+type KeyTool struct {
+	ProfileID uuid.UUID `json:"profile_id"`
+	ToolID    uuid.UUID `json:"tool_id"`
+	Position  int32     `json:"position"`
 }
 
 type Notification struct {
@@ -28,6 +45,12 @@ type Notification struct {
 	Message     string             `json:"message"`
 	IsRead      pgtype.Bool        `json:"is_read"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type OldStackItem struct {
+	ProfileID uuid.UUID          `json:"profile_id"`
+	ToolID    uuid.UUID          `json:"tool_id"`
+	AddedAt   pgtype.Timestamptz `json:"added_at"`
 }
 
 type Post struct {
@@ -48,10 +71,7 @@ type Post struct {
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 	LastPublish      pgtype.Timestamptz `json:"last_publish"`
 	LastDraftUpdate  pgtype.Timestamptz `json:"last_draft_update"`
-	// Optional: 'beginner', 'intermediate' or 'advanced', NULL when unanswered.
-	// Not yet carried by posts_with_tools_and_tickets, so it is stored on create
-	// but not returned by the queries that read through that view.
-	ExperienceLevel pgtype.Text `json:"experience_level"`
+	ExperienceLevel  pgtype.Text        `json:"experience_level"`
 }
 
 type PostComment struct {
@@ -122,30 +142,30 @@ type PostsWithToolsAndTicket struct {
 }
 
 type Profile struct {
-	ID                  uuid.UUID          `json:"id"`
-	DisplayName         string             `json:"display_name"`
-	Username            string             `json:"username"`
-	Vector              interface{}        `json:"vector"`
-	Embedding           interface{}        `json:"embedding"`
-	LastEmbeddingUpdate pgtype.Timestamptz `json:"last_embedding_update"`
-	CreatedAt           pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
-	Bio                 pgtype.Text        `json:"bio"`
-	Website             pgtype.Text        `json:"website"`
-	EmailHash           pgtype.Text        `json:"email_hash"`
-	AvatarUrl           pgtype.Text        `json:"avatar_url"`
-	FocusAreas          []string           `json:"focus_areas"`
+	ID                    uuid.UUID          `json:"id"`
+	DisplayName           string             `json:"display_name"`
+	Username              string             `json:"username"`
+	Vector                interface{}        `json:"vector"`
+	Embedding             interface{}        `json:"embedding"`
+	LastEmbeddingUpdate   pgtype.Timestamptz `json:"last_embedding_update"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	Bio                   pgtype.Text        `json:"bio"`
+	Website               pgtype.Text        `json:"website"`
+	EmailHash             pgtype.Text        `json:"email_hash"`
+	Company               pgtype.Text        `json:"company"`
+	Location              pgtype.Text        `json:"location"`
+	Linkedin              pgtype.Text        `json:"linkedin"`
+	Twitter               pgtype.Text        `json:"twitter"`
+	AvatarUrl             pgtype.Text        `json:"avatar_url"`
+	FocusAreas            []string           `json:"focus_areas"`
 	OnboardingCompletedAt pgtype.Timestamptz `json:"onboarding_completed_at"`
 }
 
 type StackItem struct {
-	ProfileID uuid.UUID `json:"profile_id"`
-	ToolID    uuid.UUID `json:"tool_id"`
-}
-
-type OldStackItem struct {
-	ProfileID uuid.UUID `json:"profile_id"`
-	ToolID    uuid.UUID `json:"tool_id"`
+	ProfileID uuid.UUID          `json:"profile_id"`
+	ToolID    uuid.UUID          `json:"tool_id"`
+	AddedAt   pgtype.Timestamptz `json:"added_at"`
 }
 
 type Tool struct {
@@ -161,8 +181,17 @@ type Tool struct {
 	DescriptionRich pgtype.Text        `json:"description_rich"`
 }
 
-// ToolOwner is the vendor-side claim on a tool page: whoever is listed here may
-// edit the page's copy, logo, vendor details and categories.
+type ToolCategory struct {
+	ToolID     uuid.UUID `json:"tool_id"`
+	CategoryID int32     `json:"category_id"`
+}
+
+type ToolFollow struct {
+	ProfileID uuid.UUID          `json:"profile_id"`
+	ToolID    uuid.UUID          `json:"tool_id"`
+	AddedAt   pgtype.Timestamptz `json:"added_at"`
+}
+
 type ToolOwner struct {
 	ToolID    uuid.UUID          `json:"tool_id"`
 	ProfileID uuid.UUID          `json:"profile_id"`
@@ -170,14 +199,9 @@ type ToolOwner struct {
 	GrantedAt pgtype.Timestamptz `json:"granted_at"`
 }
 
-type ToolCategory struct {
-	ToolID     uuid.UUID `json:"tool_id"`
-	CategoryID int32     `json:"category_id"`
-}
-
 type ToolTicket struct {
 	ID              uuid.UUID          `json:"id"`
-	PostID          uuid.UUID          `json:"post_id"`
+	PostID          pgtype.UUID        `json:"post_id"`
 	RequestedBy     uuid.UUID          `json:"requested_by"`
 	ToolName        string             `json:"tool_name"`
 	ToolDescription pgtype.Text        `json:"tool_description"`
@@ -226,6 +250,7 @@ type Vendor struct {
 }
 
 type WatchlistItem struct {
-	ProfileID uuid.UUID `json:"profile_id"`
-	ToolID    uuid.UUID `json:"tool_id"`
+	ProfileID uuid.UUID          `json:"profile_id"`
+	ToolID    uuid.UUID          `json:"tool_id"`
+	AddedAt   pgtype.Timestamptz `json:"added_at"`
 }

@@ -13,6 +13,41 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const addKeyPlaybook = `-- name: AddKeyPlaybook :exec
+INSERT INTO key_playbooks (profile_id, post_id, position)
+SELECT $1, $2, $3
+WHERE EXISTS (SELECT 1 FROM posts WHERE id = $2 AND author_id = $1)
+ON CONFLICT (profile_id, post_id) DO UPDATE SET position = EXCLUDED.position
+`
+
+type AddKeyPlaybookParams struct {
+	ProfileID uuid.UUID `json:"profile_id"`
+	PostID    uuid.UUID `json:"post_id"`
+	Position  int32     `json:"position"`
+}
+
+func (q *Queries) AddKeyPlaybook(ctx context.Context, arg AddKeyPlaybookParams) error {
+	_, err := q.db.Exec(ctx, addKeyPlaybook, arg.ProfileID, arg.PostID, arg.Position)
+	return err
+}
+
+const addKeyTool = `-- name: AddKeyTool :exec
+INSERT INTO key_tools (profile_id, tool_id, position)
+VALUES ($1, $2, $3)
+ON CONFLICT (profile_id, tool_id) DO UPDATE SET position = EXCLUDED.position
+`
+
+type AddKeyToolParams struct {
+	ProfileID uuid.UUID `json:"profile_id"`
+	ToolID    uuid.UUID `json:"tool_id"`
+	Position  int32     `json:"position"`
+}
+
+func (q *Queries) AddKeyTool(ctx context.Context, arg AddKeyToolParams) error {
+	_, err := q.db.Exec(ctx, addKeyTool, arg.ProfileID, arg.ToolID, arg.Position)
+	return err
+}
+
 const addPostToolSafe = `-- name: AddPostToolSafe :exec
 INSERT INTO post_tools (post_id, tool_id)
 VALUES ($1, $2)
@@ -34,22 +69,6 @@ type AddPostToolsParams struct {
 	ToolID uuid.UUID `json:"tool_id"`
 }
 
-const addToStack = `-- name: AddToStack :exec
-INSERT INTO stack_items (profile_id, tool_id)
-VALUES ($1, $2)
-ON CONFLICT (profile_id, tool_id) DO NOTHING
-`
-
-type AddToStackParams struct {
-	ProfileID uuid.UUID `json:"profile_id"`
-	ToolID    uuid.UUID `json:"tool_id"`
-}
-
-func (q *Queries) AddToStack(ctx context.Context, arg AddToStackParams) error {
-	_, err := q.db.Exec(ctx, addToStack, arg.ProfileID, arg.ToolID)
-	return err
-}
-
 const addToOldStack = `-- name: AddToOldStack :exec
 INSERT INTO old_stack_items (profile_id, tool_id)
 VALUES ($1, $2)
@@ -66,18 +85,19 @@ func (q *Queries) AddToOldStack(ctx context.Context, arg AddToOldStackParams) er
 	return err
 }
 
-const removeFromOldStack = `-- name: RemoveFromOldStack :exec
-DELETE FROM old_stack_items
-WHERE profile_id = $1 AND tool_id = $2
+const addToStack = `-- name: AddToStack :exec
+INSERT INTO stack_items (profile_id, tool_id)
+VALUES ($1, $2)
+ON CONFLICT (profile_id, tool_id) DO NOTHING
 `
 
-type RemoveFromOldStackParams struct {
+type AddToStackParams struct {
 	ProfileID uuid.UUID `json:"profile_id"`
 	ToolID    uuid.UUID `json:"tool_id"`
 }
 
-func (q *Queries) RemoveFromOldStack(ctx context.Context, arg RemoveFromOldStackParams) error {
-	_, err := q.db.Exec(ctx, removeFromOldStack, arg.ProfileID, arg.ToolID)
+func (q *Queries) AddToStack(ctx context.Context, arg AddToStackParams) error {
+	_, err := q.db.Exec(ctx, addToStack, arg.ProfileID, arg.ToolID)
 	return err
 }
 
@@ -94,6 +114,22 @@ type AddToWatchlistParams struct {
 
 func (q *Queries) AddToWatchlist(ctx context.Context, arg AddToWatchlistParams) error {
 	_, err := q.db.Exec(ctx, addToWatchlist, arg.ProfileID, arg.ToolID)
+	return err
+}
+
+const addToolCategories = `-- name: AddToolCategories :exec
+INSERT INTO tool_categories (tool_id, category_id)
+SELECT $1::uuid, unnest($2::int[])
+ON CONFLICT DO NOTHING
+`
+
+type AddToolCategoriesParams struct {
+	ToolID      uuid.UUID `json:"tool_id"`
+	CategoryIds []int32   `json:"category_ids"`
+}
+
+func (q *Queries) AddToolCategories(ctx context.Context, arg AddToolCategoriesParams) error {
+	_, err := q.db.Exec(ctx, addToolCategories, arg.ToolID, arg.CategoryIds)
 	return err
 }
 
@@ -296,17 +332,6 @@ func (q *Queries) CreateNotification(ctx context.Context, arg CreateNotification
 	return result.RowsAffected(), nil
 }
 
-const getUserEmail = `-- name: GetUserEmail :one
-SELECT email::text FROM auth.users WHERE id = $1
-`
-
-func (q *Queries) GetUserEmail(ctx context.Context, id uuid.UUID) (string, error) {
-	row := q.db.QueryRow(ctx, getUserEmail, id)
-	var email string
-	err := row.Scan(&email)
-	return email, err
-}
-
 const createPost = `-- name: CreatePost :one
 
 INSERT INTO posts (
@@ -332,6 +357,9 @@ type CreatePostRow struct {
 }
 
 // FIXME
+// experience_level is optional; sqlc.narg gives a nullable parameter so an
+// unanswered dropdown stores NULL rather than an empty string that would fail
+// the CHECK constraint.
 func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) (CreatePostRow, error) {
 	row := q.db.QueryRow(ctx, createPost,
 		arg.AuthorID,
@@ -407,6 +435,35 @@ func (q *Queries) CreateProfile(ctx context.Context, arg CreateProfileParams) (C
 	return i, err
 }
 
+const createStandaloneToolTicket = `-- name: CreateStandaloneToolTicket :one
+INSERT INTO tool_tickets (
+  post_id, requested_by, tool_name, tool_description, tool_website
+) VALUES (
+  NULL, $1, $2, $3, $4
+)
+RETURNING id
+`
+
+type CreateStandaloneToolTicketParams struct {
+	RequestedBy     uuid.UUID   `json:"requested_by"`
+	ToolName        string      `json:"tool_name"`
+	ToolDescription pgtype.Text `json:"tool_description"`
+	ToolWebsite     pgtype.Text `json:"tool_website"`
+}
+
+// A tool suggestion not tied to any playbook (from the /tools "Add tool" flow).
+func (q *Queries) CreateStandaloneToolTicket(ctx context.Context, arg CreateStandaloneToolTicketParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createStandaloneToolTicket,
+		arg.RequestedBy,
+		arg.ToolName,
+		arg.ToolDescription,
+		arg.ToolWebsite,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const createTool = `-- name: CreateTool :one
 INSERT INTO tools (
   name, description, logo_url
@@ -451,7 +508,7 @@ RETURNING id
 `
 
 type CreateToolTicketParams struct {
-	PostID          uuid.UUID   `json:"post_id"`
+	PostID          pgtype.UUID `json:"post_id"`
 	RequestedBy     uuid.UUID   `json:"requested_by"`
 	ToolName        string      `json:"tool_name"`
 	ToolDescription pgtype.Text `json:"tool_description"`
@@ -471,36 +528,22 @@ func (q *Queries) CreateToolTicket(ctx context.Context, arg CreateToolTicketPara
 	return id, err
 }
 
-const createStandaloneToolTicket = `-- name: CreateStandaloneToolTicket :one
-INSERT INTO tool_tickets (
-  post_id, requested_by, tool_name, tool_description, tool_website
-) VALUES (
-  NULL, $1, $2, $3, $4
-)
-RETURNING id
+const createVendorForTool = `-- name: CreateVendorForTool :one
+INSERT INTO vendors (name)
+SELECT t.name FROM tools t WHERE t.id = $1
+RETURNING vendors.id
 `
 
-type CreateStandaloneToolTicketParams struct {
-	RequestedBy     uuid.UUID   `json:"requested_by"`
-	ToolName        string      `json:"tool_name"`
-	ToolDescription pgtype.Text `json:"tool_description"`
-	ToolWebsite     pgtype.Text `json:"tool_website"`
-}
-
-func (q *Queries) CreateStandaloneToolTicket(ctx context.Context, arg CreateStandaloneToolTicketParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, createStandaloneToolTicket,
-		arg.RequestedBy,
-		arg.ToolName,
-		arg.ToolDescription,
-		arg.ToolWebsite,
-	)
-	var id uuid.UUID
+// Tools imported without vendor details have no vendors row at all; the owner
+// filling in the vendor card is what creates one.
+func (q *Queries) CreateVendorForTool(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createVendorForTool, id)
 	err := row.Scan(&id)
 	return id, err
 }
 
 const deleteNotification = `-- name: DeleteNotification :exec
-DELETE FROM notifications
+DELETE FROM notifications 
 WHERE id = $1 AND recipient_id = $2
 `
 
@@ -532,6 +575,15 @@ func (q *Queries) DeletePost(ctx context.Context, arg DeletePostParams) (int64, 
 	return result.RowsAffected(), nil
 }
 
+const deleteToolCategories = `-- name: DeleteToolCategories :exec
+DELETE FROM tool_categories WHERE tool_id = $1
+`
+
+func (q *Queries) DeleteToolCategories(ctx context.Context, toolID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteToolCategories, toolID)
+	return err
+}
+
 const editPostComment = `-- name: EditPostComment :exec
 UPDATE post_comments
 SET content = $2,
@@ -546,6 +598,22 @@ type EditPostCommentParams struct {
 
 func (q *Queries) EditPostComment(ctx context.Context, arg EditPostCommentParams) error {
 	_, err := q.db.Exec(ctx, editPostComment, arg.ID, arg.Content)
+	return err
+}
+
+const followTool = `-- name: FollowTool :exec
+INSERT INTO tool_follows (profile_id, tool_id)
+VALUES ($1, $2)
+ON CONFLICT (profile_id, tool_id) DO NOTHING
+`
+
+type FollowToolParams struct {
+	ProfileID uuid.UUID `json:"profile_id"`
+	ToolID    uuid.UUID `json:"tool_id"`
+}
+
+func (q *Queries) FollowTool(ctx context.Context, arg FollowToolParams) error {
+	_, err := q.db.Exec(ctx, followTool, arg.ProfileID, arg.ToolID)
 	return err
 }
 
@@ -600,6 +668,83 @@ func (q *Queries) GetFacetCounts(ctx context.Context, websearchToTsquery string)
 	var i GetFacetCountsRow
 	err := row.Scan(&i.PostCount, &i.ToolCount, &i.ProfileCount)
 	return i, err
+}
+
+const getPopularTools = `-- name: GetPopularTools :many
+SELECT
+  twd.id, twd.name, twd.description, twd.logo_url,
+  twd.created_at, twd.updated_at, twd.categories, twd.vendor,
+  COUNT(DISTINCT si.profile_id) AS stack_count,
+  COUNT(DISTINCT recent.post_id) AS recent_mentions
+FROM tools_with_details twd
+LEFT JOIN stack_items si ON si.tool_id = twd.id
+LEFT JOIN (
+  SELECT pt.tool_id, pt.post_id
+  FROM post_tools pt
+  JOIN posts p ON p.id = pt.post_id
+  WHERE p.is_published
+    AND p.last_publish IS NOT NULL
+    AND p.last_publish >= now() - interval '7 days'
+) recent ON recent.tool_id = twd.id
+GROUP BY twd.id, twd.name, twd.description, twd.logo_url,
+         twd.created_at, twd.updated_at, twd.categories, twd.vendor
+ORDER BY recent_mentions DESC, stack_count DESC, twd.name ASC
+LIMIT $1
+`
+
+type GetPopularToolsRow struct {
+	ID             uuid.UUID          `json:"id"`
+	Name           string             `json:"name"`
+	Description    pgtype.Text        `json:"description"`
+	LogoUrl        pgtype.Text        `json:"logo_url"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	Categories     interface{}        `json:"categories"`
+	Vendor         json.RawMessage    `json:"vendor"`
+	StackCount     int64              `json:"stack_count"`
+	RecentMentions int64              `json:"recent_mentions"`
+}
+
+// Tools "rising this week", for the dashboard shelf.
+//
+// The weekly signal is how many playbooks published in the last 7 days mention
+// the tool — people writing about it right now. Stack membership CANNOT provide
+// this: stack_items is (profile_id, tool_id) with no timestamp, so there is no
+// way to know when a tool was added to anyone's stack. Publishing activity is
+// the only "this week" the schema can actually answer.
+//
+// All-time stack count breaks ties, so a quiet week falls back to the tools
+// most people run rather than emptying the shelf. Name breaks the remaining
+// ties, keeping the order stable between loads instead of shuffling.
+func (q *Queries) GetPopularTools(ctx context.Context, pageLimit int32) ([]GetPopularToolsRow, error) {
+	rows, err := q.db.Query(ctx, getPopularTools, pageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetPopularToolsRow
+	for rows.Next() {
+		var i GetPopularToolsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.LogoUrl,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Categories,
+			&i.Vendor,
+			&i.StackCount,
+			&i.RecentMentions,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getPost = `-- name: GetPost :one
@@ -801,6 +946,160 @@ func (q *Queries) GetProfileWithUsername(ctx context.Context, username string) (
 	return i, err
 }
 
+const getProfileWithUsernameAuthenticated = `-- name: GetProfileWithUsernameAuthenticated :one
+SELECT
+  id,
+  username,
+  display_name,
+  bio,
+  website,
+  company,
+  location,
+  linkedin,
+  twitter,
+  email_hash,
+  avatar_url,
+  created_at,
+  updated_at,
+  EXISTS(
+    SELECT 1 FROM user_follows uf
+    WHERE uf.follower_id = $1 AND uf.followee_id = profiles.id
+  ) AS is_following
+FROM
+  profiles
+WHERE
+  username = $2
+`
+
+type GetProfileWithUsernameAuthenticatedParams struct {
+	ViewerID uuid.UUID `json:"viewer_id"`
+	Username string    `json:"username"`
+}
+
+type GetProfileWithUsernameAuthenticatedRow struct {
+	ID          uuid.UUID          `json:"id"`
+	Username    string             `json:"username"`
+	DisplayName string             `json:"display_name"`
+	Bio         pgtype.Text        `json:"bio"`
+	Website     pgtype.Text        `json:"website"`
+	Company     pgtype.Text        `json:"company"`
+	Location    pgtype.Text        `json:"location"`
+	Linkedin    pgtype.Text        `json:"linkedin"`
+	Twitter     pgtype.Text        `json:"twitter"`
+	EmailHash   pgtype.Text        `json:"email_hash"`
+	AvatarUrl   pgtype.Text        `json:"avatar_url"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	IsFollowing bool               `json:"is_following"`
+}
+
+// Same as GetProfileWithUsername plus whether the viewer already follows this
+// profile, so the profile page's Follow button renders in the right state on
+// the first paint instead of always starting at "Follow".
+func (q *Queries) GetProfileWithUsernameAuthenticated(ctx context.Context, arg GetProfileWithUsernameAuthenticatedParams) (GetProfileWithUsernameAuthenticatedRow, error) {
+	row := q.db.QueryRow(ctx, getProfileWithUsernameAuthenticated, arg.ViewerID, arg.Username)
+	var i GetProfileWithUsernameAuthenticatedRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.DisplayName,
+		&i.Bio,
+		&i.Website,
+		&i.Company,
+		&i.Location,
+		&i.Linkedin,
+		&i.Twitter,
+		&i.EmailHash,
+		&i.AvatarUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.IsFollowing,
+	)
+	return i, err
+}
+
+const getPublishedPostToolFacets = `-- name: GetPublishedPostToolFacets :many
+SELECT
+  t.id,
+  t.name,
+  COALESCE(t.logo_url, '') AS logo_url,
+  COUNT(DISTINCT pt.post_id)::int AS post_count
+FROM tools t
+JOIN post_tools pt ON pt.tool_id = t.id
+JOIN posts p ON p.id = pt.post_id
+WHERE p.is_published
+  AND NOT EXISTS (
+    SELECT 1 FROM tool_tickets tt
+    WHERE tt.post_id = p.id AND tt.status IN ('pending', 'rejected')
+  )
+GROUP BY t.id, t.name, t.logo_url
+ORDER BY post_count DESC, t.name ASC
+LIMIT $1
+`
+
+type GetPublishedPostToolFacetsRow struct {
+	ID        uuid.UUID `json:"id"`
+	Name      string    `json:"name"`
+	LogoUrl   string    `json:"logo_url"`
+	PostCount int32     `json:"post_count"`
+}
+
+// Tools used across published posts, with how many posts use each — the "Tools"
+// facet on the /playbooks browse page.
+func (q *Queries) GetPublishedPostToolFacets(ctx context.Context, limit int32) ([]GetPublishedPostToolFacetsRow, error) {
+	rows, err := q.db.Query(ctx, getPublishedPostToolFacets, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetPublishedPostToolFacetsRow
+	for rows.Next() {
+		var i GetPublishedPostToolFacetsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.LogoUrl,
+			&i.PostCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getPublishedPostTypeCounts = `-- name: GetPublishedPostTypeCounts :one
+SELECT
+  COUNT(*)::int AS all_count,
+  COUNT(*) FILTER (WHERE p.type = 'playbook')::int AS playbook_count,
+  COUNT(*) FILTER (WHERE p.type = 'comparison')::int AS comparison_count
+FROM posts p
+WHERE p.is_published
+  AND NOT EXISTS (
+    SELECT 1 FROM tool_tickets tt
+    WHERE tt.post_id = p.id AND tt.status IN ('pending', 'rejected')
+  )
+`
+
+type GetPublishedPostTypeCountsRow struct {
+	AllCount        int32 `json:"all_count"`
+	PlaybookCount   int32 `json:"playbook_count"`
+	ComparisonCount int32 `json:"comparison_count"`
+}
+
+// Counts for the /playbooks filter chips. There is no combo_count any more:
+// the type was folded into 'playbook', so a combo column would now always
+// read zero.
+func (q *Queries) GetPublishedPostTypeCounts(ctx context.Context) (GetPublishedPostTypeCountsRow, error) {
+	row := q.db.QueryRow(ctx, getPublishedPostTypeCounts)
+	var i GetPublishedPostTypeCountsRow
+	err := row.Scan(&i.AllCount, &i.PlaybookCount, &i.ComparisonCount)
+	return i, err
+}
+
 const getTool = `-- name: GetTool :one
 SELECT
   twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor, twd.description_rich,
@@ -840,87 +1139,6 @@ func (q *Queries) GetTool(ctx context.Context, id uuid.UUID) (GetToolRow, error)
 	return i, err
 }
 
-const listTools = `-- name: ListTools :many
-SELECT
-  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor,
-  COUNT(*) OVER() AS total_count
-FROM tools_with_details twd
-WHERE (
-    $3::text = ''
-    OR twd.name ILIKE '%' || $3::text || '%'
-    OR twd.description ILIKE '%' || $3::text || '%'
-  )
-  AND (
-    $4::text = ''
-    OR EXISTS (
-      SELECT 1 FROM tool_categories tc
-      JOIN categories c ON tc.category_id = c.id
-      WHERE tc.tool_id = twd.id AND c.slug = $4::text
-    )
-  )
-ORDER BY
-  CASE WHEN $5::text = 'newest' THEN twd.created_at END DESC,
-  CASE WHEN $5::text = 'updated' THEN twd.updated_at END DESC,
-  twd.name ASC
-LIMIT $1 OFFSET $2
-`
-
-type ListToolsParams struct {
-	Limit        int32  `json:"limit"`
-	Offset       int32  `json:"offset"`
-	Search       string `json:"search"`
-	CategorySlug string `json:"category_slug"`
-	Sort         string `json:"sort"`
-}
-
-type ListToolsRow struct {
-	ID          uuid.UUID          `json:"id"`
-	Name        string             `json:"name"`
-	Description pgtype.Text        `json:"description"`
-	LogoUrl     pgtype.Text        `json:"logo_url"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
-	Categories  interface{}        `json:"categories"`
-	Vendor      json.RawMessage    `json:"vendor"`
-	TotalCount  int64              `json:"total_count"`
-}
-
-func (q *Queries) ListTools(ctx context.Context, arg ListToolsParams) ([]ListToolsRow, error) {
-	rows, err := q.db.Query(ctx, listTools,
-		arg.Limit,
-		arg.Offset,
-		arg.Search,
-		arg.CategorySlug,
-		arg.Sort,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListToolsRow
-	for rows.Next() {
-		var i ListToolsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Description,
-			&i.LogoUrl,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.Categories,
-			&i.Vendor,
-			&i.TotalCount,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getToolAuthenticated = `-- name: GetToolAuthenticated :one
 SELECT
   id, name, description, logo_url, created_at, updated_at, categories, vendor, description_rich,
@@ -943,21 +1161,21 @@ type GetToolAuthenticatedParams struct {
 }
 
 type GetToolAuthenticatedRow struct {
-	ID            uuid.UUID          `json:"id"`
-	Name          string             `json:"name"`
-	Description   pgtype.Text        `json:"description"`
-	LogoUrl       pgtype.Text        `json:"logo_url"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
-	Categories      interface{}      `json:"categories"`
-	Vendor          json.RawMessage  `json:"vendor"`
-	DescriptionRich pgtype.Text      `json:"description_rich"`
-	IsInStack       bool             `json:"is_in_stack"`
-	IsInWatchlist   bool             `json:"is_in_watchlist"`
-	IsInOldStack    bool             `json:"is_in_old_stack"`
-	IsFollowed      bool             `json:"is_followed"`
-	IsOwner         bool             `json:"is_owner"`
-	IsClaimed       bool             `json:"is_claimed"`
+	ID              uuid.UUID          `json:"id"`
+	Name            string             `json:"name"`
+	Description     pgtype.Text        `json:"description"`
+	LogoUrl         pgtype.Text        `json:"logo_url"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	Categories      interface{}        `json:"categories"`
+	Vendor          json.RawMessage    `json:"vendor"`
+	DescriptionRich pgtype.Text        `json:"description_rich"`
+	IsInStack       bool               `json:"is_in_stack"`
+	IsInWatchlist   bool               `json:"is_in_watchlist"`
+	IsInOldStack    bool               `json:"is_in_old_stack"`
+	IsFollowed      bool               `json:"is_followed"`
+	IsOwner         bool               `json:"is_owner"`
+	IsClaimed       bool               `json:"is_claimed"`
 }
 
 func (q *Queries) GetToolAuthenticated(ctx context.Context, arg GetToolAuthenticatedParams) (GetToolAuthenticatedRow, error) {
@@ -1037,6 +1255,22 @@ func (q *Queries) GetToolFromTicket(ctx context.Context, id uuid.UUID) (GetToolF
 		&i.Vendor,
 	)
 	return i, err
+}
+
+const getToolIDBySlug = `-- name: GetToolIDBySlug :one
+SELECT id FROM tools
+WHERE btrim(lower(regexp_replace(name, '[^a-zA-Z0-9]+', '-', 'g')), '-') = $1
+LIMIT 1
+`
+
+// Resolves a URL slug back to a tool id. The slug is the tool name lowercased
+// with every run of non-alphanumeric characters collapsed to '-'. Must stay in
+// sync with toolSlug() on the frontend.
+func (q *Queries) GetToolIDBySlug(ctx context.Context, name string) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getToolIDBySlug, name)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getToolTicket = `-- name: GetToolTicket :one
@@ -1129,9 +1363,20 @@ func (q *Queries) GetToolTicket(ctx context.Context, id uuid.UUID) (GetToolTicke
 	return i, err
 }
 
+const getToolVendorID = `-- name: GetToolVendorID :one
+SELECT vendor_id FROM tools WHERE id = $1
+`
+
+func (q *Queries) GetToolVendorID(ctx context.Context, id uuid.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, getToolVendorID, id)
+	var vendor_id pgtype.UUID
+	err := row.Scan(&vendor_id)
+	return vendor_id, err
+}
+
 const getToolsByCategory = `-- name: GetToolsByCategory :many
 SELECT
-  id, name, description, logo_url, created_at, updated_at, categories, vendor,
+  id, name, description, logo_url, created_at, updated_at, categories, vendor, description_rich,
   COUNT(*) OVER() AS total_count
 FROM tools_with_details twd
 WHERE EXISTS (
@@ -1151,15 +1396,16 @@ type GetToolsByCategoryParams struct {
 }
 
 type GetToolsByCategoryRow struct {
-	ID          uuid.UUID          `json:"id"`
-	Name        string             `json:"name"`
-	Description pgtype.Text        `json:"description"`
-	LogoUrl     pgtype.Text        `json:"logo_url"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
-	Categories  interface{}        `json:"categories"`
-	Vendor      json.RawMessage    `json:"vendor"`
-	TotalCount  int64              `json:"total_count"`
+	ID              uuid.UUID          `json:"id"`
+	Name            string             `json:"name"`
+	Description     pgtype.Text        `json:"description"`
+	LogoUrl         pgtype.Text        `json:"logo_url"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	Categories      interface{}        `json:"categories"`
+	Vendor          json.RawMessage    `json:"vendor"`
+	DescriptionRich pgtype.Text        `json:"description_rich"`
+	TotalCount      int64              `json:"total_count"`
 }
 
 func (q *Queries) GetToolsByCategory(ctx context.Context, arg GetToolsByCategoryParams) ([]GetToolsByCategoryRow, error) {
@@ -1180,6 +1426,7 @@ func (q *Queries) GetToolsByCategory(ctx context.Context, arg GetToolsByCategory
 			&i.UpdatedAt,
 			&i.Categories,
 			&i.Vendor,
+			&i.DescriptionRich,
 			&i.TotalCount,
 		); err != nil {
 			return nil, err
@@ -1192,48 +1439,41 @@ func (q *Queries) GetToolsByCategory(ctx context.Context, arg GetToolsByCategory
 	return items, nil
 }
 
-const listUserStack = `-- name: ListUserStack :many
-SELECT
-  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor, si.added_at
-FROM tools_with_details twd
-JOIN stack_items si ON si.tool_id = twd.id
-JOIN profiles p ON p.id = si.profile_id
-WHERE p.username = $1
-ORDER BY twd.name
+const getToolsByCategoryKeywords = `-- name: GetToolsByCategoryKeywords :many
+SELECT DISTINCT t.id, t.name, t.logo_url
+FROM tools t
+JOIN tool_categories tc ON tc.tool_id = t.id
+JOIN categories c ON c.id = tc.category_id
+WHERE c.name ILIKE ANY($1::text[])
+  AND t.logo_url IS NOT NULL
+  AND t.logo_url <> ''
+ORDER BY t.name
+LIMIT $2
 `
 
-type ListUserStackRow struct {
-	ID          uuid.UUID          `json:"id"`
-	Name        string             `json:"name"`
-	Description pgtype.Text        `json:"description"`
-	LogoUrl     pgtype.Text        `json:"logo_url"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
-	Categories  interface{}        `json:"categories"`
-	Vendor      json.RawMessage    `json:"vendor"`
-	AddedAt     pgtype.Timestamptz `json:"added_at"`
+type GetToolsByCategoryKeywordsParams struct {
+	Patterns []string `json:"patterns"`
+	Lim      int32    `json:"lim"`
 }
 
-func (q *Queries) ListUserStack(ctx context.Context, username string) ([]ListUserStackRow, error) {
-	rows, err := q.db.Query(ctx, listUserStack, username)
+type GetToolsByCategoryKeywordsRow struct {
+	ID      uuid.UUID   `json:"id"`
+	Name    string      `json:"name"`
+	LogoUrl pgtype.Text `json:"logo_url"`
+}
+
+// Loose match of tools whose categories look like one of the chosen onboarding
+// focus areas. Requires a logo so every onboarding tile renders properly.
+func (q *Queries) GetToolsByCategoryKeywords(ctx context.Context, arg GetToolsByCategoryKeywordsParams) ([]GetToolsByCategoryKeywordsRow, error) {
+	rows, err := q.db.Query(ctx, getToolsByCategoryKeywords, arg.Patterns, arg.Lim)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListUserStackRow
+	var items []GetToolsByCategoryKeywordsRow
 	for rows.Next() {
-		var i ListUserStackRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Description,
-			&i.LogoUrl,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.Categories,
-			&i.Vendor,
-			&i.AddedAt,
-		); err != nil {
+		var i GetToolsByCategoryKeywordsRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.LogoUrl); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1244,429 +1484,31 @@ func (q *Queries) ListUserStack(ctx context.Context, username string) ([]ListUse
 	return items, nil
 }
 
-const listUserWatchlist = `-- name: ListUserWatchlist :many
-SELECT
-  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor, wi.added_at
-FROM tools_with_details twd
-JOIN watchlist_items wi ON wi.tool_id = twd.id
-JOIN profiles p ON p.id = wi.profile_id
-WHERE p.username = $1
-ORDER BY twd.name
+const getToolsByNames = `-- name: GetToolsByNames :many
+SELECT id, name, logo_url
+FROM tools
+WHERE lower(name) = ANY($1::text[])
+ORDER BY name
 `
 
-type ListUserWatchlistRow struct {
-	ID          uuid.UUID          `json:"id"`
-	Name        string             `json:"name"`
-	Description pgtype.Text        `json:"description"`
-	LogoUrl     pgtype.Text        `json:"logo_url"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
-	Categories  interface{}        `json:"categories"`
-	Vendor      json.RawMessage    `json:"vendor"`
-	AddedAt     pgtype.Timestamptz `json:"added_at"`
+type GetToolsByNamesRow struct {
+	ID      uuid.UUID   `json:"id"`
+	Name    string      `json:"name"`
+	LogoUrl pgtype.Text `json:"logo_url"`
 }
 
-func (q *Queries) ListUserWatchlist(ctx context.Context, username string) ([]ListUserWatchlistRow, error) {
-	rows, err := q.db.Query(ctx, listUserWatchlist, username)
+// Resolves a fixed list of catalog names (the onboarding "popular tools" grid)
+// to real tools, so the tiles can show the stored logo.
+func (q *Queries) GetToolsByNames(ctx context.Context, names []string) ([]GetToolsByNamesRow, error) {
+	rows, err := q.db.Query(ctx, getToolsByNames, names)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListUserWatchlistRow
+	var items []GetToolsByNamesRow
 	for rows.Next() {
-		var i ListUserWatchlistRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Description,
-			&i.LogoUrl,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.Categories,
-			&i.Vendor,
-			&i.AddedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listUserOldStack = `-- name: ListUserOldStack :many
-SELECT
-  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor, oi.added_at
-FROM tools_with_details twd
-JOIN old_stack_items oi ON oi.tool_id = twd.id
-JOIN profiles p ON p.id = oi.profile_id
-WHERE p.username = $1
-ORDER BY twd.name
-`
-
-type ListUserOldStackRow struct {
-	ID          uuid.UUID          `json:"id"`
-	Name        string             `json:"name"`
-	Description pgtype.Text        `json:"description"`
-	LogoUrl     pgtype.Text        `json:"logo_url"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
-	Categories  interface{}        `json:"categories"`
-	Vendor      json.RawMessage    `json:"vendor"`
-	AddedAt     pgtype.Timestamptz `json:"added_at"`
-}
-
-func (q *Queries) ListUserOldStack(ctx context.Context, username string) ([]ListUserOldStackRow, error) {
-	rows, err := q.db.Query(ctx, listUserOldStack, username)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListUserOldStackRow
-	for rows.Next() {
-		var i ListUserOldStackRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Description,
-			&i.LogoUrl,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.Categories,
-			&i.Vendor,
-			&i.AddedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listUserKeyTools = `-- name: ListUserKeyTools :many
-SELECT
-  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor
-FROM tools_with_details twd
-JOIN key_tools kt ON kt.tool_id = twd.id
-JOIN profiles p ON p.id = kt.profile_id
-WHERE p.username = $1
-ORDER BY kt.position
-`
-
-type ListUserKeyToolsRow struct {
-	ID          uuid.UUID          `json:"id"`
-	Name        string             `json:"name"`
-	Description pgtype.Text        `json:"description"`
-	LogoUrl     pgtype.Text        `json:"logo_url"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
-	Categories  interface{}        `json:"categories"`
-	Vendor      json.RawMessage    `json:"vendor"`
-}
-
-func (q *Queries) ListUserKeyTools(ctx context.Context, username string) ([]ListUserKeyToolsRow, error) {
-	rows, err := q.db.Query(ctx, listUserKeyTools, username)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListUserKeyToolsRow
-	for rows.Next() {
-		var i ListUserKeyToolsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Description,
-			&i.LogoUrl,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.Categories,
-			&i.Vendor,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const removeAllKeyTools = `-- name: RemoveAllKeyTools :exec
-DELETE FROM key_tools
-WHERE profile_id = $1
-`
-
-func (q *Queries) RemoveAllKeyTools(ctx context.Context, profileID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, removeAllKeyTools, profileID)
-	return err
-}
-
-const addKeyTool = `-- name: AddKeyTool :exec
-INSERT INTO key_tools (profile_id, tool_id, position)
-VALUES ($1, $2, $3)
-ON CONFLICT (profile_id, tool_id) DO UPDATE SET position = EXCLUDED.position
-`
-
-type AddKeyToolParams struct {
-	ProfileID uuid.UUID `json:"profile_id"`
-	ToolID    uuid.UUID `json:"tool_id"`
-	Position  int32     `json:"position"`
-}
-
-func (q *Queries) AddKeyTool(ctx context.Context, arg AddKeyToolParams) error {
-	_, err := q.db.Exec(ctx, addKeyTool, arg.ProfileID, arg.ToolID, arg.Position)
-	return err
-}
-
-const listUserKeyPlaybooks = `-- name: ListUserKeyPlaybooks :many
-SELECT
-  pwt.id, pwt.type, pwt.name, pwt.slug, pwt.description, pwt.updated_at, pwt.created_at, pwt.last_draft_update, pwt.last_publish, pwt.author_id, pwt.is_published, pwt.author_username, pwt.tools
-FROM posts_with_tools pwt
-JOIN key_playbooks kp ON kp.post_id = pwt.id
-JOIN profiles p ON p.id = kp.profile_id
-WHERE p.username = $1 AND pwt.is_published
-ORDER BY kp.position
-`
-
-type ListUserKeyPlaybooksRow struct {
-	ID              uuid.UUID          `json:"id"`
-	Type            string             `json:"type"`
-	Name            string             `json:"name"`
-	Slug            string             `json:"slug"`
-	Description     string             `json:"description"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	LastDraftUpdate pgtype.Timestamptz `json:"last_draft_update"`
-	LastPublish     pgtype.Timestamptz `json:"last_publish"`
-	AuthorID        uuid.UUID          `json:"author_id"`
-	IsPublished     pgtype.Bool        `json:"is_published"`
-	AuthorUsername  string             `json:"author_username"`
-	Tools           json.RawMessage    `json:"tools"`
-}
-
-func (q *Queries) ListUserKeyPlaybooks(ctx context.Context, username string) ([]ListUserKeyPlaybooksRow, error) {
-	rows, err := q.db.Query(ctx, listUserKeyPlaybooks, username)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListUserKeyPlaybooksRow
-	for rows.Next() {
-		var i ListUserKeyPlaybooksRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Type,
-			&i.Name,
-			&i.Slug,
-			&i.Description,
-			&i.UpdatedAt,
-			&i.CreatedAt,
-			&i.LastDraftUpdate,
-			&i.LastPublish,
-			&i.AuthorID,
-			&i.IsPublished,
-			&i.AuthorUsername,
-			&i.Tools,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const removeAllKeyPlaybooks = `-- name: RemoveAllKeyPlaybooks :exec
-DELETE FROM key_playbooks
-WHERE profile_id = $1
-`
-
-func (q *Queries) RemoveAllKeyPlaybooks(ctx context.Context, profileID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, removeAllKeyPlaybooks, profileID)
-	return err
-}
-
-const addKeyPlaybook = `-- name: AddKeyPlaybook :exec
-INSERT INTO key_playbooks (profile_id, post_id, position)
-SELECT $1, $2, $3
-WHERE EXISTS (SELECT 1 FROM posts WHERE id = $2 AND author_id = $1)
-ON CONFLICT (profile_id, post_id) DO UPDATE SET position = EXCLUDED.position
-`
-
-type AddKeyPlaybookParams struct {
-	ProfileID uuid.UUID `json:"profile_id"`
-	PostID    uuid.UUID `json:"post_id"`
-	Position  int32     `json:"position"`
-}
-
-func (q *Queries) AddKeyPlaybook(ctx context.Context, arg AddKeyPlaybookParams) error {
-	_, err := q.db.Exec(ctx, addKeyPlaybook, arg.ProfileID, arg.PostID, arg.Position)
-	return err
-}
-
-const getUserStats = `-- name: GetUserStats :one
-SELECT
-  (SELECT COUNT(*) FROM posts WHERE author_id = $1 AND is_published = true)::int AS post_count,
-  (SELECT COUNT(*) FROM user_follows WHERE followee_id = $1)::int AS follower_count,
-  (SELECT COUNT(*) FROM user_follows WHERE follower_id = $1)::int AS following_count,
-  (SELECT COUNT(*) FROM tool_follows WHERE profile_id = $1)::int AS tools_followed_count
-`
-
-type GetUserStatsRow struct {
-	PostCount          int32 `json:"post_count"`
-	FollowerCount      int32 `json:"follower_count"`
-	FollowingCount     int32 `json:"following_count"`
-	ToolsFollowedCount int32 `json:"tools_followed_count"`
-}
-
-func (q *Queries) GetUserStats(ctx context.Context, authorID uuid.UUID) (GetUserStatsRow, error) {
-	row := q.db.QueryRow(ctx, getUserStats, authorID)
-	var i GetUserStatsRow
-	err := row.Scan(
-		&i.PostCount,
-		&i.FollowerCount,
-		&i.FollowingCount,
-		&i.ToolsFollowedCount,
-	)
-	return i, err
-}
-
-const listFollowers = `-- name: ListFollowers :many
-SELECT
-  p.id,
-  p.username,
-  p.display_name,
-  p.bio,
-  p.email_hash,
-  p.avatar_url,
-  ($1::bool AND EXISTS(
-    SELECT 1 FROM user_follows uf2
-    WHERE uf2.follower_id = $2 AND uf2.followee_id = p.id
-  )) AS is_following,
-  COUNT(*) OVER() AS total_count
-FROM user_follows uf
-JOIN profiles p ON p.id = uf.follower_id
-WHERE uf.followee_id = $3
-ORDER BY p.username
-LIMIT $4 OFFSET $5
-`
-
-type ListFollowersParams struct {
-	IsAuthenticated bool      `json:"is_authenticated"`
-	ViewerID        uuid.UUID `json:"viewer_id"`
-	TargetID        uuid.UUID `json:"target_id"`
-	Lim             int32     `json:"lim"`
-	Off             int32     `json:"off"`
-}
-
-type FollowUserRow struct {
-	ID          uuid.UUID   `json:"id"`
-	Username    string      `json:"username"`
-	DisplayName pgtype.Text `json:"display_name"`
-	Bio         pgtype.Text `json:"bio"`
-	EmailHash   pgtype.Text `json:"email_hash"`
-	AvatarUrl   pgtype.Text `json:"avatar_url"`
-	IsFollowing bool        `json:"is_following"`
-	TotalCount  int64       `json:"total_count"`
-}
-
-func (q *Queries) ListFollowers(ctx context.Context, arg ListFollowersParams) ([]FollowUserRow, error) {
-	rows, err := q.db.Query(ctx, listFollowers,
-		arg.IsAuthenticated,
-		arg.ViewerID,
-		arg.TargetID,
-		arg.Lim,
-		arg.Off,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []FollowUserRow
-	for rows.Next() {
-		var i FollowUserRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Username,
-			&i.DisplayName,
-			&i.Bio,
-			&i.EmailHash,
-			&i.AvatarUrl,
-			&i.IsFollowing,
-			&i.TotalCount,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listFollowing = `-- name: ListFollowing :many
-SELECT
-  p.id,
-  p.username,
-  p.display_name,
-  p.bio,
-  p.email_hash,
-  p.avatar_url,
-  ($1::bool AND EXISTS(
-    SELECT 1 FROM user_follows uf2
-    WHERE uf2.follower_id = $2 AND uf2.followee_id = p.id
-  )) AS is_following,
-  COUNT(*) OVER() AS total_count
-FROM user_follows uf
-JOIN profiles p ON p.id = uf.followee_id
-WHERE uf.follower_id = $3
-ORDER BY p.username
-LIMIT $4 OFFSET $5
-`
-
-type ListFollowingParams struct {
-	IsAuthenticated bool      `json:"is_authenticated"`
-	ViewerID        uuid.UUID `json:"viewer_id"`
-	TargetID        uuid.UUID `json:"target_id"`
-	Lim             int32     `json:"lim"`
-	Off             int32     `json:"off"`
-}
-
-func (q *Queries) ListFollowing(ctx context.Context, arg ListFollowingParams) ([]FollowUserRow, error) {
-	rows, err := q.db.Query(ctx, listFollowing,
-		arg.IsAuthenticated,
-		arg.ViewerID,
-		arg.TargetID,
-		arg.Lim,
-		arg.Off,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []FollowUserRow
-	for rows.Next() {
-		var i FollowUserRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Username,
-			&i.DisplayName,
-			&i.Bio,
-			&i.EmailHash,
-			&i.AvatarUrl,
-			&i.IsFollowing,
-			&i.TotalCount,
-		); err != nil {
+		var i GetToolsByNamesRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.LogoUrl); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1861,7 +1703,7 @@ WITH user_embedding AS (
   SELECT embedding FROM profiles WHERE id = $1
 )
 SELECT
-  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor,
+  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor, twd.description_rich,
   (1 - (user_embedding.embedding <=> t.embedding))::REAL AS cosine_similarity
 FROM
   tools_with_details twd
@@ -1897,6 +1739,7 @@ type GetTopRecommendedToolsRow struct {
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 	Categories       interface{}        `json:"categories"`
 	Vendor           json.RawMessage    `json:"vendor"`
+	DescriptionRich  pgtype.Text        `json:"description_rich"`
 	CosineSimilarity float32            `json:"cosine_similarity"`
 }
 
@@ -1918,6 +1761,7 @@ func (q *Queries) GetTopRecommendedTools(ctx context.Context, arg GetTopRecommen
 			&i.UpdatedAt,
 			&i.Categories,
 			&i.Vendor,
+			&i.DescriptionRich,
 			&i.CosineSimilarity,
 		); err != nil {
 			return nil, err
@@ -2001,6 +1845,143 @@ func (q *Queries) GetTopRecommendedUsers(ctx context.Context, arg GetTopRecommen
 	return items, nil
 }
 
+const getTrendingPlaybooksForUser = `-- name: GetTrendingPlaybooksForUser :many
+WITH
+  stack_tools AS (
+    SELECT tool_id FROM stack_items WHERE profile_id = $1
+  ),
+  followed_tools AS (
+    SELECT tool_id FROM tool_follows WHERE profile_id = $1
+  ),
+  starred_tools AS (
+    SELECT DISTINCT pt.tool_id
+    FROM post_stars ps
+    JOIN post_tools pt ON pt.post_id = ps.post_id
+    WHERE ps.liker_id = $1
+  ),
+  followed_people_tools AS (
+    SELECT DISTINCT pt.tool_id
+    FROM user_follows uf
+    JOIN posts fp ON fp.author_id = uf.followee_id AND fp.is_published
+    JOIN post_tools pt ON pt.post_id = fp.id
+    WHERE uf.follower_id = $1
+  ),
+  candidates AS (
+    SELECT pt.post_id, 1 AS tier FROM post_tools pt
+      WHERE pt.tool_id IN (SELECT tool_id FROM stack_tools)
+    UNION ALL
+    SELECT pt.post_id, 2 FROM post_tools pt
+      WHERE pt.tool_id IN (SELECT tool_id FROM followed_tools)
+    UNION ALL
+    SELECT pt.post_id, 3 FROM post_tools pt
+      WHERE pt.tool_id IN (SELECT tool_id FROM starred_tools)
+    UNION ALL
+    SELECT pt.post_id, 4 FROM post_tools pt
+      WHERE pt.tool_id IN (SELECT tool_id FROM followed_people_tools)
+  ),
+  ranked AS (
+    SELECT post_id, MIN(tier) AS tier FROM candidates GROUP BY post_id
+  )
+SELECT
+  pwt.id, pwt.type, pwt.name, pwt.slug, pwt.description,
+  pwt.updated_at, pwt.created_at, pwt.last_draft_update, pwt.last_publish,
+  pwt.author_id, pwt.is_published, pwt.author_username, pwt.tools,
+  r.tier::int AS tier,
+  false AS is_starred
+FROM ranked r
+JOIN posts_with_tools_and_tickets pwt ON pwt.id = r.post_id
+JOIN posts p ON p.id = r.post_id
+WHERE p.is_published
+  AND p.last_publish IS NOT NULL
+  AND p.author_id <> $1
+  AND NOT EXISTS (
+    SELECT 1 FROM post_stars ps
+    WHERE ps.post_id = p.id AND ps.liker_id = $1
+  )
+ORDER BY r.tier, p.last_publish DESC
+LIMIT $2
+`
+
+type GetTrendingPlaybooksForUserParams struct {
+	ViewerID  uuid.UUID `json:"viewer_id"`
+	PageLimit int32     `json:"page_limit"`
+}
+
+type GetTrendingPlaybooksForUserRow struct {
+	ID              uuid.UUID          `json:"id"`
+	Type            string             `json:"type"`
+	Name            string             `json:"name"`
+	Slug            string             `json:"slug"`
+	Description     string             `json:"description"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	LastDraftUpdate pgtype.Timestamptz `json:"last_draft_update"`
+	LastPublish     pgtype.Timestamptz `json:"last_publish"`
+	AuthorID        uuid.UUID          `json:"author_id"`
+	IsPublished     pgtype.Bool        `json:"is_published"`
+	AuthorUsername  string             `json:"author_username"`
+	Tools           interface{}        `json:"tools"`
+	Tier            int32              `json:"tier"`
+	IsStarred       bool               `json:"is_starred"`
+}
+
+// Personalised "Trending playbooks" for the dashboard, ranked by how close a
+// playbook's tools sit to the viewer's own tool graph:
+//
+//	tier 1  a tool in the viewer's active stack
+//	tier 2  a tool the viewer follows (watchlist plus manual follows)
+//	tier 3  a tool appearing in a playbook the viewer starred
+//	tier 4  a tool used by someone the viewer follows, in one of their playbooks
+//
+// A playbook matching several tiers keeps its STRONGEST (lowest) one, via
+// MIN(tier) — so a post about a stack tool never sinks to tier 4 merely because
+// someone the viewer follows also uses that tool. Within a tier the most
+// recently published wins.
+//
+// Posts the viewer already starred are excluded: this section exists to surface
+// things they have not seen, and a starred post is already saved. is_starred is
+// therefore always false, and is kept only so the JSON shape matches the other
+// post listings the frontend consumes.
+//
+// This replaces an embedding cosine-similarity ranking that returned NOTHING at
+// all when a viewer's profile embedding was still null — a silently empty
+// section for every new account.
+func (q *Queries) GetTrendingPlaybooksForUser(ctx context.Context, arg GetTrendingPlaybooksForUserParams) ([]GetTrendingPlaybooksForUserRow, error) {
+	rows, err := q.db.Query(ctx, getTrendingPlaybooksForUser, arg.ViewerID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetTrendingPlaybooksForUserRow
+	for rows.Next() {
+		var i GetTrendingPlaybooksForUserRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Type,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.UpdatedAt,
+			&i.CreatedAt,
+			&i.LastDraftUpdate,
+			&i.LastPublish,
+			&i.AuthorID,
+			&i.IsPublished,
+			&i.AuthorUsername,
+			&i.Tools,
+			&i.Tier,
+			&i.IsStarred,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUnreadNotificationCount = `-- name: GetUnreadNotificationCount :one
 SELECT COUNT(*)::INTEGER as count
 FROM notifications 
@@ -2012,6 +1993,215 @@ func (q *Queries) GetUnreadNotificationCount(ctx context.Context, recipientID uu
 	var count int32
 	err := row.Scan(&count)
 	return count, err
+}
+
+const getUserEmail = `-- name: GetUserEmail :one
+SELECT email::text FROM auth.users WHERE id = $1
+`
+
+func (q *Queries) GetUserEmail(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getUserEmail, id)
+	var email string
+	err := row.Scan(&email)
+	return email, err
+}
+
+const getUserFeed = `-- name: GetUserFeed :many
+WITH followed_users AS (
+  SELECT followee_id FROM user_follows WHERE follower_id = $1
+), followed_tools AS (
+  SELECT tool_id FROM tool_follows WHERE profile_id = $1
+), stack_tools AS (
+  SELECT tool_id FROM stack_items WHERE profile_id = $1
+), follows_anything AS (
+  SELECT (EXISTS(SELECT 1 FROM followed_users)
+       OR EXISTS(SELECT 1 FROM followed_tools)) AS yes
+), events AS (
+  -- Tier 0 — things that happened to you. Unread only: once you have seen a
+  -- notification it stops pinning the top of the feed, and the notifications
+  -- page still holds the full history.
+  SELECT 'notification'::text AS kind, n.type AS reason, 0 AS tier,
+         'notification:' || n.id::text AS event_key,
+         n.created_at AS occurred_at, n.actor_id AS actor_id,
+         CASE WHEN n.entity_type = 'post' THEN n.entity_id END AS post_id,
+         NULL::uuid AS tool_id,
+         n.message AS notification_message
+  FROM notifications n
+  WHERE n.recipient_id = $1
+    AND NOT COALESCE(n.is_read, false)
+
+  UNION ALL
+  -- Tier 1 — a playbook published by someone the viewer follows.
+  SELECT 'post', 'following_user', 1, 'post:' || p.id::text,
+         p.last_publish, p.author_id, p.id, NULL::uuid, NULL::text
+  FROM posts p
+  WHERE p.is_published AND p.last_publish IS NOT NULL
+    AND p.author_id IN (SELECT followee_id FROM followed_users)
+
+  UNION ALL
+  -- Tier 2 — a playbook about a tool in the viewer's ACTIVE STACK.
+  SELECT 'post', 'stack_tool', 2, 'post:' || p.id::text,
+         p.last_publish, p.author_id, p.id, pt.tool_id, NULL::text
+  FROM posts p
+  JOIN post_tools pt ON pt.post_id = p.id
+  WHERE p.is_published AND p.last_publish IS NOT NULL
+    AND pt.tool_id IN (SELECT tool_id FROM followed_tools)
+    AND pt.tool_id IN (SELECT tool_id FROM stack_tools)
+
+  UNION ALL
+  -- Tier 3 — a playbook about a followed tool that is NOT in the stack: the
+  -- watchlist, plus any tool followed by hand from its page. Half the weight of
+  -- tier 2 in the sense that matters — it never outranks it.
+  SELECT 'post', 'watchlist_tool', 3, 'post:' || p.id::text,
+         p.last_publish, p.author_id, p.id, pt.tool_id, NULL::text
+  FROM posts p
+  JOIN post_tools pt ON pt.post_id = p.id
+  WHERE p.is_published AND p.last_publish IS NOT NULL
+    AND pt.tool_id IN (SELECT tool_id FROM followed_tools)
+    AND pt.tool_id NOT IN (SELECT tool_id FROM stack_tools)
+
+  UNION ALL
+  -- Tier 4 — recent playbooks, so a brand-new account still sees something.
+  -- Suppressed the moment the viewer follows anyone or any tool: this branch is
+  -- what used to put strangers' posts in an established account's feed.
+  SELECT 'post', 'latest', 4, 'post:' || p.id::text,
+         p.last_publish, p.author_id, p.id, NULL::uuid, NULL::text
+  FROM posts p
+  WHERE p.is_published AND p.last_publish IS NOT NULL
+    AND NOT (SELECT yes FROM follows_anything)
+), ranked AS (
+  SELECT e.kind, e.reason, e.tier, e.event_key, e.occurred_at, e.actor_id, e.post_id, e.tool_id, e.notification_message, ROW_NUMBER() OVER (
+      PARTITION BY e.event_key ORDER BY e.tier
+    ) AS rn
+  FROM events e
+)
+SELECT
+  r.kind, r.reason, r.tier, r.occurred_at,
+  r.actor_id, actor.username AS actor_username,
+  -- sqlc infers a UNION column's type and nullability from the FIRST branch
+  -- only. Read straight from ` + "`" + `r` + "`" + `, post_id came out as interface{} (a UUID then
+  -- serialises as a byte array) and notification_message as a non-null string
+  -- (every post row is NULL there, so the scan fails and /feed 500s).
+  --   post_id: taken from the LEFT JOIN, which sqlc knows is nullable. Same
+  --     value, except a notification about a since-deleted post now gives
+  --     NULL rather than a dangling id; the frontend only uses it in a key.
+  --   notification_message: sqlc v1.21 cannot be talked out of ` + "`" + `string` + "`" + ` here
+  --     (NULLIF comes out as bool, COALESCE as string). A CASE is typed
+  --     interface{}, which pgx fills with a string or nil, so the JSON is
+  --     still a string or null. Values unchanged: post rows were NULL already.
+  p.id AS post_id,
+  p.name AS post_name, p.slug AS post_slug, p.type AS post_type, p.description AS post_description,
+  r.tool_id, t.name AS tool_name, t.logo_url AS tool_logo_url,
+  CASE WHEN r.kind = 'notification' THEN r.notification_message END AS notification_message,
+  COUNT(*) OVER() AS total_count
+FROM ranked r
+JOIN profiles actor ON actor.id = r.actor_id
+LEFT JOIN posts p ON p.id = r.post_id
+LEFT JOIN tools t ON t.id = r.tool_id
+WHERE r.rn = 1
+  -- A feed is what other people did; your own activity is not news to you.
+  AND r.actor_id <> $1::uuid
+ORDER BY (r.occurred_at < now() - interval '3 days')::int, r.tier, r.occurred_at DESC
+LIMIT $3 OFFSET $2
+`
+
+type GetUserFeedParams struct {
+	ViewerID   uuid.UUID `json:"viewer_id"`
+	PageOffset int32     `json:"page_offset"`
+	PageLimit  int32     `json:"page_limit"`
+}
+
+type GetUserFeedRow struct {
+	Kind                string             `json:"kind"`
+	Reason              string             `json:"reason"`
+	Tier                int32              `json:"tier"`
+	OccurredAt          pgtype.Timestamptz `json:"occurred_at"`
+	ActorID             pgtype.UUID        `json:"actor_id"`
+	ActorUsername       string             `json:"actor_username"`
+	PostID              pgtype.UUID        `json:"post_id"`
+	PostName            pgtype.Text        `json:"post_name"`
+	PostSlug            pgtype.Text        `json:"post_slug"`
+	PostType            pgtype.Text        `json:"post_type"`
+	PostDescription     pgtype.Text        `json:"post_description"`
+	ToolID              pgtype.UUID        `json:"tool_id"`
+	ToolName            pgtype.Text        `json:"tool_name"`
+	ToolLogoUrl         pgtype.Text        `json:"tool_logo_url"`
+	NotificationMessage interface{}        `json:"notification_message"`
+	TotalCount          int64              `json:"total_count"`
+}
+
+// Activity feed, ranked by how much each event has to do with the viewer:
+//
+//	tier 0  about you        — unread stars, comments, new followers, tool approvals
+//	tier 1  people you follow  — they published a playbook or comparison
+//	tier 2  tools in your stack — someone published about one
+//	tier 3  other followed tools — watchlist, plus anything followed by hand
+//	tier 4  discovery filler   — recent playbooks, and ONLY for a viewer who
+//	                             follows nobody and no tools, so an established
+//	                             account never sees strangers in its feed
+//
+// Tiers 2 and 3 are how "a watchlist tool carries half the weight of a stack
+// tool" is expressed: both are followed, but a post about something you
+// actually run always outranks a post about something you are only watching.
+// Tools in the old stack are absent entirely — archiving unfollows them.
+//
+// Recency outranks the tiers. Events from the last 3 days form a "fresh" band
+// that sorts above everything older, and the tiers order events *within* each
+// band. Tier alone used to decide absolutely, which let a three-week-old post
+// from someone you follow sit above a post from this morning about a tool you
+// run — the feed read as stale even when the site was busy.
+//
+// The tiers still matter, which is the point of banding rather than sorting by
+// time alone: among today's events you still see people you follow before
+// watchlist chatter. Only once an event ages out of the band does recency stop
+// protecting it.
+//
+// Within a band and tier the newest event wins. Every branch carries an event_key so a
+// post matching several reasons appears once, keeping its strongest reason —
+// which is also what makes a post about both a stack tool and a watchlist tool
+// rank as a stack post.
+//
+// Deliberately absent: "someone you follow started following X". Adding a tool
+// to a stack auto-follows it, so those rows were the highest-volume and least
+// informative thing in the feed, and they named tools the viewer had no
+// relationship with.
+// 0 for the last 3 days, 1 for everything older: the outermost sort key, so a
+// fresh event of any tier outranks a stale one of every tier.
+func (q *Queries) GetUserFeed(ctx context.Context, arg GetUserFeedParams) ([]GetUserFeedRow, error) {
+	rows, err := q.db.Query(ctx, getUserFeed, arg.ViewerID, arg.PageOffset, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetUserFeedRow
+	for rows.Next() {
+		var i GetUserFeedRow
+		if err := rows.Scan(
+			&i.Kind,
+			&i.Reason,
+			&i.Tier,
+			&i.OccurredAt,
+			&i.ActorID,
+			&i.ActorUsername,
+			&i.PostID,
+			&i.PostName,
+			&i.PostSlug,
+			&i.PostType,
+			&i.PostDescription,
+			&i.ToolID,
+			&i.ToolName,
+			&i.ToolLogoUrl,
+			&i.NotificationMessage,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getUserNotifications = `-- name: GetUserNotifications :many
@@ -2209,6 +2399,51 @@ func (q *Queries) GetUserPostByOldSlug(ctx context.Context, arg GetUserPostByOld
 	return i, err
 }
 
+const getUserPostCounts = `-- name: GetUserPostCounts :one
+SELECT
+  COUNT(*) FILTER (WHERE NOT sub.has_pending AND NOT sub.has_rejected AND sub.is_published)::int AS published,
+  COUNT(*) FILTER (WHERE NOT sub.has_pending AND NOT sub.has_rejected AND NOT sub.is_published)::int AS drafts,
+  COUNT(*) FILTER (WHERE sub.has_pending)::int AS waiting,
+  COUNT(*) FILTER (WHERE sub.has_rejected AND NOT sub.has_pending)::int AS rejected
+FROM (
+  SELECT
+    COALESCE(p.is_published, false) AS is_published,
+    EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = p.id AND tt.status = 'pending') AS has_pending,
+    EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = p.id AND tt.status = 'rejected') AS has_rejected
+  FROM posts p
+  WHERE p.author_id = $1
+    AND ($2::boolean = false OR p.type = $3)
+) sub
+`
+
+type GetUserPostCountsParams struct {
+	AuthorID      uuid.UUID `json:"author_id"`
+	UsePostFilter bool      `json:"use_post_filter"`
+	PostFilter    string    `json:"post_filter"`
+}
+
+type GetUserPostCountsRow struct {
+	Published int32 `json:"published"`
+	Drafts    int32 `json:"drafts"`
+	Waiting   int32 `json:"waiting"`
+	Rejected  int32 `json:"rejected"`
+}
+
+// Owner-only counts for the profile status filters. Each category is mutually
+// exclusive: waiting = has a pending ticket; rejected = has a rejected ticket
+// and no pending; published/drafts = neither, split by publish state.
+func (q *Queries) GetUserPostCounts(ctx context.Context, arg GetUserPostCountsParams) (GetUserPostCountsRow, error) {
+	row := q.db.QueryRow(ctx, getUserPostCounts, arg.AuthorID, arg.UsePostFilter, arg.PostFilter)
+	var i GetUserPostCountsRow
+	err := row.Scan(
+		&i.Published,
+		&i.Drafts,
+		&i.Waiting,
+		&i.Rejected,
+	)
+	return i, err
+}
+
 const getUserPostDirect = `-- name: GetUserPostDirect :one
 SELECT 
   id, type, name, slug, description, updated_at, created_at, last_draft_update, last_publish, author_id, is_published, author_username, tools,
@@ -2268,9 +2503,36 @@ func (q *Queries) GetUserPostDirect(ctx context.Context, arg GetUserPostDirectPa
 	return i, err
 }
 
+const getUserStats = `-- name: GetUserStats :one
+SELECT
+  (SELECT COUNT(*) FROM posts WHERE author_id = $1 AND is_published = true)::int AS post_count,
+  (SELECT COUNT(*) FROM user_follows WHERE followee_id = $1)::int AS follower_count,
+  (SELECT COUNT(*) FROM user_follows WHERE follower_id = $1)::int AS following_count,
+  (SELECT COUNT(*) FROM tool_follows WHERE profile_id = $1)::int AS tools_followed_count
+`
+
+type GetUserStatsRow struct {
+	PostCount          int32 `json:"post_count"`
+	FollowerCount      int32 `json:"follower_count"`
+	FollowingCount     int32 `json:"following_count"`
+	ToolsFollowedCount int32 `json:"tools_followed_count"`
+}
+
+func (q *Queries) GetUserStats(ctx context.Context, authorID uuid.UUID) (GetUserStatsRow, error) {
+	row := q.db.QueryRow(ctx, getUserStats, authorID)
+	var i GetUserStatsRow
+	err := row.Scan(
+		&i.PostCount,
+		&i.FollowerCount,
+		&i.FollowingCount,
+		&i.ToolsFollowedCount,
+	)
+	return i, err
+}
+
 const isFollowing = `-- name: IsFollowing :one
 SELECT EXISTS(
-  SELECT 1 FROM user_follows 
+  SELECT 1 FROM user_follows
   WHERE follower_id = $1 AND followee_id = $2
 ) AS is_following
 `
@@ -2285,6 +2547,208 @@ func (q *Queries) IsFollowing(ctx context.Context, arg IsFollowingParams) (bool,
 	var is_following bool
 	err := row.Scan(&is_following)
 	return is_following, err
+}
+
+const isToolOwner = `-- name: IsToolOwner :one
+SELECT EXISTS(
+  SELECT 1 FROM tool_owners WHERE tool_id = $1 AND profile_id = $2
+) AS is_owner
+`
+
+type IsToolOwnerParams struct {
+	ToolID    uuid.UUID `json:"tool_id"`
+	ProfileID uuid.UUID `json:"profile_id"`
+}
+
+// Gate for every tool-page edit. Ownership is granted out of band (see
+// scripts/grant-tool-owner.mjs), never through the API.
+func (q *Queries) IsToolOwner(ctx context.Context, arg IsToolOwnerParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isToolOwner, arg.ToolID, arg.ProfileID)
+	var is_owner bool
+	err := row.Scan(&is_owner)
+	return is_owner, err
+}
+
+const listFollowers = `-- name: ListFollowers :many
+SELECT
+  p.id,
+  p.username,
+  p.display_name,
+  p.bio,
+  p.email_hash,
+  p.avatar_url,
+  ($1::bool AND EXISTS(
+    SELECT 1 FROM user_follows uf2
+    WHERE uf2.follower_id = $2 AND uf2.followee_id = p.id
+  )) AS is_following,
+  COUNT(*) OVER() AS total_count
+FROM user_follows uf
+JOIN profiles p ON p.id = uf.follower_id
+WHERE uf.followee_id = $3
+ORDER BY p.username
+LIMIT $5 OFFSET $4
+`
+
+type ListFollowersParams struct {
+	IsAuthenticated bool      `json:"is_authenticated"`
+	ViewerID        uuid.UUID `json:"viewer_id"`
+	TargetID        uuid.UUID `json:"target_id"`
+	Off             int32     `json:"off"`
+	Lim             int32     `json:"lim"`
+}
+
+type ListFollowersRow struct {
+	ID          uuid.UUID   `json:"id"`
+	Username    string      `json:"username"`
+	DisplayName string      `json:"display_name"`
+	Bio         pgtype.Text `json:"bio"`
+	EmailHash   pgtype.Text `json:"email_hash"`
+	AvatarUrl   pgtype.Text `json:"avatar_url"`
+	IsFollowing pgtype.Bool `json:"is_following"`
+	TotalCount  int64       `json:"total_count"`
+}
+
+func (q *Queries) ListFollowers(ctx context.Context, arg ListFollowersParams) ([]ListFollowersRow, error) {
+	rows, err := q.db.Query(ctx, listFollowers,
+		arg.IsAuthenticated,
+		arg.ViewerID,
+		arg.TargetID,
+		arg.Off,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFollowersRow
+	for rows.Next() {
+		var i ListFollowersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.DisplayName,
+			&i.Bio,
+			&i.EmailHash,
+			&i.AvatarUrl,
+			&i.IsFollowing,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFollowing = `-- name: ListFollowing :many
+SELECT
+  p.id,
+  p.username,
+  p.display_name,
+  p.bio,
+  p.email_hash,
+  p.avatar_url,
+  ($1::bool AND EXISTS(
+    SELECT 1 FROM user_follows uf2
+    WHERE uf2.follower_id = $2 AND uf2.followee_id = p.id
+  )) AS is_following,
+  COUNT(*) OVER() AS total_count
+FROM user_follows uf
+JOIN profiles p ON p.id = uf.followee_id
+WHERE uf.follower_id = $3
+ORDER BY p.username
+LIMIT $5 OFFSET $4
+`
+
+type ListFollowingParams struct {
+	IsAuthenticated bool      `json:"is_authenticated"`
+	ViewerID        uuid.UUID `json:"viewer_id"`
+	TargetID        uuid.UUID `json:"target_id"`
+	Off             int32     `json:"off"`
+	Lim             int32     `json:"lim"`
+}
+
+type ListFollowingRow struct {
+	ID          uuid.UUID   `json:"id"`
+	Username    string      `json:"username"`
+	DisplayName string      `json:"display_name"`
+	Bio         pgtype.Text `json:"bio"`
+	EmailHash   pgtype.Text `json:"email_hash"`
+	AvatarUrl   pgtype.Text `json:"avatar_url"`
+	IsFollowing pgtype.Bool `json:"is_following"`
+	TotalCount  int64       `json:"total_count"`
+}
+
+func (q *Queries) ListFollowing(ctx context.Context, arg ListFollowingParams) ([]ListFollowingRow, error) {
+	rows, err := q.db.Query(ctx, listFollowing,
+		arg.IsAuthenticated,
+		arg.ViewerID,
+		arg.TargetID,
+		arg.Off,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFollowingRow
+	for rows.Next() {
+		var i ListFollowingRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.DisplayName,
+			&i.Bio,
+			&i.EmailHash,
+			&i.AvatarUrl,
+			&i.IsFollowing,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOwnedTools = `-- name: ListOwnedTools :many
+SELECT t.id, t.name, t.logo_url
+FROM tool_owners tow
+JOIN tools t ON t.id = tow.tool_id
+WHERE tow.profile_id = $1
+ORDER BY t.name
+`
+
+type ListOwnedToolsRow struct {
+	ID      uuid.UUID   `json:"id"`
+	Name    string      `json:"name"`
+	LogoUrl pgtype.Text `json:"logo_url"`
+}
+
+func (q *Queries) ListOwnedTools(ctx context.Context, profileID uuid.UUID) ([]ListOwnedToolsRow, error) {
+	rows, err := q.db.Query(ctx, listOwnedTools, profileID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOwnedToolsRow
+	for rows.Next() {
+		var i ListOwnedToolsRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.LogoUrl); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listPostComments = `-- name: ListPostComments :many
@@ -2353,6 +2817,155 @@ func (q *Queries) ListPosts(ctx context.Context) ([]ListPostsRow, error) {
 	for rows.Next() {
 		var i ListPostsRow
 		if err := rows.Scan(&i.ID, &i.Name, &i.Description); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPublishedPosts = `-- name: ListPublishedPosts :many
+SELECT
+  pwt.id, pwt.type, pwt.name, pwt.slug, pwt.description, pwt.updated_at, pwt.created_at, pwt.last_draft_update, pwt.last_publish, pwt.author_id, pwt.is_published, pwt.author_username, pwt.tools,
+  COUNT(*) OVER() AS total_count
+FROM posts_with_tools pwt
+WHERE pwt.is_published
+  AND ($3::boolean = false OR pwt.type = $4)
+  AND (
+    $5::text = ''
+    OR pwt.name ILIKE '%' || $5::text || '%'
+    OR pwt.description ILIKE '%' || $5::text || '%'
+  )
+  AND (
+    $6::boolean = false
+    OR EXISTS (
+      SELECT 1 FROM post_tools pt
+      WHERE pt.post_id = pwt.id AND pt.tool_id = $7
+    )
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM tool_tickets tt
+    WHERE tt.post_id = pwt.id AND tt.status IN ('pending', 'rejected')
+  )
+ORDER BY
+  CASE WHEN $8::text = 'name' THEN pwt.name END ASC,
+  CASE WHEN $8::text = 'created' THEN pwt.created_at END DESC,
+  CASE WHEN $8::text = 'stars'
+    THEN (SELECT COUNT(*) FROM post_stars ps WHERE ps.post_id = pwt.id) END DESC,
+  pwt.updated_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListPublishedPostsParams struct {
+	Limit         int32     `json:"limit"`
+	Offset        int32     `json:"offset"`
+	UseTypeFilter bool      `json:"use_type_filter"`
+	TypeFilter    string    `json:"type_filter"`
+	Search        string    `json:"search"`
+	UseToolFilter bool      `json:"use_tool_filter"`
+	ToolFilter    uuid.UUID `json:"tool_filter"`
+	Sort          string    `json:"sort"`
+}
+
+type ListPublishedPostsRow struct {
+	ID              uuid.UUID          `json:"id"`
+	Type            string             `json:"type"`
+	Name            string             `json:"name"`
+	Slug            string             `json:"slug"`
+	Description     string             `json:"description"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	LastDraftUpdate pgtype.Timestamptz `json:"last_draft_update"`
+	LastPublish     pgtype.Timestamptz `json:"last_publish"`
+	AuthorID        uuid.UUID          `json:"author_id"`
+	IsPublished     pgtype.Bool        `json:"is_published"`
+	AuthorUsername  string             `json:"author_username"`
+	Tools           json.RawMessage    `json:"tools"`
+	TotalCount      int64              `json:"total_count"`
+}
+
+// Public browse listing: published posts, optionally filtered by type and a
+// name/description search, with a selectable sort. Posts whose tool is still
+// pending (or was rejected) stay hidden, same as the profile listings.
+func (q *Queries) ListPublishedPosts(ctx context.Context, arg ListPublishedPostsParams) ([]ListPublishedPostsRow, error) {
+	rows, err := q.db.Query(ctx, listPublishedPosts,
+		arg.Limit,
+		arg.Offset,
+		arg.UseTypeFilter,
+		arg.TypeFilter,
+		arg.Search,
+		arg.UseToolFilter,
+		arg.ToolFilter,
+		arg.Sort,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPublishedPostsRow
+	for rows.Next() {
+		var i ListPublishedPostsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Type,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.UpdatedAt,
+			&i.CreatedAt,
+			&i.LastDraftUpdate,
+			&i.LastPublish,
+			&i.AuthorID,
+			&i.IsPublished,
+			&i.AuthorUsername,
+			&i.Tools,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listToolOwners = `-- name: ListToolOwners :many
+SELECT p.id, p.username, p.display_name, p.avatar_url, tow.granted_at
+FROM tool_owners tow
+JOIN profiles p ON p.id = tow.profile_id
+WHERE tow.tool_id = $1
+ORDER BY tow.granted_at
+`
+
+type ListToolOwnersRow struct {
+	ID          uuid.UUID          `json:"id"`
+	Username    string             `json:"username"`
+	DisplayName string             `json:"display_name"`
+	AvatarUrl   pgtype.Text        `json:"avatar_url"`
+	GrantedAt   pgtype.Timestamptz `json:"granted_at"`
+}
+
+func (q *Queries) ListToolOwners(ctx context.Context, toolID uuid.UUID) ([]ListToolOwnersRow, error) {
+	rows, err := q.db.Query(ctx, listToolOwners, toolID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListToolOwnersRow
+	for rows.Next() {
+		var i ListToolOwnersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.DisplayName,
+			&i.AvatarUrl,
+			&i.GrantedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -2478,313 +3091,160 @@ func (q *Queries) ListToolTickets(ctx context.Context, arg ListToolTicketsParams
 	return items, nil
 }
 
-const listUserPostsByApprovalStatus = `-- name: ListUserPostsByApprovalStatus :many
+const listTools = `-- name: ListTools :many
 SELECT
-  id, type, name, slug, description, updated_at, created_at, last_draft_update, last_publish, author_id, is_published, author_username, tools,
+  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor,
   COUNT(*) OVER() AS total_count
-FROM posts_with_tools_and_tickets
-WHERE
-  author_username = $1
-  AND author_id = $4
-  AND ($6::boolean = false OR type = $7)
-  AND (
-    $5::text = 'all'
-    OR
-    ($5::text = 'waiting'
-      AND EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = posts_with_tools_and_tickets.id AND tt.status = 'pending'))
-    OR
-    ($5::text = 'rejected'
-      AND EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = posts_with_tools_and_tickets.id AND tt.status = 'rejected')
-      AND NOT EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = posts_with_tools_and_tickets.id AND tt.status = 'pending'))
-  )
-ORDER BY updated_at DESC
-LIMIT $2 OFFSET $3
-`
-
-type ListUserPostsByApprovalStatusParams struct {
-	AuthorUsername  string    `json:"author_username"`
-	Limit           int32     `json:"limit"`
-	Offset          int32     `json:"offset"`
-	AuthenticatedID uuid.UUID `json:"authenticated_id"`
-	ApprovalStatus  string    `json:"approval_status"`
-	UsePostFilter   bool      `json:"use_post_filter"`
-	PostFilter      string    `json:"post_filter"`
-}
-
-type ListUserPostsByApprovalStatusRow struct {
-	ID              uuid.UUID          `json:"id"`
-	Type            string             `json:"type"`
-	Name            string             `json:"name"`
-	Slug            string             `json:"slug"`
-	Description     string             `json:"description"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	LastDraftUpdate pgtype.Timestamptz `json:"last_draft_update"`
-	LastPublish     pgtype.Timestamptz `json:"last_publish"`
-	AuthorID        uuid.UUID          `json:"author_id"`
-	IsPublished     pgtype.Bool        `json:"is_published"`
-	AuthorUsername  string             `json:"author_username"`
-	Tools           json.RawMessage    `json:"tools"`
-	TotalCount      int64              `json:"total_count"`
-}
-
-func (q *Queries) ListUserPostsByApprovalStatus(ctx context.Context, arg ListUserPostsByApprovalStatusParams) ([]ListUserPostsByApprovalStatusRow, error) {
-	rows, err := q.db.Query(ctx, listUserPostsByApprovalStatus,
-		arg.AuthorUsername,
-		arg.Limit,
-		arg.Offset,
-		arg.AuthenticatedID,
-		arg.ApprovalStatus,
-		arg.UsePostFilter,
-		arg.PostFilter,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListUserPostsByApprovalStatusRow
-	for rows.Next() {
-		var i ListUserPostsByApprovalStatusRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Type,
-			&i.Name,
-			&i.Slug,
-			&i.Description,
-			&i.UpdatedAt,
-			&i.CreatedAt,
-			&i.LastDraftUpdate,
-			&i.LastPublish,
-			&i.AuthorID,
-			&i.IsPublished,
-			&i.AuthorUsername,
-			&i.Tools,
-			&i.TotalCount,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getToolIDBySlug = `-- name: GetToolIDBySlug :one
-SELECT id FROM tools
-WHERE btrim(lower(regexp_replace(name, '[^a-zA-Z0-9]+', '-', 'g')), '-') = $1
-LIMIT 1
-`
-
-func (q *Queries) GetToolIDBySlug(ctx context.Context, slug string) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, getToolIDBySlug, slug)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
-const getUserPostCounts = `-- name: GetUserPostCounts :one
-SELECT
-  COUNT(*) FILTER (WHERE NOT sub.has_pending AND NOT sub.has_rejected AND sub.is_published)::int AS published,
-  COUNT(*) FILTER (WHERE NOT sub.has_pending AND NOT sub.has_rejected AND NOT sub.is_published)::int AS drafts,
-  COUNT(*) FILTER (WHERE sub.has_pending)::int AS waiting,
-  COUNT(*) FILTER (WHERE sub.has_rejected AND NOT sub.has_pending)::int AS rejected
-FROM (
-  SELECT
-    COALESCE(p.is_published, false) AS is_published,
-    EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = p.id AND tt.status = 'pending') AS has_pending,
-    EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = p.id AND tt.status = 'rejected') AS has_rejected
-  FROM posts p
-  WHERE p.author_id = $1
-    AND ($2::boolean = false OR p.type = $3)
-) sub
-`
-
-type GetUserPostCountsParams struct {
-	AuthorID      uuid.UUID `json:"author_id"`
-	UsePostFilter bool      `json:"use_post_filter"`
-	PostFilter    string    `json:"post_filter"`
-}
-
-type GetUserPostCountsRow struct {
-	Published int32 `json:"published"`
-	Drafts    int32 `json:"drafts"`
-	Waiting   int32 `json:"waiting"`
-	Rejected  int32 `json:"rejected"`
-}
-
-func (q *Queries) GetUserPostCounts(ctx context.Context, arg GetUserPostCountsParams) (GetUserPostCountsRow, error) {
-	row := q.db.QueryRow(ctx, getUserPostCounts, arg.AuthorID, arg.UsePostFilter, arg.PostFilter)
-	var i GetUserPostCountsRow
-	err := row.Scan(
-		&i.Published,
-		&i.Drafts,
-		&i.Waiting,
-		&i.Rejected,
-	)
-	return i, err
-}
-
-const getPublishedPostToolFacets = `-- name: GetPublishedPostToolFacets :many
-SELECT
-  t.id,
-  t.name,
-  COALESCE(t.logo_url, '') AS logo_url,
-  COUNT(DISTINCT pt.post_id)::int AS post_count
-FROM tools t
-JOIN post_tools pt ON pt.tool_id = t.id
-JOIN posts p ON p.id = pt.post_id
-WHERE p.is_published
-  AND NOT EXISTS (
-    SELECT 1 FROM tool_tickets tt
-    WHERE tt.post_id = p.id AND tt.status IN ('pending', 'rejected')
-  )
-GROUP BY t.id, t.name, t.logo_url
-ORDER BY post_count DESC, t.name ASC
-LIMIT $1
-`
-
-type GetPublishedPostToolFacetsRow struct {
-	ID        uuid.UUID `json:"id"`
-	Name      string    `json:"name"`
-	LogoUrl   string    `json:"logo_url"`
-	PostCount int32     `json:"post_count"`
-}
-
-func (q *Queries) GetPublishedPostToolFacets(ctx context.Context, limit int32) ([]GetPublishedPostToolFacetsRow, error) {
-	rows, err := q.db.Query(ctx, getPublishedPostToolFacets, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetPublishedPostToolFacetsRow
-	for rows.Next() {
-		var i GetPublishedPostToolFacetsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.LogoUrl,
-			&i.PostCount,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getPublishedPostTypeCounts = `-- name: GetPublishedPostTypeCounts :one
-SELECT
-  COUNT(*)::int AS all_count,
-  COUNT(*) FILTER (WHERE p.type = 'playbook')::int AS playbook_count,
-  COUNT(*) FILTER (WHERE p.type = 'comparison')::int AS comparison_count
-FROM posts p
-WHERE p.is_published
-  AND NOT EXISTS (
-    SELECT 1 FROM tool_tickets tt
-    WHERE tt.post_id = p.id AND tt.status IN ('pending', 'rejected')
-  )
-`
-
-type GetPublishedPostTypeCountsRow struct {
-	AllCount        int32 `json:"all_count"`
-	PlaybookCount   int32 `json:"playbook_count"`
-	ComparisonCount int32 `json:"comparison_count"`
-}
-
-func (q *Queries) GetPublishedPostTypeCounts(ctx context.Context) (GetPublishedPostTypeCountsRow, error) {
-	row := q.db.QueryRow(ctx, getPublishedPostTypeCounts)
-	var i GetPublishedPostTypeCountsRow
-	err := row.Scan(
-		&i.AllCount,
-		&i.PlaybookCount,
-		&i.ComparisonCount,
-	)
-	return i, err
-}
-
-const listPublishedPosts = `-- name: ListPublishedPosts :many
-SELECT
-  pwt.id, pwt.type, pwt.name, pwt.slug, pwt.description, pwt.updated_at, pwt.created_at, pwt.last_draft_update, pwt.last_publish, pwt.author_id, pwt.is_published, pwt.author_username, pwt.tools,
-  COUNT(*) OVER() AS total_count
-FROM posts_with_tools pwt
-WHERE pwt.is_published
-  AND ($3::boolean = false OR pwt.type = $4)
-  AND (
-    $5::text = ''
-    OR pwt.name ILIKE '%' || $5::text || '%'
-    OR pwt.description ILIKE '%' || $5::text || '%'
+FROM tools_with_details twd
+WHERE (
+    $3::text = ''
+    OR twd.name ILIKE '%' || $3::text || '%'
+    OR twd.description ILIKE '%' || $3::text || '%'
   )
   AND (
-    $7::boolean = false
+    $4::text = ''
     OR EXISTS (
-      SELECT 1 FROM post_tools pt
-      WHERE pt.post_id = pwt.id AND pt.tool_id = $8
+      SELECT 1 FROM tool_categories tc
+      JOIN categories c ON tc.category_id = c.id
+      WHERE tc.tool_id = twd.id AND c.slug = $4::text
     )
   )
-  AND NOT EXISTS (
-    SELECT 1 FROM tool_tickets tt
-    WHERE tt.post_id = pwt.id AND tt.status IN ('pending', 'rejected')
-  )
 ORDER BY
-  CASE WHEN $6::text = 'name' THEN pwt.name END ASC,
-  CASE WHEN $6::text = 'created' THEN pwt.created_at END DESC,
-  CASE WHEN $6::text = 'stars'
-    THEN (SELECT COUNT(*) FROM post_stars ps WHERE ps.post_id = pwt.id) END DESC,
-  pwt.updated_at DESC
+  CASE WHEN $5::text = 'newest' THEN twd.created_at END DESC,
+  CASE WHEN $5::text = 'updated' THEN twd.updated_at END DESC,
+  twd.name ASC
 LIMIT $1 OFFSET $2
 `
 
-type ListPublishedPostsParams struct {
-	Limit         int32     `json:"limit"`
-	Offset        int32     `json:"offset"`
-	UseTypeFilter bool      `json:"use_type_filter"`
-	TypeFilter    string    `json:"type_filter"`
-	Search        string    `json:"search"`
-	Sort          string    `json:"sort"`
-	UseToolFilter bool      `json:"use_tool_filter"`
-	ToolFilter    uuid.UUID `json:"tool_filter"`
+type ListToolsParams struct {
+	Limit        int32  `json:"limit"`
+	Offset       int32  `json:"offset"`
+	Search       string `json:"search"`
+	CategorySlug string `json:"category_slug"`
+	Sort         string `json:"sort"`
 }
 
-type ListPublishedPostsRow struct {
-	ID              uuid.UUID          `json:"id"`
-	Type            string             `json:"type"`
-	Name            string             `json:"name"`
-	Slug            string             `json:"slug"`
-	Description     string             `json:"description"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	LastDraftUpdate pgtype.Timestamptz `json:"last_draft_update"`
-	LastPublish     pgtype.Timestamptz `json:"last_publish"`
-	AuthorID        uuid.UUID          `json:"author_id"`
-	IsPublished     pgtype.Bool        `json:"is_published"`
-	AuthorUsername  string             `json:"author_username"`
-	Tools           json.RawMessage    `json:"tools"`
-	TotalCount      int64              `json:"total_count"`
+type ListToolsRow struct {
+	ID          uuid.UUID          `json:"id"`
+	Name        string             `json:"name"`
+	Description pgtype.Text        `json:"description"`
+	LogoUrl     pgtype.Text        `json:"logo_url"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	Categories  interface{}        `json:"categories"`
+	Vendor      json.RawMessage    `json:"vendor"`
+	TotalCount  int64              `json:"total_count"`
 }
 
-func (q *Queries) ListPublishedPosts(ctx context.Context, arg ListPublishedPostsParams) ([]ListPublishedPostsRow, error) {
-	rows, err := q.db.Query(ctx, listPublishedPosts,
+// Public browse listing for /tools: all tools, optional name/description search
+// and category (slug) filter, with a selectable sort.
+func (q *Queries) ListTools(ctx context.Context, arg ListToolsParams) ([]ListToolsRow, error) {
+	rows, err := q.db.Query(ctx, listTools,
 		arg.Limit,
 		arg.Offset,
-		arg.UseTypeFilter,
-		arg.TypeFilter,
 		arg.Search,
+		arg.CategorySlug,
 		arg.Sort,
-		arg.UseToolFilter,
-		arg.ToolFilter,
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListPublishedPostsRow
+	var items []ListToolsRow
 	for rows.Next() {
-		var i ListPublishedPostsRow
+		var i ListToolsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.LogoUrl,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Categories,
+			&i.Vendor,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserFollowedTools = `-- name: ListUserFollowedTools :many
+SELECT
+  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor, tf.added_at
+FROM tools_with_details twd
+JOIN tool_follows tf ON tf.tool_id = twd.id
+JOIN profiles p ON p.id = tf.profile_id
+WHERE p.username = $1
+ORDER BY twd.name
+`
+
+type ListUserFollowedToolsRow struct {
+	ID          uuid.UUID          `json:"id"`
+	Name        string             `json:"name"`
+	Description pgtype.Text        `json:"description"`
+	LogoUrl     pgtype.Text        `json:"logo_url"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	Categories  interface{}        `json:"categories"`
+	Vendor      json.RawMessage    `json:"vendor"`
+	AddedAt     pgtype.Timestamptz `json:"added_at"`
+}
+
+func (q *Queries) ListUserFollowedTools(ctx context.Context, username string) ([]ListUserFollowedToolsRow, error) {
+	rows, err := q.db.Query(ctx, listUserFollowedTools, username)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserFollowedToolsRow
+	for rows.Next() {
+		var i ListUserFollowedToolsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.LogoUrl,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Categories,
+			&i.Vendor,
+			&i.AddedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserKeyPlaybooks = `-- name: ListUserKeyPlaybooks :many
+SELECT
+  pwt.id, pwt.type, pwt.name, pwt.slug, pwt.description, pwt.updated_at, pwt.created_at, pwt.last_draft_update, pwt.last_publish, pwt.author_id, pwt.is_published, pwt.author_username, pwt.tools
+FROM posts_with_tools pwt
+JOIN key_playbooks kp ON kp.post_id = pwt.id
+JOIN profiles p ON p.id = kp.profile_id
+WHERE p.username = $1 AND pwt.is_published
+ORDER BY kp.position
+`
+
+func (q *Queries) ListUserKeyPlaybooks(ctx context.Context, username string) ([]PostsWithTool, error) {
+	rows, err := q.db.Query(ctx, listUserKeyPlaybooks, username)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PostsWithTool
+	for rows.Next() {
+		var i PostsWithTool
 		if err := rows.Scan(
 			&i.ID,
 			&i.Type,
@@ -2799,7 +3259,108 @@ func (q *Queries) ListPublishedPosts(ctx context.Context, arg ListPublishedPosts
 			&i.IsPublished,
 			&i.AuthorUsername,
 			&i.Tools,
-			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserKeyTools = `-- name: ListUserKeyTools :many
+SELECT
+  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor
+FROM tools_with_details twd
+JOIN key_tools kt ON kt.tool_id = twd.id
+JOIN profiles p ON p.id = kt.profile_id
+WHERE p.username = $1
+ORDER BY kt.position
+`
+
+type ListUserKeyToolsRow struct {
+	ID          uuid.UUID          `json:"id"`
+	Name        string             `json:"name"`
+	Description pgtype.Text        `json:"description"`
+	LogoUrl     pgtype.Text        `json:"logo_url"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	Categories  interface{}        `json:"categories"`
+	Vendor      json.RawMessage    `json:"vendor"`
+}
+
+func (q *Queries) ListUserKeyTools(ctx context.Context, username string) ([]ListUserKeyToolsRow, error) {
+	rows, err := q.db.Query(ctx, listUserKeyTools, username)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserKeyToolsRow
+	for rows.Next() {
+		var i ListUserKeyToolsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.LogoUrl,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Categories,
+			&i.Vendor,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserOldStack = `-- name: ListUserOldStack :many
+SELECT
+  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor, oi.added_at
+FROM tools_with_details twd
+JOIN old_stack_items oi ON oi.tool_id = twd.id
+JOIN profiles p ON p.id = oi.profile_id
+WHERE p.username = $1
+ORDER BY twd.name
+`
+
+type ListUserOldStackRow struct {
+	ID          uuid.UUID          `json:"id"`
+	Name        string             `json:"name"`
+	Description pgtype.Text        `json:"description"`
+	LogoUrl     pgtype.Text        `json:"logo_url"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	Categories  interface{}        `json:"categories"`
+	Vendor      json.RawMessage    `json:"vendor"`
+	AddedAt     pgtype.Timestamptz `json:"added_at"`
+}
+
+func (q *Queries) ListUserOldStack(ctx context.Context, username string) ([]ListUserOldStackRow, error) {
+	rows, err := q.db.Query(ctx, listUserOldStack, username)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserOldStackRow
+	for rows.Next() {
+		var i ListUserOldStackRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.LogoUrl,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Categories,
+			&i.Vendor,
+			&i.AddedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -2819,6 +3380,8 @@ FROM posts_with_tools
 WHERE
   author_username = $1 AND (($4::boolean = true AND author_id = $5) OR is_published)
   AND ($6::boolean = false OR type = $7)
+  -- Hide posts whose suggested tool is still pending or was rejected. They live
+  -- in the dedicated "waiting for approval" / "rejected" tabs until approved.
   AND NOT EXISTS (
     SELECT 1 FROM tool_tickets tt
     WHERE tt.post_id = posts_with_tools.id AND tt.status IN ('pending', 'rejected')
@@ -2897,6 +3460,154 @@ func (q *Queries) ListUserPosts(ctx context.Context, arg ListUserPostsParams) ([
 	return items, nil
 }
 
+const listUserPostsByApprovalStatus = `-- name: ListUserPostsByApprovalStatus :many
+SELECT
+  id, type, name, slug, description, updated_at, created_at, last_draft_update, last_publish, author_id, is_published, author_username, tools,
+  COUNT(*) OVER() AS total_count
+FROM posts_with_tools_and_tickets
+WHERE
+  author_username = $1
+  AND author_id = $4
+  AND ($5::boolean = false OR type = $6)
+  AND (
+    $7::text = 'all'
+    OR
+    ($7::text = 'waiting'
+      AND EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = posts_with_tools_and_tickets.id AND tt.status = 'pending'))
+    OR
+    ($7::text = 'rejected'
+      AND EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = posts_with_tools_and_tickets.id AND tt.status = 'rejected')
+      AND NOT EXISTS (SELECT 1 FROM tool_tickets tt WHERE tt.post_id = posts_with_tools_and_tickets.id AND tt.status = 'pending'))
+  )
+ORDER BY updated_at DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListUserPostsByApprovalStatusParams struct {
+	AuthorUsername  string    `json:"author_username"`
+	Limit           int32     `json:"limit"`
+	Offset          int32     `json:"offset"`
+	AuthenticatedID uuid.UUID `json:"authenticated_id"`
+	UsePostFilter   bool      `json:"use_post_filter"`
+	PostFilter      string    `json:"post_filter"`
+	ApprovalStatus  string    `json:"approval_status"`
+}
+
+type ListUserPostsByApprovalStatusRow struct {
+	ID              uuid.UUID          `json:"id"`
+	Type            string             `json:"type"`
+	Name            string             `json:"name"`
+	Slug            string             `json:"slug"`
+	Description     string             `json:"description"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	LastDraftUpdate pgtype.Timestamptz `json:"last_draft_update"`
+	LastPublish     pgtype.Timestamptz `json:"last_publish"`
+	AuthorID        uuid.UUID          `json:"author_id"`
+	IsPublished     pgtype.Bool        `json:"is_published"`
+	AuthorUsername  string             `json:"author_username"`
+	Tools           interface{}        `json:"tools"`
+	TotalCount      int64              `json:"total_count"`
+}
+
+// Uses posts_with_tools_and_tickets (LEFT JOIN) so posts whose only tool is a
+// still-pending ticket are included. posts_with_tools INNER-JOINs post_tools and
+// would drop them entirely.
+func (q *Queries) ListUserPostsByApprovalStatus(ctx context.Context, arg ListUserPostsByApprovalStatusParams) ([]ListUserPostsByApprovalStatusRow, error) {
+	rows, err := q.db.Query(ctx, listUserPostsByApprovalStatus,
+		arg.AuthorUsername,
+		arg.Limit,
+		arg.Offset,
+		arg.AuthenticatedID,
+		arg.UsePostFilter,
+		arg.PostFilter,
+		arg.ApprovalStatus,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserPostsByApprovalStatusRow
+	for rows.Next() {
+		var i ListUserPostsByApprovalStatusRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Type,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.UpdatedAt,
+			&i.CreatedAt,
+			&i.LastDraftUpdate,
+			&i.LastPublish,
+			&i.AuthorID,
+			&i.IsPublished,
+			&i.AuthorUsername,
+			&i.Tools,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserStack = `-- name: ListUserStack :many
+SELECT
+  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor, si.added_at
+FROM tools_with_details twd
+JOIN stack_items si ON si.tool_id = twd.id
+JOIN profiles p ON p.id = si.profile_id
+WHERE p.username = $1
+ORDER BY twd.name
+`
+
+type ListUserStackRow struct {
+	ID          uuid.UUID          `json:"id"`
+	Name        string             `json:"name"`
+	Description pgtype.Text        `json:"description"`
+	LogoUrl     pgtype.Text        `json:"logo_url"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	Categories  interface{}        `json:"categories"`
+	Vendor      json.RawMessage    `json:"vendor"`
+	AddedAt     pgtype.Timestamptz `json:"added_at"`
+}
+
+func (q *Queries) ListUserStack(ctx context.Context, username string) ([]ListUserStackRow, error) {
+	rows, err := q.db.Query(ctx, listUserStack, username)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserStackRow
+	for rows.Next() {
+		var i ListUserStackRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.LogoUrl,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Categories,
+			&i.Vendor,
+			&i.AddedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserStarredPosts = `-- name: ListUserStarredPosts :many
 SELECT
   pwt.id, pwt.type, pwt.name, pwt.slug, pwt.description, pwt.updated_at, pwt.created_at, pwt.last_draft_update, pwt.last_publish, pwt.author_id, pwt.is_published, pwt.author_username, pwt.tools,
@@ -2935,7 +3646,7 @@ type ListUserStarredPostsRow struct {
 	IsPublished     pgtype.Bool        `json:"is_published"`
 	AuthorUsername  string             `json:"author_username"`
 	Tools           json.RawMessage    `json:"tools"`
-	Categories      json.RawMessage    `json:"categories"`
+	Categories      interface{}        `json:"categories"`
 	TotalCount      int64              `json:"total_count"`
 }
 
@@ -2964,6 +3675,58 @@ func (q *Queries) ListUserStarredPosts(ctx context.Context, arg ListUserStarredP
 			&i.Tools,
 			&i.Categories,
 			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserWatchlist = `-- name: ListUserWatchlist :many
+SELECT
+  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor, wi.added_at
+FROM tools_with_details twd
+JOIN watchlist_items wi ON wi.tool_id = twd.id
+JOIN profiles p ON p.id = wi.profile_id
+WHERE p.username = $1
+ORDER BY twd.name
+`
+
+type ListUserWatchlistRow struct {
+	ID          uuid.UUID          `json:"id"`
+	Name        string             `json:"name"`
+	Description pgtype.Text        `json:"description"`
+	LogoUrl     pgtype.Text        `json:"logo_url"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	Categories  interface{}        `json:"categories"`
+	Vendor      json.RawMessage    `json:"vendor"`
+	AddedAt     pgtype.Timestamptz `json:"added_at"`
+}
+
+func (q *Queries) ListUserWatchlist(ctx context.Context, username string) ([]ListUserWatchlistRow, error) {
+	rows, err := q.db.Query(ctx, listUserWatchlist, username)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserWatchlistRow
+	for rows.Next() {
+		var i ListUserWatchlistRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.LogoUrl,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Categories,
+			&i.Vendor,
+			&i.AddedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -3038,8 +3801,43 @@ func (q *Queries) RejectToolTicket(ctx context.Context, arg RejectToolTicketPara
 	return err
 }
 
+const removeAllKeyPlaybooks = `-- name: RemoveAllKeyPlaybooks :exec
+DELETE FROM key_playbooks
+WHERE profile_id = $1
+`
+
+func (q *Queries) RemoveAllKeyPlaybooks(ctx context.Context, profileID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, removeAllKeyPlaybooks, profileID)
+	return err
+}
+
+const removeAllKeyTools = `-- name: RemoveAllKeyTools :exec
+DELETE FROM key_tools
+WHERE profile_id = $1
+`
+
+func (q *Queries) RemoveAllKeyTools(ctx context.Context, profileID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, removeAllKeyTools, profileID)
+	return err
+}
+
+const removeFromOldStack = `-- name: RemoveFromOldStack :exec
+DELETE FROM old_stack_items
+WHERE profile_id = $1 AND tool_id = $2
+`
+
+type RemoveFromOldStackParams struct {
+	ProfileID uuid.UUID `json:"profile_id"`
+	ToolID    uuid.UUID `json:"tool_id"`
+}
+
+func (q *Queries) RemoveFromOldStack(ctx context.Context, arg RemoveFromOldStackParams) error {
+	_, err := q.db.Exec(ctx, removeFromOldStack, arg.ProfileID, arg.ToolID)
+	return err
+}
+
 const removeFromStack = `-- name: RemoveFromStack :exec
-DELETE FROM stack_items 
+DELETE FROM stack_items
 WHERE profile_id = $1 AND tool_id = $2
 `
 
@@ -3066,89 +3864,6 @@ type RemoveFromWatchlistParams struct {
 func (q *Queries) RemoveFromWatchlist(ctx context.Context, arg RemoveFromWatchlistParams) error {
 	_, err := q.db.Exec(ctx, removeFromWatchlist, arg.ProfileID, arg.ToolID)
 	return err
-}
-
-const followTool = `-- name: FollowTool :exec
-INSERT INTO tool_follows (profile_id, tool_id)
-VALUES ($1, $2)
-ON CONFLICT (profile_id, tool_id) DO NOTHING
-`
-
-type FollowToolParams struct {
-	ProfileID uuid.UUID `json:"profile_id"`
-	ToolID    uuid.UUID `json:"tool_id"`
-}
-
-func (q *Queries) FollowTool(ctx context.Context, arg FollowToolParams) error {
-	_, err := q.db.Exec(ctx, followTool, arg.ProfileID, arg.ToolID)
-	return err
-}
-
-const unfollowTool = `-- name: UnfollowTool :exec
-DELETE FROM tool_follows
-WHERE profile_id = $1 AND tool_id = $2
-`
-
-type UnfollowToolParams struct {
-	ProfileID uuid.UUID `json:"profile_id"`
-	ToolID    uuid.UUID `json:"tool_id"`
-}
-
-func (q *Queries) UnfollowTool(ctx context.Context, arg UnfollowToolParams) error {
-	_, err := q.db.Exec(ctx, unfollowTool, arg.ProfileID, arg.ToolID)
-	return err
-}
-
-const listUserFollowedTools = `-- name: ListUserFollowedTools :many
-SELECT
-  twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor, tf.added_at
-FROM tools_with_details twd
-JOIN tool_follows tf ON tf.tool_id = twd.id
-JOIN profiles p ON p.id = tf.profile_id
-WHERE p.username = $1
-ORDER BY twd.name
-`
-
-type ListUserFollowedToolsRow struct {
-	ID          uuid.UUID          `json:"id"`
-	Name        string             `json:"name"`
-	Description pgtype.Text        `json:"description"`
-	LogoUrl     pgtype.Text        `json:"logo_url"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
-	Categories  interface{}        `json:"categories"`
-	Vendor      json.RawMessage    `json:"vendor"`
-	AddedAt     pgtype.Timestamptz `json:"added_at"`
-}
-
-func (q *Queries) ListUserFollowedTools(ctx context.Context, username string) ([]ListUserFollowedToolsRow, error) {
-	rows, err := q.db.Query(ctx, listUserFollowedTools, username)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListUserFollowedToolsRow
-	for rows.Next() {
-		var i ListUserFollowedToolsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Description,
-			&i.LogoUrl,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.Categories,
-			&i.Vendor,
-			&i.AddedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const removePostComment = `-- name: RemovePostComment :exec
@@ -3460,7 +4175,7 @@ func (q *Queries) SearchProfile(ctx context.Context, arg SearchProfileParams) ([
 
 const searchTool = `-- name: SearchTool :many
 SELECT
-  id, name, description, logo_url, created_at, updated_at, categories, vendor,
+  id, name, description, logo_url, created_at, updated_at, categories, vendor, description_rich,
   $4::boolean = true AND EXISTS(SELECT 1 FROM stack_items si WHERE si.profile_id = $5 AND si.tool_id = twd.id) AS is_in_stack,
   $4::boolean = true AND EXISTS(SELECT 1 FROM watchlist_items wi WHERE wi.profile_id = $5 AND wi.tool_id = twd.id) AS is_in_watchlist,
   ts_rank_cd((SELECT vector FROM tools WHERE id = twd.id), websearch_to_tsquery('english', $1)) AS rank,
@@ -3480,18 +4195,19 @@ type SearchToolParams struct {
 }
 
 type SearchToolRow struct {
-	ID            uuid.UUID          `json:"id"`
-	Name          string             `json:"name"`
-	Description   pgtype.Text        `json:"description"`
-	LogoUrl       pgtype.Text        `json:"logo_url"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
-	Categories    interface{}        `json:"categories"`
-	Vendor        json.RawMessage    `json:"vendor"`
-	IsInStack     pgtype.Bool        `json:"is_in_stack"`
-	IsInWatchlist pgtype.Bool        `json:"is_in_watchlist"`
-	Rank          float32            `json:"rank"`
-	TotalCount    int64              `json:"total_count"`
+	ID              uuid.UUID          `json:"id"`
+	Name            string             `json:"name"`
+	Description     pgtype.Text        `json:"description"`
+	LogoUrl         pgtype.Text        `json:"logo_url"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	Categories      interface{}        `json:"categories"`
+	Vendor          json.RawMessage    `json:"vendor"`
+	DescriptionRich pgtype.Text        `json:"description_rich"`
+	IsInStack       pgtype.Bool        `json:"is_in_stack"`
+	IsInWatchlist   pgtype.Bool        `json:"is_in_watchlist"`
+	Rank            float32            `json:"rank"`
+	TotalCount      int64              `json:"total_count"`
 }
 
 func (q *Queries) SearchTool(ctx context.Context, arg SearchToolParams) ([]SearchToolRow, error) {
@@ -3518,6 +4234,7 @@ func (q *Queries) SearchTool(ctx context.Context, arg SearchToolParams) ([]Searc
 			&i.UpdatedAt,
 			&i.Categories,
 			&i.Vendor,
+			&i.DescriptionRich,
 			&i.IsInStack,
 			&i.IsInWatchlist,
 			&i.Rank,
@@ -3531,6 +4248,57 @@ func (q *Queries) SearchTool(ctx context.Context, arg SearchToolParams) ([]Searc
 		return nil, err
 	}
 	return items, nil
+}
+
+const setProfileAvatar = `-- name: SetProfileAvatar :exec
+UPDATE profiles
+SET avatar_url = $2, updated_at = now()
+WHERE id = $1
+`
+
+type SetProfileAvatarParams struct {
+	ID        uuid.UUID   `json:"id"`
+	AvatarUrl pgtype.Text `json:"avatar_url"`
+}
+
+// Pass NULL to clear the uploaded picture and fall back to Gravatar.
+func (q *Queries) SetProfileAvatar(ctx context.Context, arg SetProfileAvatarParams) error {
+	_, err := q.db.Exec(ctx, setProfileAvatar, arg.ID, arg.AvatarUrl)
+	return err
+}
+
+const setProfileFocusAreas = `-- name: SetProfileFocusAreas :exec
+UPDATE profiles
+SET focus_areas = $1::text[],
+    onboarding_completed_at = now(),
+    updated_at = now()
+WHERE id = $2
+`
+
+type SetProfileFocusAreasParams struct {
+	FocusAreas []string  `json:"focus_areas"`
+	ProfileID  uuid.UUID `json:"profile_id"`
+}
+
+// Stores the GTM focus areas picked during onboarding and marks the multi-step
+// flow as finished so it is not shown again.
+func (q *Queries) SetProfileFocusAreas(ctx context.Context, arg SetProfileFocusAreasParams) error {
+	_, err := q.db.Exec(ctx, setProfileFocusAreas, arg.FocusAreas, arg.ProfileID)
+	return err
+}
+
+const setToolVendor = `-- name: SetToolVendor :exec
+UPDATE tools SET vendor_id = $2, updated_at = now() WHERE id = $1
+`
+
+type SetToolVendorParams struct {
+	ID       uuid.UUID   `json:"id"`
+	VendorID pgtype.UUID `json:"vendor_id"`
+}
+
+func (q *Queries) SetToolVendor(ctx context.Context, arg SetToolVendorParams) error {
+	_, err := q.db.Exec(ctx, setToolVendor, arg.ID, arg.VendorID)
+	return err
 }
 
 const starPost = `-- name: StarPost :exec
@@ -3549,6 +4317,21 @@ type StarPostParams struct {
 
 func (q *Queries) StarPost(ctx context.Context, arg StarPostParams) error {
 	_, err := q.db.Exec(ctx, starPost, arg.PostID, arg.LikerID)
+	return err
+}
+
+const unfollowTool = `-- name: UnfollowTool :exec
+DELETE FROM tool_follows
+WHERE profile_id = $1 AND tool_id = $2
+`
+
+type UnfollowToolParams struct {
+	ProfileID uuid.UUID `json:"profile_id"`
+	ToolID    uuid.UUID `json:"tool_id"`
+}
+
+func (q *Queries) UnfollowTool(ctx context.Context, arg UnfollowToolParams) error {
+	_, err := q.db.Exec(ctx, unfollowTool, arg.ProfileID, arg.ToolID)
 	return err
 }
 
@@ -3664,395 +4447,6 @@ func (q *Queries) UpdateProfile(ctx context.Context, arg UpdateProfileParams) er
 	return err
 }
 
-const getUserFeed = `-- name: GetUserFeed :many
--- Activity feed, ranked by how much each event has to do with the viewer:
---   tier 0  about you        — unread stars, comments, new followers, tool approvals
---   tier 1  people you follow  — they published a playbook or comparison
---   tier 2  tools in your stack — someone published about one
---   tier 3  other followed tools — watchlist, plus anything followed by hand
---   tier 4  discovery filler   — recent playbooks, and ONLY for a viewer who
---                                follows nobody and no tools, so an established
---                                account never sees strangers in its feed
---
--- Tiers 2 and 3 are how "a watchlist tool carries half the weight of a stack
--- tool" is expressed: both are followed, but a post about something you
--- actually run always outranks a post about something you are only watching.
--- Tools in the old stack are absent entirely — archiving unfollows them.
---
--- Recency outranks the tiers. Events from the last 3 days form a "fresh" band
--- that sorts above everything older, and the tiers order events *within* each
--- band. Tier alone used to decide absolutely, which let a three-week-old post
--- from someone you follow sit above a post from this morning about a tool you
--- run — the feed read as stale even when the site was busy.
---
--- The tiers still matter, which is the point of banding rather than sorting by
--- time alone: among today's events you still see people you follow before
--- watchlist chatter. Only once an event ages out of the band does recency stop
--- protecting it.
---
--- Within a band and tier the newest event wins. Every branch carries an event_key so a
--- post matching several reasons appears once, keeping its strongest reason —
--- which is also what makes a post about both a stack tool and a watchlist tool
--- rank as a stack post.
---
--- Deliberately absent: "someone you follow started following X". Adding a tool
--- to a stack auto-follows it, so those rows were the highest-volume and least
--- informative thing in the feed, and they named tools the viewer had no
--- relationship with.
-WITH followed_users AS (
-  SELECT followee_id FROM user_follows WHERE follower_id = $1
-), followed_tools AS (
-  SELECT tool_id FROM tool_follows WHERE profile_id = $1
-), stack_tools AS (
-  SELECT tool_id FROM stack_items WHERE profile_id = $1
-), follows_anything AS (
-  SELECT (EXISTS(SELECT 1 FROM followed_users)
-       OR EXISTS(SELECT 1 FROM followed_tools)) AS yes
-), events AS (
-  -- Tier 0 — things that happened to you. Unread only: once you have seen a
-  -- notification it stops pinning the top of the feed, and the notifications
-  -- page still holds the full history.
-  SELECT 'notification'::text AS kind, n.type AS reason, 0 AS tier,
-         'notification:' || n.id::text AS event_key,
-         n.created_at AS occurred_at, n.actor_id AS actor_id,
-         CASE WHEN n.entity_type = 'post' THEN n.entity_id END AS post_id,
-         NULL::uuid AS tool_id,
-         n.message AS notification_message
-  FROM notifications n
-  WHERE n.recipient_id = $1
-    AND NOT COALESCE(n.is_read, false)
-
-  UNION ALL
-  -- Tier 1 — a playbook published by someone the viewer follows.
-  SELECT 'post', 'following_user', 1, 'post:' || p.id::text,
-         p.last_publish, p.author_id, p.id, NULL::uuid, NULL::text
-  FROM posts p
-  WHERE p.is_published AND p.last_publish IS NOT NULL
-    AND p.author_id IN (SELECT followee_id FROM followed_users)
-
-  UNION ALL
-  -- Tier 2 — a playbook about a tool in the viewer's ACTIVE STACK.
-  SELECT 'post', 'stack_tool', 2, 'post:' || p.id::text,
-         p.last_publish, p.author_id, p.id, pt.tool_id, NULL::text
-  FROM posts p
-  JOIN post_tools pt ON pt.post_id = p.id
-  WHERE p.is_published AND p.last_publish IS NOT NULL
-    AND pt.tool_id IN (SELECT tool_id FROM followed_tools)
-    AND pt.tool_id IN (SELECT tool_id FROM stack_tools)
-
-  UNION ALL
-  -- Tier 3 — a playbook about a followed tool that is NOT in the stack: the
-  -- watchlist, plus any tool followed by hand from its page. Half the weight of
-  -- tier 2 in the sense that matters — it never outranks it.
-  SELECT 'post', 'watchlist_tool', 3, 'post:' || p.id::text,
-         p.last_publish, p.author_id, p.id, pt.tool_id, NULL::text
-  FROM posts p
-  JOIN post_tools pt ON pt.post_id = p.id
-  WHERE p.is_published AND p.last_publish IS NOT NULL
-    AND pt.tool_id IN (SELECT tool_id FROM followed_tools)
-    AND pt.tool_id NOT IN (SELECT tool_id FROM stack_tools)
-
-  UNION ALL
-  -- Tier 4 — recent playbooks, so a brand-new account still sees something.
-  -- Suppressed the moment the viewer follows anyone or any tool: this branch is
-  -- what used to put strangers' posts in an established account's feed.
-  SELECT 'post', 'latest', 4, 'post:' || p.id::text,
-         p.last_publish, p.author_id, p.id, NULL::uuid, NULL::text
-  FROM posts p
-  WHERE p.is_published AND p.last_publish IS NOT NULL
-    AND NOT (SELECT yes FROM follows_anything)
-), ranked AS (
-  SELECT e.*, ROW_NUMBER() OVER (
-      PARTITION BY e.event_key ORDER BY e.tier
-    ) AS rn
-  FROM events e
-)
-SELECT
-  r.kind, r.reason, r.tier, r.occurred_at,
-  r.actor_id, actor.username AS actor_username,
-  r.post_id, p.name AS post_name, p.slug AS post_slug, p.type AS post_type, p.description AS post_description,
-  r.tool_id, t.name AS tool_name, t.logo_url AS tool_logo_url,
-  r.notification_message,
-  COUNT(*) OVER() AS total_count
-FROM ranked r
-JOIN profiles actor ON actor.id = r.actor_id
-LEFT JOIN posts p ON p.id = r.post_id
-LEFT JOIN tools t ON t.id = r.tool_id
-WHERE r.rn = 1
-  -- A feed is what other people did; your own activity is not news to you.
-  AND r.actor_id <> $1
--- 0 for the last 3 days, 1 for everything older: the outermost sort key, so a
--- fresh event of any tier outranks a stale one of every tier.
-ORDER BY (r.occurred_at < now() - interval '3 days')::int, r.tier, r.occurred_at DESC
-LIMIT $2 OFFSET $3
-`
-
-type GetUserFeedParams struct {
-	ViewerID   uuid.UUID `json:"viewer_id"`
-	PageLimit  int32     `json:"page_limit"`
-	PageOffset int32     `json:"page_offset"`
-}
-
-type GetUserFeedRow struct {
-	Kind                string             `json:"kind"`
-	Reason              string             `json:"reason"`
-	Tier                int32              `json:"tier"`
-	OccurredAt          pgtype.Timestamptz `json:"occurred_at"`
-	ActorID             uuid.UUID          `json:"actor_id"`
-	ActorUsername       string             `json:"actor_username"`
-	PostID              pgtype.UUID        `json:"post_id"`
-	PostName            pgtype.Text        `json:"post_name"`
-	PostSlug            pgtype.Text        `json:"post_slug"`
-	PostType            pgtype.Text        `json:"post_type"`
-	PostDescription     pgtype.Text        `json:"post_description"`
-	ToolID              pgtype.UUID        `json:"tool_id"`
-	ToolName            pgtype.Text        `json:"tool_name"`
-	ToolLogoUrl         pgtype.Text        `json:"tool_logo_url"`
-	NotificationMessage pgtype.Text        `json:"notification_message"`
-	TotalCount          int64              `json:"total_count"`
-}
-
-func (q *Queries) GetUserFeed(ctx context.Context, arg GetUserFeedParams) ([]GetUserFeedRow, error) {
-	rows, err := q.db.Query(ctx, getUserFeed, arg.ViewerID, arg.PageLimit, arg.PageOffset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetUserFeedRow
-	for rows.Next() {
-		var i GetUserFeedRow
-		if err := rows.Scan(
-			&i.Kind,
-			&i.Reason,
-			&i.Tier,
-			&i.OccurredAt,
-			&i.ActorID,
-			&i.ActorUsername,
-			&i.PostID,
-			&i.PostName,
-			&i.PostSlug,
-			&i.PostType,
-			&i.PostDescription,
-			&i.ToolID,
-			&i.ToolName,
-			&i.ToolLogoUrl,
-			&i.NotificationMessage,
-			&i.TotalCount,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const setProfileAvatar = `-- name: SetProfileAvatar :exec
-UPDATE profiles
-SET avatar_url = $2, updated_at = now()
-WHERE id = $1
-`
-
-type SetProfileAvatarParams struct {
-	ID        uuid.UUID   `json:"id"`
-	AvatarUrl pgtype.Text `json:"avatar_url"`
-}
-
-func (q *Queries) SetProfileAvatar(ctx context.Context, arg SetProfileAvatarParams) error {
-	_, err := q.db.Exec(ctx, setProfileAvatar, arg.ID, arg.AvatarUrl)
-	return err
-}
-
-const setProfileFocusAreas = `-- name: SetProfileFocusAreas :exec
-UPDATE profiles
-SET focus_areas = $1::text[],
-    onboarding_completed_at = now(),
-    updated_at = now()
-WHERE id = $2
-`
-
-type SetProfileFocusAreasParams struct {
-	FocusAreas []string  `json:"focus_areas"`
-	ProfileID  uuid.UUID `json:"profile_id"`
-}
-
-func (q *Queries) SetProfileFocusAreas(ctx context.Context, arg SetProfileFocusAreasParams) error {
-	_, err := q.db.Exec(ctx, setProfileFocusAreas, arg.FocusAreas, arg.ProfileID)
-	return err
-}
-
-const getToolsByNames = `-- name: GetToolsByNames :many
-SELECT id, name, logo_url
-FROM tools
-WHERE lower(name) = ANY($1::text[])
-ORDER BY name
-`
-
-type GetToolsByNamesRow struct {
-	ID      uuid.UUID   `json:"id"`
-	Name    string      `json:"name"`
-	LogoUrl pgtype.Text `json:"logo_url"`
-}
-
-func (q *Queries) GetToolsByNames(ctx context.Context, names []string) ([]GetToolsByNamesRow, error) {
-	rows, err := q.db.Query(ctx, getToolsByNames, names)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetToolsByNamesRow
-	for rows.Next() {
-		var i GetToolsByNamesRow
-		if err := rows.Scan(&i.ID, &i.Name, &i.LogoUrl); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getToolsByCategoryKeywords = `-- name: GetToolsByCategoryKeywords :many
-SELECT DISTINCT t.id, t.name, t.logo_url
-FROM tools t
-JOIN tool_categories tc ON tc.tool_id = t.id
-JOIN categories c ON c.id = tc.category_id
-WHERE c.name ILIKE ANY($1::text[])
-  AND t.logo_url IS NOT NULL
-  AND t.logo_url <> ''
-ORDER BY t.name
-LIMIT $2
-`
-
-type GetToolsByCategoryKeywordsParams struct {
-	Patterns []string `json:"patterns"`
-	Lim      int32    `json:"lim"`
-}
-
-type GetToolsByCategoryKeywordsRow struct {
-	ID      uuid.UUID   `json:"id"`
-	Name    string      `json:"name"`
-	LogoUrl pgtype.Text `json:"logo_url"`
-}
-
-func (q *Queries) GetToolsByCategoryKeywords(ctx context.Context, arg GetToolsByCategoryKeywordsParams) ([]GetToolsByCategoryKeywordsRow, error) {
-	rows, err := q.db.Query(ctx, getToolsByCategoryKeywords, arg.Patterns, arg.Lim)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetToolsByCategoryKeywordsRow
-	for rows.Next() {
-		var i GetToolsByCategoryKeywordsRow
-		if err := rows.Scan(&i.ID, &i.Name, &i.LogoUrl); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const isToolOwner = `-- name: IsToolOwner :one
-SELECT EXISTS(
-  SELECT 1 FROM tool_owners WHERE tool_id = $1 AND profile_id = $2
-) AS is_owner
-`
-
-type IsToolOwnerParams struct {
-	ToolID    uuid.UUID `json:"tool_id"`
-	ProfileID uuid.UUID `json:"profile_id"`
-}
-
-func (q *Queries) IsToolOwner(ctx context.Context, arg IsToolOwnerParams) (bool, error) {
-	row := q.db.QueryRow(ctx, isToolOwner, arg.ToolID, arg.ProfileID)
-	var is_owner bool
-	err := row.Scan(&is_owner)
-	return is_owner, err
-}
-
-const listToolOwners = `-- name: ListToolOwners :many
-SELECT p.id, p.username, p.display_name, p.avatar_url, tow.granted_at
-FROM tool_owners tow
-JOIN profiles p ON p.id = tow.profile_id
-WHERE tow.tool_id = $1
-ORDER BY tow.granted_at
-`
-
-type ListToolOwnersRow struct {
-	ID          uuid.UUID          `json:"id"`
-	Username    string             `json:"username"`
-	DisplayName string             `json:"display_name"`
-	AvatarUrl   pgtype.Text        `json:"avatar_url"`
-	GrantedAt   pgtype.Timestamptz `json:"granted_at"`
-}
-
-func (q *Queries) ListToolOwners(ctx context.Context, toolID uuid.UUID) ([]ListToolOwnersRow, error) {
-	rows, err := q.db.Query(ctx, listToolOwners, toolID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListToolOwnersRow
-	for rows.Next() {
-		var i ListToolOwnersRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Username,
-			&i.DisplayName,
-			&i.AvatarUrl,
-			&i.GrantedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listOwnedTools = `-- name: ListOwnedTools :many
-SELECT t.id, t.name, t.logo_url
-FROM tool_owners tow
-JOIN tools t ON t.id = tow.tool_id
-WHERE tow.profile_id = $1
-ORDER BY t.name
-`
-
-type ListOwnedToolsRow struct {
-	ID      uuid.UUID   `json:"id"`
-	Name    string      `json:"name"`
-	LogoUrl pgtype.Text `json:"logo_url"`
-}
-
-func (q *Queries) ListOwnedTools(ctx context.Context, profileID uuid.UUID) ([]ListOwnedToolsRow, error) {
-	rows, err := q.db.Query(ctx, listOwnedTools, profileID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListOwnedToolsRow
-	for rows.Next() {
-		var i ListOwnedToolsRow
-		if err := rows.Scan(&i.ID, &i.Name, &i.LogoUrl); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const updateToolPageContent = `-- name: UpdateToolPageContent :exec
 UPDATE tools
 SET description      = COALESCE($2, description),
@@ -4069,6 +4463,8 @@ type UpdateToolPageContentParams struct {
 	LogoUrl         pgtype.Text `json:"logo_url"`
 }
 
+// Partial update: a NULL argument leaves the stored value alone, so each of the
+// page's edit icons can save just its own field.
 func (q *Queries) UpdateToolPageContent(ctx context.Context, arg UpdateToolPageContentParams) error {
 	_, err := q.db.Exec(ctx, updateToolPageContent,
 		arg.ID,
@@ -4076,44 +4472,6 @@ func (q *Queries) UpdateToolPageContent(ctx context.Context, arg UpdateToolPageC
 		arg.DescriptionRich,
 		arg.LogoUrl,
 	)
-	return err
-}
-
-const getToolVendorID = `-- name: GetToolVendorID :one
-SELECT vendor_id FROM tools WHERE id = $1
-`
-
-func (q *Queries) GetToolVendorID(ctx context.Context, id uuid.UUID) (pgtype.UUID, error) {
-	row := q.db.QueryRow(ctx, getToolVendorID, id)
-	var vendor_id pgtype.UUID
-	err := row.Scan(&vendor_id)
-	return vendor_id, err
-}
-
-const createVendorForTool = `-- name: CreateVendorForTool :one
-INSERT INTO vendors (name)
-SELECT name FROM tools WHERE id = $1
-RETURNING id
-`
-
-func (q *Queries) CreateVendorForTool(ctx context.Context, toolID uuid.UUID) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, createVendorForTool, toolID)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
-const setToolVendor = `-- name: SetToolVendor :exec
-UPDATE tools SET vendor_id = $2, updated_at = now() WHERE id = $1
-`
-
-type SetToolVendorParams struct {
-	ID       uuid.UUID   `json:"id"`
-	VendorID pgtype.UUID `json:"vendor_id"`
-}
-
-func (q *Queries) SetToolVendor(ctx context.Context, arg SetToolVendorParams) error {
-	_, err := q.db.Exec(ctx, setToolVendor, arg.ID, arg.VendorID)
 	return err
 }
 
@@ -4136,6 +4494,8 @@ type UpdateVendorDetailsParams struct {
 	YearOfFoundation pgtype.Int4 `json:"year_of_foundation"`
 }
 
+// The vendor card is edited as one form, so blanks are written through —
+// clearing a field the owner emptied is the point.
 func (q *Queries) UpdateVendorDetails(ctx context.Context, arg UpdateVendorDetailsParams) error {
 	_, err := q.db.Exec(ctx, updateVendorDetails,
 		arg.ID,
@@ -4146,280 +4506,4 @@ func (q *Queries) UpdateVendorDetails(ctx context.Context, arg UpdateVendorDetai
 		arg.YearOfFoundation,
 	)
 	return err
-}
-
-const deleteToolCategories = `-- name: DeleteToolCategories :exec
-DELETE FROM tool_categories WHERE tool_id = $1
-`
-
-func (q *Queries) DeleteToolCategories(ctx context.Context, toolID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteToolCategories, toolID)
-	return err
-}
-
-const addToolCategories = `-- name: AddToolCategories :exec
-INSERT INTO tool_categories (tool_id, category_id)
-SELECT $1, unnest($2::int[])
-ON CONFLICT DO NOTHING
-`
-
-type AddToolCategoriesParams struct {
-	ToolID      uuid.UUID `json:"tool_id"`
-	CategoryIds []int32   `json:"category_ids"`
-}
-
-func (q *Queries) AddToolCategories(ctx context.Context, arg AddToolCategoriesParams) error {
-	_, err := q.db.Exec(ctx, addToolCategories, arg.ToolID, arg.CategoryIds)
-	return err
-}
-
-const getProfileWithUsernameAuthenticated = `-- name: GetProfileWithUsernameAuthenticated :one
-SELECT
-  id,
-  username,
-  display_name,
-  bio,
-  website,
-  company,
-  location,
-  linkedin,
-  twitter,
-  email_hash,
-  avatar_url,
-  created_at,
-  updated_at,
-  EXISTS(
-    SELECT 1 FROM user_follows uf
-    WHERE uf.follower_id = $2 AND uf.followee_id = profiles.id
-  ) AS is_following
-FROM
-  profiles
-WHERE
-  username = $1
-`
-
-type GetProfileWithUsernameAuthenticatedParams struct {
-	Username string    `json:"username"`
-	ViewerID uuid.UUID `json:"viewer_id"`
-}
-
-type GetProfileWithUsernameAuthenticatedRow struct {
-	ID          uuid.UUID          `json:"id"`
-	Username    string             `json:"username"`
-	DisplayName string             `json:"display_name"`
-	Bio         pgtype.Text        `json:"bio"`
-	Website     pgtype.Text        `json:"website"`
-	Company     pgtype.Text        `json:"company"`
-	Location    pgtype.Text        `json:"location"`
-	Linkedin    pgtype.Text        `json:"linkedin"`
-	Twitter     pgtype.Text        `json:"twitter"`
-	EmailHash   pgtype.Text        `json:"email_hash"`
-	AvatarUrl   pgtype.Text        `json:"avatar_url"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
-	IsFollowing bool               `json:"is_following"`
-}
-
-func (q *Queries) GetProfileWithUsernameAuthenticated(ctx context.Context, arg GetProfileWithUsernameAuthenticatedParams) (GetProfileWithUsernameAuthenticatedRow, error) {
-	row := q.db.QueryRow(ctx, getProfileWithUsernameAuthenticated, arg.Username, arg.ViewerID)
-	var i GetProfileWithUsernameAuthenticatedRow
-	err := row.Scan(
-		&i.ID,
-		&i.Username,
-		&i.DisplayName,
-		&i.Bio,
-		&i.Website,
-		&i.Company,
-		&i.Location,
-		&i.Linkedin,
-		&i.Twitter,
-		&i.EmailHash,
-		&i.AvatarUrl,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.IsFollowing,
-	)
-	return i, err
-}
-
-const getTrendingPlaybooksForUser = `-- name: GetTrendingPlaybooksForUser :many
-WITH
-  stack_tools AS (
-    SELECT tool_id FROM stack_items WHERE profile_id = $1
-  ),
-  followed_tools AS (
-    SELECT tool_id FROM tool_follows WHERE profile_id = $1
-  ),
-  starred_tools AS (
-    SELECT DISTINCT pt.tool_id
-    FROM post_stars ps
-    JOIN post_tools pt ON pt.post_id = ps.post_id
-    WHERE ps.liker_id = $1
-  ),
-  followed_people_tools AS (
-    SELECT DISTINCT pt.tool_id
-    FROM user_follows uf
-    JOIN posts fp ON fp.author_id = uf.followee_id AND fp.is_published
-    JOIN post_tools pt ON pt.post_id = fp.id
-    WHERE uf.follower_id = $1
-  ),
-  candidates AS (
-    SELECT pt.post_id, 1 AS tier FROM post_tools pt
-      WHERE pt.tool_id IN (SELECT tool_id FROM stack_tools)
-    UNION ALL
-    SELECT pt.post_id, 2 FROM post_tools pt
-      WHERE pt.tool_id IN (SELECT tool_id FROM followed_tools)
-    UNION ALL
-    SELECT pt.post_id, 3 FROM post_tools pt
-      WHERE pt.tool_id IN (SELECT tool_id FROM starred_tools)
-    UNION ALL
-    SELECT pt.post_id, 4 FROM post_tools pt
-      WHERE pt.tool_id IN (SELECT tool_id FROM followed_people_tools)
-  ),
-  ranked AS (
-    SELECT post_id, MIN(tier) AS tier FROM candidates GROUP BY post_id
-  )
-SELECT
-  pwt.id, pwt.type, pwt.name, pwt.slug, pwt.description,
-  pwt.updated_at, pwt.created_at, pwt.last_draft_update, pwt.last_publish,
-  pwt.author_id, pwt.is_published, pwt.author_username, pwt.tools,
-  r.tier::int AS tier,
-  false AS is_starred
-FROM ranked r
-JOIN posts_with_tools_and_tickets pwt ON pwt.id = r.post_id
-JOIN posts p ON p.id = r.post_id
-WHERE p.is_published
-  AND p.last_publish IS NOT NULL
-  AND p.author_id <> $1
-  AND NOT EXISTS (
-    SELECT 1 FROM post_stars ps
-    WHERE ps.post_id = p.id AND ps.liker_id = $1
-  )
-ORDER BY r.tier, p.last_publish DESC
-LIMIT $2
-`
-
-type GetTrendingPlaybooksForUserParams struct {
-	ViewerID  uuid.UUID `json:"viewer_id"`
-	PageLimit int32     `json:"page_limit"`
-}
-
-type GetTrendingPlaybooksForUserRow struct {
-	ID              uuid.UUID          `json:"id"`
-	Type            string             `json:"type"`
-	Name            string             `json:"name"`
-	Slug            string             `json:"slug"`
-	Description     string             `json:"description"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	LastDraftUpdate pgtype.Timestamptz `json:"last_draft_update"`
-	LastPublish     pgtype.Timestamptz `json:"last_publish"`
-	AuthorID        uuid.UUID          `json:"author_id"`
-	IsPublished     pgtype.Bool        `json:"is_published"`
-	AuthorUsername  string             `json:"author_username"`
-	Tools           interface{}        `json:"tools"`
-	Tier            int32              `json:"tier"`
-	IsStarred       pgtype.Bool        `json:"is_starred"`
-}
-
-func (q *Queries) GetTrendingPlaybooksForUser(ctx context.Context, arg GetTrendingPlaybooksForUserParams) ([]GetTrendingPlaybooksForUserRow, error) {
-	rows, err := q.db.Query(ctx, getTrendingPlaybooksForUser, arg.ViewerID, arg.PageLimit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetTrendingPlaybooksForUserRow
-	for rows.Next() {
-		var i GetTrendingPlaybooksForUserRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Type,
-			&i.Name,
-			&i.Slug,
-			&i.Description,
-			&i.UpdatedAt,
-			&i.CreatedAt,
-			&i.LastDraftUpdate,
-			&i.LastPublish,
-			&i.AuthorID,
-			&i.IsPublished,
-			&i.AuthorUsername,
-			&i.Tools,
-			&i.Tier,
-			&i.IsStarred,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getPopularTools = `-- name: GetPopularTools :many
-SELECT
-  twd.id, twd.name, twd.description, twd.logo_url,
-  twd.created_at, twd.updated_at, twd.categories, twd.vendor,
-  COUNT(DISTINCT si.profile_id) AS stack_count,
-  COUNT(DISTINCT recent.post_id) AS recent_mentions
-FROM tools_with_details twd
-LEFT JOIN stack_items si ON si.tool_id = twd.id
-LEFT JOIN (
-  SELECT pt.tool_id, pt.post_id
-  FROM post_tools pt
-  JOIN posts p ON p.id = pt.post_id
-  WHERE p.is_published
-    AND p.last_publish IS NOT NULL
-    AND p.last_publish >= now() - interval '7 days'
-) recent ON recent.tool_id = twd.id
-GROUP BY twd.id, twd.name, twd.description, twd.logo_url,
-         twd.created_at, twd.updated_at, twd.categories, twd.vendor
-ORDER BY recent_mentions DESC, stack_count DESC, twd.name ASC
-LIMIT $1
-`
-
-type GetPopularToolsRow struct {
-	ID          uuid.UUID          `json:"id"`
-	Name        string             `json:"name"`
-	Description pgtype.Text        `json:"description"`
-	LogoUrl     pgtype.Text        `json:"logo_url"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
-	Categories  interface{}        `json:"categories"`
-	Vendor         json.RawMessage    `json:"vendor"`
-	StackCount     int64              `json:"stack_count"`
-	RecentMentions int64              `json:"recent_mentions"`
-}
-
-func (q *Queries) GetPopularTools(ctx context.Context, pageLimit int32) ([]GetPopularToolsRow, error) {
-	rows, err := q.db.Query(ctx, getPopularTools, pageLimit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetPopularToolsRow
-	for rows.Next() {
-		var i GetPopularToolsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Description,
-			&i.LogoUrl,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.Categories,
-			&i.Vendor,
-			&i.StackCount,
-			&i.RecentMentions,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }

@@ -290,7 +290,9 @@ func TestFeedExcludesOwnPostsIntegration(t *testing.T) {
 	}
 
 	for _, item := range feed {
-		if item.ActorID == author {
+		// Nullable to sqlc, since one UNION branch reads a nullable column;
+		// never null in practice because the feed inner-joins profiles on it.
+		if item.ActorID.Valid && uuid.UUID(item.ActorID.Bytes) == author {
 			t.Fatalf("the viewer's own activity appeared in their feed (kind %q, tier %d)",
 				item.Kind, item.Tier)
 		}

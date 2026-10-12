@@ -59,12 +59,12 @@ SELECT
   updated_at,
   EXISTS(
     SELECT 1 FROM user_follows uf
-    WHERE uf.follower_id = $2 AND uf.followee_id = profiles.id
+    WHERE uf.follower_id = sqlc.arg(viewer_id) AND uf.followee_id = profiles.id
   ) AS is_following
 FROM
   profiles
 WHERE
-  username = $1;
+  username = sqlc.arg(username);
 
 -- name: CreateProfile :one
 INSERT INTO profiles (
@@ -1183,9 +1183,21 @@ WITH followed_users AS (
 SELECT
   r.kind, r.reason, r.tier, r.occurred_at,
   r.actor_id, actor.username AS actor_username,
-  r.post_id, p.name AS post_name, p.slug AS post_slug, p.type AS post_type, p.description AS post_description,
+  -- sqlc infers a UNION column's type and nullability from the FIRST branch
+  -- only. Read straight from `r`, post_id came out as interface{} (a UUID then
+  -- serialises as a byte array) and notification_message as a non-null string
+  -- (every post row is NULL there, so the scan fails and /feed 500s).
+  --   post_id: taken from the LEFT JOIN, which sqlc knows is nullable. Same
+  --     value, except a notification about a since-deleted post now gives
+  --     NULL rather than a dangling id; the frontend only uses it in a key.
+  --   notification_message: sqlc v1.21 cannot be talked out of `string` here
+  --     (NULLIF comes out as bool, COALESCE as string). A CASE is typed
+  --     interface{}, which pgx fills with a string or nil, so the JSON is
+  --     still a string or null. Values unchanged: post rows were NULL already.
+  p.id AS post_id,
+  p.name AS post_name, p.slug AS post_slug, p.type AS post_type, p.description AS post_description,
   r.tool_id, t.name AS tool_name, t.logo_url AS tool_logo_url,
-  r.notification_message,
+  CASE WHEN r.kind = 'notification' THEN r.notification_message END AS notification_message,
   COUNT(*) OVER() AS total_count
 FROM ranked r
 JOIN profiles actor ON actor.id = r.actor_id
@@ -1193,7 +1205,7 @@ LEFT JOIN posts p ON p.id = r.post_id
 LEFT JOIN tools t ON t.id = r.tool_id
 WHERE r.rn = 1
   -- A feed is what other people did; your own activity is not news to you.
-  AND r.actor_id <> sqlc.arg(viewer_id)
+  AND r.actor_id <> sqlc.arg(viewer_id)::uuid
 -- 0 for the last 3 days, 1 for everything older: the outermost sort key, so a
 -- fresh event of any tier outranks a stale one of every tier.
 ORDER BY (r.occurred_at < now() - interval '3 days')::int, r.tier, r.occurred_at DESC
@@ -1273,8 +1285,8 @@ SELECT vendor_id FROM tools WHERE id = $1;
 -- Tools imported without vendor details have no vendors row at all; the owner
 -- filling in the vendor card is what creates one.
 INSERT INTO vendors (name)
-SELECT name FROM tools WHERE id = $1
-RETURNING id;
+SELECT t.name FROM tools t WHERE t.id = $1
+RETURNING vendors.id;
 
 -- name: SetToolVendor :exec
 UPDATE tools SET vendor_id = $2, updated_at = now() WHERE id = $1;
@@ -1295,7 +1307,7 @@ DELETE FROM tool_categories WHERE tool_id = $1;
 
 -- name: AddToolCategories :exec
 INSERT INTO tool_categories (tool_id, category_id)
-SELECT $1, unnest($2::int[])
+SELECT sqlc.arg(tool_id)::uuid, unnest(sqlc.arg(category_ids)::int[])
 ON CONFLICT DO NOTHING;
 
 -- name: GetTrendingPlaybooksForUser :many

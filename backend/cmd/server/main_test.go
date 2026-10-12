@@ -211,7 +211,13 @@ func TestCachePublicIsNotAppliedToPerViewerResponses(t *testing.T) {
 		"listUserPosts", "getFeed", "listUserStarredPosts", "getTopPosts",
 	}
 
-	text := string(source)
+	// Normalised, because this scans the file as text and git here is set to
+	// core.autocrlf=true. A checkout on Windows rewrites every line ending to
+	// CRLF, so searching for a bare LF before a closing brace matches nothing
+	// and this test fails on the first handler while the code it guards is
+	// perfectly fine.
+	text := strings.ReplaceAll(string(source), "\r\n", "\n")
+
 	for _, name := range perViewer {
 		marker := "func (app *App) " + name + "("
 		start := strings.Index(text, marker)
