@@ -3,7 +3,7 @@
     "Demo accounts for handing to a client through the account-claim flow.",
     "",
     "  1. node scripts/seed.mjs scripts/seed-data.demo.json",
-    "  2. node scripts/claim-link.mjs demo_gtm      <- first run",
+    "  2. node scripts/claim-link.mjs demo_growth      <- first run",
     "     node scripts/claim-link.mjs demo_ops      <- spare, for a second run",
     "  3. send the printed link",
     "",
@@ -28,9 +28,9 @@
   ],
   "users": [
     {
-      "email": "demo_gtm@stackhub.invalid",
+      "email": "demo_growth@stackhub.invalid",
       "password": "ReplacedByClaimFlow1!",
-      "username": "demo_gtm",
+      "username": "demo_growth",
       "display_name": "Demo Account",
       "bio": "Demo profile for walking through StackHub. Claim it and make it yours.",
       "company": "StackHub",
@@ -72,7 +72,7 @@
   ],
   "playbooks": [
     {
-      "author": "demo_gtm",
+      "author": "demo_growth",
       "type": "playbook",
       "title": "Enrich inbound leads before they reach the CRM",
       "description": "Turn a bare email address into a scored, routed lead.",
@@ -89,7 +89,7 @@
       ]
     },
     {
-      "author": "demo_gtm",
+      "author": "demo_growth",
       "type": "playbook",
       "title": "A cold email sequence that survives a reply",
       "description": "Most sequences break the moment someone answers. This one does not.",
@@ -106,7 +106,7 @@
       ]
     },
     {
-      "author": "demo_gtm",
+      "author": "demo_growth",
       "type": "comparison",
       "title": "Apollo vs Clay for outbound data",
       "description": "Both sell contact data. They are not solving the same problem.",
