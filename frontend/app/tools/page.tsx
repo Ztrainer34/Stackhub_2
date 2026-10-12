@@ -21,7 +21,7 @@ import { Pagination } from "@/components/pagination";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
-import { Search, Wrench, Calendar, Filter, X } from "lucide-react";
+import { Search, Wrench, Filter, X } from "lucide-react";
 import { ToolLogo } from "@/components/tool-logo";
 import { ToolActions } from "@/components/tool-actions";
 import { toolHref, BrowseTool } from "@/lib/tool";
@@ -66,13 +66,6 @@ function ToolCard({ tool }: { tool: BrowseTool }) {
             </div>
           </div>
         </CardHeader>
-
-        <CardContent className="pt-0">
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Calendar className="w-3 h-3" />
-            <span>Updated {new Date(tool.updated_at).toLocaleDateString()}</span>
-          </div>
-        </CardContent>
       </Card>
     </Link>
   );

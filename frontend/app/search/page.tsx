@@ -27,6 +27,9 @@ type SearchCategory = {
   icon: React.ComponentType<{ className?: string }>;
 };
 
+import { AddToolDialog } from "@/components/add-tool-dialog";
+import { shouldOfferToolSuggestion } from "@/lib/search-empty-state";
+
 const categories: SearchCategory[] = [
   {
     id: "post",
@@ -341,7 +344,28 @@ export default function SearchPage() {
           <UserCard key={user.id} user={user} />
         ))}
 
-      {results.length === 0 && <NoResultFoundText />}
+      {results.length === 0 && (
+        <div className="space-y-4">
+          <NoResultFoundText />
+
+          {/* Only the tool catalogue is something a visitor can extend, so the
+              prompt is scoped to that tab — an empty search for a person has
+              nothing to offer. A search that found nothing is also the moment
+              someone is most willing to add the missing entry. */}
+          {shouldOfferToolSuggestion(category, results.length) && (
+            <div className="rounded-lg border border-dashed p-6 max-w-2xl">
+              <p className="font-medium mb-1">
+                Can&apos;t find &ldquo;{query}&rdquo;?
+              </p>
+              <p className="text-sm text-muted-foreground mb-4">
+                Add it to StackHub so the next person searching for it does
+                find it. Our team reviews every suggestion.
+              </p>
+              <AddToolDialog />
+            </div>
+          )}
+        </div>
+      )}
     </>
   );
 

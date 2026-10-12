@@ -29,7 +29,6 @@ export default function ProfileTabs({ username }: ProfileTabsProps) {
     { key: "overview", label: "Overview", href: `/${username}` },
     { key: "stack", label: "Stack", href: `/${username}?tab=stack` },
     { key: "playbooks", label: "Playbooks", href: `/${username}?tab=playbooks` },
-    { key: "combos", label: "Combos", href: `/${username}?tab=combos` },
     { key: "comparisons", label: "Comparisons", href: `/${username}?tab=comparisons` },
     { key: "starred", label: "Starred", href: `/${username}?tab=starred` },
   ];

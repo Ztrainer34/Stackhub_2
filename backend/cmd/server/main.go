@@ -142,18 +142,21 @@ func (app *App) createPost(w http.ResponseWriter, r *http.Request) {
 
 	switch form.Type {
 	case "playbook":
-		if totalTools != 1 {
-			http.Error(w, "Playbooks require exactly one tool or tool suggestion", http.StatusBadRequest)
+		// One or more. A playbook used to mean exactly one tool and a "combo"
+		// meant several; combos were folded into playbooks because the split
+		// made authors categorise their writing before they had written it.
+		if totalTools > maxPostTools {
+			http.Error(w, fmt.Sprintf("Too many tools (maximum %d)", maxPostTools), http.StatusBadRequest)
 			return
 		}
-	case "combo", "comparison":
+	case "comparison":
+		// A comparison of one thing is not a comparison.
 		if totalTools < 2 {
-			http.Error(w, "Combos and comparisons require at least two tools or tool suggestions", http.StatusBadRequest)
+			http.Error(w, "Comparisons require at least two tools or tool suggestions", http.StatusBadRequest)
 			return
 		}
-		// FIXME: Settle on a global limit
-		if totalTools > 10 {
-			http.Error(w, "Too many tools (maximum 10)", http.StatusBadRequest)
+		if totalTools > maxPostTools {
+			http.Error(w, fmt.Sprintf("Too many tools (maximum %d)", maxPostTools), http.StatusBadRequest)
 			return
 		}
 	default:
@@ -161,12 +164,25 @@ func (app *App) createPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Optional, so an empty string is "not answered" and stores NULL. Anything
+	// else must be one of the three levels; rejecting it here turns a CHECK
+	// constraint violation into a 400 that names the field.
+	experienceLevel := pgtype.Text{}
+	if trimmed := strings.TrimSpace(strings.ToLower(form.ExperienceLevel)); trimmed != "" {
+		if !post.ValidExperienceLevels[trimmed] {
+			http.Error(w, "Unknown experience level", http.StatusBadRequest)
+			return
+		}
+		experienceLevel = pgtype.Text{String: trimmed, Valid: true}
+	}
+
 	createPostParams := db.CreatePostParams{
-		AuthorID:    userID,
-		Type:        form.Type,
-		Name:        form.Name,
-		Slug:        post.NameToSlug(form.Name),
-		Description: form.Description,
+		AuthorID:        userID,
+		Type:            form.Type,
+		Name:            form.Name,
+		Slug:            post.NameToSlug(form.Name),
+		Description:     form.Description,
+		ExperienceLevel: experienceLevel,
 	}
 
 	tx, err := app.db.Begin(r.Context())
@@ -1352,6 +1368,8 @@ func (app *App) autocompleteTool(w http.ResponseWriter, r *http.Request) {
 		results = []db.AutocompleteToolRow{}
 	}
 
+	// Typeahead over the same catalogue; heavily repeated.
+	cachePublic(w, 60, 300)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(results)
 }
@@ -1432,6 +1450,11 @@ func (app *App) getTool(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(tool)
 	}
 }
+
+// maxPostTools caps how many tools one post may reference. It replaced a
+// per-type limit that lived inline in createPost, where the "combo" branch
+// carried a FIXME asking for exactly this.
+const maxPostTools = 10
 
 // maxToolCategories caps what a page owner can attach, so the categories card
 // stays a short list rather than a keyword dump.
@@ -1902,6 +1925,8 @@ func (app *App) listTools(w http.ResponseWriter, r *http.Request) {
 		TotalPages: totalPages,
 	}
 
+	// The catalogue changes only when a tool is added or edited.
+	cachePublic(w, 60, 300)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
@@ -1962,6 +1987,8 @@ func (app *App) getToolsByCategory(w http.ResponseWriter, r *http.Request) {
 		"total_pages": totalPages,
 	}
 
+	// Same data as the catalogue, filtered.
+	cachePublic(w, 60, 300)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
@@ -1980,6 +2007,8 @@ func (app *App) getCategoryBySlug(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Categories change very rarely.
+	cachePublic(w, 300, 900)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(category)
 }
@@ -2359,21 +2388,36 @@ func (app *App) getTopPosts(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(posts)
 	} else {
-		params := db.GetTopRecommendedPostsParams{
-			LikerID:         userID,
-			Limit:           100,
-			IsAuthenticated: true,
-		}
-
-		posts, err := app.queries.GetTopRecommendedPosts(r.Context(), params)
+		// Ranked against the viewer's own tool graph — stack, follows, starred
+		// playbooks, then people they follow. This replaced an embedding
+		// similarity ranking that returned nothing at all for anyone whose
+		// profile embedding was still null, i.e. every new account.
+		posts, err := app.queries.GetTrendingPlaybooksForUser(r.Context(), db.GetTrendingPlaybooksForUserParams{
+			ViewerID:  userID,
+			PageLimit: limit,
+		})
 		if err != nil {
 			log.Println(err)
 			http.Error(w, "Could not get top posts", http.StatusInternalServerError)
 			return
 		}
 
-		if posts == nil {
-			posts = []db.GetTopRecommendedPostsRow{}
+		// A viewer with an empty tool graph — no stack, no follows, no stars —
+		// matches no tier at all. Fall back to the public listing rather than
+		// showing them an empty dashboard.
+		if len(posts) == 0 {
+			fallback, err := app.queries.GetTopPosts(r.Context(), limit)
+			if err != nil {
+				log.Println(err)
+				http.Error(w, "Could not get top posts", http.StatusInternalServerError)
+				return
+			}
+			if fallback == nil {
+				fallback = []db.PostsWithTool{}
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(fallback)
+			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -2405,8 +2449,41 @@ func (app *App) getTopCategories(w http.ResponseWriter, r *http.Request) {
 		categories = []db.GetTopCategoriesRow{}
 	}
 
+	// A ranking that moves over weeks, not minutes.
+	cachePublic(w, 300, 900)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(categories)
+}
+
+// getPopularTools backs the dashboard's "Popular tools" section. Public: the
+// ranking is the same for everyone, so it needs no viewer.
+func (app *App) getPopularTools(w http.ResponseWriter, r *http.Request) {
+	limit := int32(6) // The dashboard shows six.
+
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if parsedLimit, err := strconv.ParseInt(limitStr, 10, 32); err == nil && parsedLimit > 0 {
+			limit = int32(parsedLimit)
+			if limit > 100 { // Upper bound
+				limit = 100
+			}
+		}
+	}
+
+	tools, err := app.queries.GetPopularTools(r.Context(), limit)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Could not get popular tools", http.StatusInternalServerError)
+		return
+	}
+
+	if tools == nil {
+		tools = []db.GetPopularToolsRow{}
+	}
+
+	// Ranked over a 7-day window; a 15-minute shared cache cannot skew it.
+	cachePublic(w, 300, 900)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(tools)
 }
 
 func (app *App) facets(w http.ResponseWriter, r *http.Request) {
@@ -2781,6 +2858,30 @@ type UploadImageFile struct {
 type UploadImageResponse struct {
 	Success int             `json:"success"`
 	File    UploadImageFile `json:"file"`
+}
+
+// cachePublic marks a response as safe for shared caches — a CDN in front of
+// the API, and the visitor's own browser — to store and serve to anyone.
+//
+// ONLY for responses that are byte-identical for every viewer. Anything that
+// varies with who is asking — a response carrying is_starred, is_in_stack, an
+// ownership flag, or a handler that branches on the viewer at all — must never
+// carry this header, because a shared cache will hand one person's state to the
+// next. getTool is the near miss worth remembering: its query has no per-user
+// columns, but the handler resolves tool ownership from the viewer, so it is
+// deliberately absent from the list of callers.
+//
+//	max-age                browsers
+//	s-maxage               shared caches, which prefer it over max-age
+//	stale-while-revalidate serve the stale copy immediately, refresh behind it
+//
+// Call this immediately before writing a SUCCESSFUL response, never at the top
+// of a handler: headers already set are still sent by http.Error, so an early
+// call would let a CDN cache a 500.
+func cachePublic(w http.ResponseWriter, browserSeconds, sharedSeconds int) {
+	w.Header().Set("Cache-Control", fmt.Sprintf(
+		"public, max-age=%d, s-maxage=%d, stale-while-revalidate=%d",
+		browserSeconds, sharedSeconds, sharedSeconds*2))
 }
 
 func getPublicSupabaseBucketURL(projectRef, bucketName, filePath string) string {
@@ -4633,6 +4734,7 @@ func main() {
 		r.Get("/post/{slug}/content", app.getPostContent)
 		r.Get("/post/{id}/comment", app.listPostComments)
 		r.Get("/homepage/top-posts", app.getTopPosts)
+		r.Get("/homepage/popular-tools", app.getPopularTools)
 
 		r.Get("/user/{slug}/posts", app.listUserPosts)
 		r.Get("/user/{slug}/followers", app.listFollowers)

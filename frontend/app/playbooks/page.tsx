@@ -80,7 +80,6 @@ export default function PlaybooksPage() {
   const playbookTypes = [
     { key: "all", label: "All", count: data?.counts.all_count ?? 0 },
     { key: "playbook", label: "Playbooks", count: data?.counts.playbook_count ?? 0 },
-    { key: "combo", label: "Combos", count: data?.counts.combo_count ?? 0 },
     { key: "comparison", label: "Comparisons", count: data?.counts.comparison_count ?? 0 },
   ];
 

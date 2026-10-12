@@ -1,6 +1,11 @@
 package main
 
-import "testing"
+import (
+	"net/http/httptest"
+	"os"
+	"strings"
+	"testing"
+)
 
 // tiptapPlainText is the bridge between the rich editor and everything that
 // reads plain text: full-text search, the embeddings, and the catalogue cards.
@@ -135,5 +140,92 @@ func TestOptionalText(t *testing.T) {
 				t.Errorf("optionalText(%q).String = %q, want %q", tc.in, got.String, tc.wantText)
 			}
 		})
+	}
+}
+
+// TestCachePublic pins the Cache-Control directives, because each one does a
+// different job and dropping any of them fails quietly rather than loudly:
+// without s-maxage a CDN falls back to max-age and caches for the wrong period,
+// without public a shared cache may refuse to store the response at all, and
+// without stale-while-revalidate every expiry makes a visitor wait for a fresh
+// origin fetch instead of being served the old copy while it refreshes.
+func TestCachePublic(t *testing.T) {
+	cases := []struct {
+		name     string
+		browser  int
+		shared   int
+		expected string
+	}{
+		{
+			name:     "catalogue values",
+			browser:  60,
+			shared:   300,
+			expected: "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
+		},
+		{
+			name:     "slow-moving values",
+			browser:  300,
+			shared:   900,
+			expected: "public, max-age=300, s-maxage=900, stale-while-revalidate=1800",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			cachePublic(rec, tc.browser, tc.shared)
+
+			got := rec.Header().Get("Cache-Control")
+			if got != tc.expected {
+				t.Errorf("Cache-Control = %q, want %q", got, tc.expected)
+			}
+
+			// A shared cache must be told it may store this at all. "private"
+			// here would mean browsers cache it and the CDN does not, which is
+			// the opposite of the point.
+			if !strings.Contains(got, "public") {
+				t.Error("header must be marked public or a shared cache may refuse to store it")
+			}
+		})
+	}
+}
+
+// TestCachePublicIsNotAppliedToPerViewerResponses is a guard against the one
+// mistake in this area that is a security bug rather than a performance one:
+// marking a response public when it varies by who asked for it lets a shared
+// cache serve one person's starred, stacked or owned state to the next.
+//
+// It reads main.go rather than calling anything, because the property being
+// checked is "which handlers call cachePublic", which no amount of running the
+// code reveals.
+func TestCachePublicIsNotAppliedToPerViewerResponses(t *testing.T) {
+	source, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+
+	// Handlers that resolve something about the signed-in viewer. Their
+	// responses differ per user and must never be shared-cacheable.
+	perViewer := []string{
+		"getTool", "getUser", "getPost", "getUserPost", "search",
+		"listUserPosts", "getFeed", "listUserStarredPosts", "getTopPosts",
+	}
+
+	text := string(source)
+	for _, name := range perViewer {
+		marker := "func (app *App) " + name + "("
+		start := strings.Index(text, marker)
+		if start == -1 {
+			continue // renamed or removed; not this test's business
+		}
+		end := strings.Index(text[start:], "\n}\n")
+		if end == -1 {
+			t.Fatalf("could not find the end of %s", name)
+		}
+
+		if strings.Contains(text[start:start+end], "cachePublic(") {
+			t.Errorf("%s varies by viewer but calls cachePublic — a shared cache "+
+				"would serve one user's state to another", name)
+		}
 	}
 }

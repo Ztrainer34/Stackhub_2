@@ -21,10 +21,17 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useCategoryAutocomplete } from "@/lib/queries/use-category-autocomplete";
 
-const suggestedToolSchema = z.object({
+// Every field is required. A suggested tool goes into a catalogue other people
+// browse and trust, and a half-filled entry — no website, no description —
+// still has to be researched by hand before it can be approved. Asking for all
+// of it up front is cheaper than chasing it afterwards.
+export const suggestedToolSchema = z.object({
   name: z.string().min(1, "Tool name is required").max(100, "Tool name must be less than 100 characters"),
-  description: z.string().max(500, "Description must be less than 500 characters").optional(),
-  website: z.string().url("Please enter a valid URL").optional().or(z.literal("")),
+  description: z
+    .string()
+    .min(1, "Description is required")
+    .max(500, "Description must be less than 500 characters"),
+  website: z.string().min(1, "Website is required").url("Please enter a valid URL"),
   categories: z.array(z.number()).min(1, "Please select at least one category"),
 });
 
@@ -130,7 +137,7 @@ export function SuggestedToolForm({ onSubmit, onCancel, submitLabel = "Suggest T
           name="website"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Website</FormLabel>
+              <FormLabel>Website *</FormLabel>
               <FormControl>
                 <Input
                   placeholder="https://example.com"
@@ -148,7 +155,7 @@ export function SuggestedToolForm({ onSubmit, onCancel, submitLabel = "Suggest T
           name="description"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Description</FormLabel>
+              <FormLabel>Description *</FormLabel>
               <FormControl>
                 <Textarea
                   placeholder="Brief description of what this tool does..."

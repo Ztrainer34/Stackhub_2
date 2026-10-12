@@ -8,7 +8,9 @@ export interface PostTool {
   is_ticket: boolean;
 }
 
-export type PostType = "playbook" | "combo" | "comparison"
+// "combo" was removed: it meant a playbook about several tools, which a
+// playbook now simply is. Existing combos were reclassified by migration.
+export type PostType = "playbook" | "comparison"
 
 export interface Post {
   id: string;
@@ -39,7 +41,6 @@ export interface PaginatedPostsResponse {
 export interface PostTypeCounts {
   all_count: number;
   playbook_count: number;
-  combo_count: number;
   comparison_count: number;
 }
 
