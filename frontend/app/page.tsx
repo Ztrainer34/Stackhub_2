@@ -27,7 +27,7 @@ async function LandingPage() {
         <div className="container px-4 md:px-6">
           <div className="flex flex-col items-center text-center space-y-8 max-w-4xl mx-auto">
             <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight">
-              Discover GTMs&apos; best tools and playbooks
+              Discover the best GTM tools and playbooks
             </h1>
 
             <p className="text-xl text-muted-foreground max-w-2xl leading-relaxed">
