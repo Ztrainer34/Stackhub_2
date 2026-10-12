@@ -3,6 +3,7 @@ package main
 import (
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -199,9 +200,24 @@ func TestCachePublic(t *testing.T) {
 // checked is "which handlers call cachePublic", which no amount of running the
 // code reveals.
 func TestCachePublicIsNotAppliedToPerViewerResponses(t *testing.T) {
-	source, err := os.ReadFile("main.go")
+	// Every non-test source file in the package, not one file by name. Handlers
+	// live across many files, and a guard that read only main.go would go
+	// quietly blind the moment one moved out of it - while still passing.
+	paths, err := filepath.Glob("*.go")
 	if err != nil {
-		t.Fatalf("read main.go: %v", err)
+		t.Fatalf("list source files: %v", err)
+	}
+	var all strings.Builder
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		source, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		all.Write(source)
+		all.WriteString("\n")
 	}
 
 	// Handlers that resolve something about the signed-in viewer. Their
@@ -216,13 +232,18 @@ func TestCachePublicIsNotAppliedToPerViewerResponses(t *testing.T) {
 	// CRLF, so searching for a bare LF before a closing brace matches nothing
 	// and this test fails on the first handler while the code it guards is
 	// perfectly fine.
-	text := strings.ReplaceAll(string(source), "\r\n", "\n")
+	text := strings.ReplaceAll(all.String(), "\r\n", "\n")
 
 	for _, name := range perViewer {
 		marker := "func (app *App) " + name + "("
 		start := strings.Index(text, marker)
 		if start == -1 {
-			continue // renamed or removed; not this test's business
+			// Fail rather than skip. Skipping is how this guard would stop
+			// guarding without anyone noticing: rename a handler and the check
+			// silently passes. If one is genuinely removed, update the list.
+			t.Errorf("%s not found in any source file - update perViewer "+
+				"deliberately if it was renamed or removed", name)
+			continue
 		}
 		end := strings.Index(text[start:], "\n}\n")
 		if end == -1 {

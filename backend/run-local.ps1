@@ -74,4 +74,7 @@ if ($db -match '\.supabase\.co') {
 Write-Host "Starting on http://localhost:8080 ..." -ForegroundColor Green
 Write-Host ""
 
-go run cmd/server/main.go
+# The PACKAGE, not main.go. Naming a single file compiles only that file, so
+# every handler in the other cmd/server/*.go files goes missing and the build
+# fails on the first reference to one (`app.routes undefined`).
+go run ./cmd/server

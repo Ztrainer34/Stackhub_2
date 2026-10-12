@@ -427,7 +427,6 @@ func TestFeedRecencyBandIntegration(t *testing.T) {
 	}
 }
 
-
 // TestTrendingTiersIntegration covers the dashboard's "Trending playbooks"
 // ranking: a playbook is scored by how close its tools sit to the viewer's own
 // tool graph, strongest tier winning.
