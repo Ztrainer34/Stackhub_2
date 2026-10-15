@@ -26,7 +26,7 @@ import { useCategoryAutocomplete } from "@/lib/queries/use-category-autocomplete
 // still has to be researched by hand before it can be approved. Asking for all
 // of it up front is cheaper than chasing it afterwards.
 export const suggestedToolSchema = z.object({
-  name: z.string().min(1, "Tool name is required").max(100, "Tool name must be less than 100 characters"),
+  name: z.string().trim().min(1, "Tool name is required").max(100, "Tool name must be less than 100 characters"),
   description: z
     .string()
     .min(1, "Description is required")

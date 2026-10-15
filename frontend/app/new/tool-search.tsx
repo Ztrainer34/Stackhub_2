@@ -49,6 +49,7 @@ export function ToolSearch({
   const [open, setOpen] = React.useState(false);
   const [view, setView] = React.useState<DialogView>('search');
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [submittedName, setSubmittedName] = React.useState("");
   const [debouncedQuery, setDebouncedQuery] = React.useState("");
   const inputRef = React.useRef<HTMLInputElement>(null);
 
@@ -117,6 +118,7 @@ export function ToolSearch({
         type: 'suggested',
       };
       onSuggestTool(suggestedTool);
+      setSubmittedName(data.name);
       setView('confirmation');
     }
   };
@@ -227,19 +229,16 @@ export function ToolSearch({
           <div className="flex flex-col max-h-[70vh]">
             <div className="p-4 pb-2">
               <DialogHeader>
-                <DialogTitle>Suggest a tool to add to StackHub</DialogTitle>
+                <DialogTitle>Add a new tool</DialogTitle>
                 <DialogDescription className="text-sm space-y-2 pt-1">
                   <span className="block">
-                    Couldn&apos;t find a tool and want to add it?
+                    Can&rsquo;t find a tool? Add it!
                     <br />
-                    Amazing! Thank you for your contribution 🙏
-                  </span>
-                  <span className="block">
-                    Other users will rely on the information you fill in. So
-                    please double check its accuracy 🔍
+                    Others will rely on your info, so please check it&rsquo;s
+                    accurate.
                     <br />
-                    If our team rejects the info you entered, the tool
-                    won&apos;t be added.
+                    We review every submission and will let you know if
+                    it&rsquo;s approved or not.
                   </span>
                 </DialogDescription>
               </DialogHeader>
@@ -250,7 +249,7 @@ export function ToolSearch({
                 <SuggestedToolForm
                   onSubmit={handleSuggestTool}
                   onCancel={() => setView('search')}
-                  submitLabel="Suggest tool"
+                  submitLabel="Add a new tool"
                 />
               </div>
             </ScrollArea>
@@ -261,12 +260,11 @@ export function ToolSearch({
           <div className="p-6 text-center">
             <DialogHeader className="mb-4">
               <DialogTitle className="text-center">
-                Thank you for adding a new tool!
+                Thanks for adding {submittedName}
               </DialogTitle>
               <DialogDescription className="text-sm pt-3 space-y-3 text-center">
                 <span className="block">
-                  Once we&apos;ve reviewed the information, we&apos;ll add your
-                  tool to StackHub and notify you.
+                  We&rsquo;ll let you know once it&rsquo;s reviewed
                 </span>
                 <span className="block">
                   In the meantime, you can go ahead and create your playbook.

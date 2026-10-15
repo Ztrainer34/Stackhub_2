@@ -27,6 +27,7 @@ export function AddToolDialog() {
   const [open, setOpen] = React.useState(false);
   const [view, setView] = React.useState<View>("form");
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [submittedName, setSubmittedName] = React.useState("");
   const router = useRouter();
 
   React.useEffect(() => {
@@ -46,6 +47,7 @@ export function AddToolDialog() {
         website: data.website,
         categories: data.categories,
       });
+      setSubmittedName(data.name);
       setView("confirmation");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to submit tool");
@@ -72,19 +74,16 @@ export function AddToolDialog() {
         {view === "form" ? (
           <>
             <DialogHeader>
-              <DialogTitle>Suggest a tool to add to StackHub</DialogTitle>
+              <DialogTitle>Add a new tool</DialogTitle>
               <DialogDescription className="text-sm space-y-2 pt-1">
                 <span className="block">
-                  Couldn&apos;t find a tool and want to add it?
+                  Can&rsquo;t find a tool? Add it!
                   <br />
-                  Amazing! Thank you for your contribution 🙏
-                </span>
-                <span className="block">
-                  Other users will rely on the information you fill in. So
-                  please double check its accuracy 🔍
+                  Others will rely on your info, so please check it&rsquo;s
+                  accurate.
                   <br />
-                  If our team rejects the info you entered, the tool
-                  won&apos;t be added.
+                  We review every submission and will let you know if
+                  it&rsquo;s approved or not.
                 </span>
               </DialogDescription>
             </DialogHeader>
@@ -92,18 +91,17 @@ export function AddToolDialog() {
             <SuggestedToolForm
               onSubmit={handleSubmit}
               onCancel={() => setOpen(false)}
-              submitLabel={isSubmitting ? "Submitting..." : "Suggest tool"}
+              submitLabel={isSubmitting ? "Submitting..." : "Add a new tool"}
             />
           </>
         ) : (
           <div className="p-2 text-center">
             <DialogHeader className="mb-4">
               <DialogTitle className="text-center">
-                Thanks for suggesting a tool!
+                Thanks for adding {submittedName}
               </DialogTitle>
               <DialogDescription className="text-sm pt-3 text-center">
-                Once we&apos;ve reviewed the information, we&apos;ll add your
-                tool to StackHub and notify you.
+                We&rsquo;ll let you know once it&rsquo;s reviewed
               </DialogDescription>
             </DialogHeader>
 
