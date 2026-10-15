@@ -67,7 +67,7 @@ export function AddToolDialog() {
       <DialogTrigger asChild>
         <Button>
           <Plus className="h-4 w-4 mr-2" />
-          Add a tool
+          Add new tool
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[550px] max-h-[85vh] overflow-y-auto">
@@ -91,7 +91,7 @@ export function AddToolDialog() {
             <SuggestedToolForm
               onSubmit={handleSubmit}
               onCancel={() => setOpen(false)}
-              submitLabel={isSubmitting ? "Submitting..." : "Add a new tool"}
+              submitLabel={isSubmitting ? "Submitting..." : "Add new tool"}
             />
           </>
         ) : (

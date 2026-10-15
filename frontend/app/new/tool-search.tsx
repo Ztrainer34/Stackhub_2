@@ -216,7 +216,7 @@ export function ToolSearch({
                       onClick={() => setView('add-tool')}
                     >
                       <Plus className="h-4 w-4" />
-                      Add tool
+                      Add new tool
                     </Button>
                   </div>
                 </div>
@@ -249,7 +249,7 @@ export function ToolSearch({
                 <SuggestedToolForm
                   onSubmit={handleSuggestTool}
                   onCancel={() => setView('search')}
-                  submitLabel="Add a new tool"
+                  submitLabel="Add new tool"
                 />
               </div>
             </ScrollArea>
