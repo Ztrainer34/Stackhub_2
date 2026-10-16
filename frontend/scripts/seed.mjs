@@ -212,6 +212,10 @@ async function main() {
         draft_content: doc,
         draft_content_text: text,
         is_published: p.published ?? true,
+        // The feed requires is_published AND last_publish IS NOT NULL — a post
+        // with only the flag set is invisible in every feed. The publish
+        // endpoint sets this; inserting directly has to do it too.
+        last_publish: (p.published ?? true) ? new Date().toISOString() : null,
       })
       .select("id")
       .single();

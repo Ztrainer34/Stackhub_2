@@ -59,13 +59,13 @@ function ConfirmationDialog({
 
   const dialogConfig = {
     delete: {
-      title: "Delete Post",
+      title: "Delete post",
       description: "Are you sure you want to delete this post? This action cannot be undone and all data associated with this post will be permanently removed.",
       confirmText: "Delete",
       confirmVariant: "destructive" as const,
     },
     unpublish: {
-      title: "Unpublish Post",
+      title: "Unpublish post",
       description: "Are you sure you want to unpublish this post? It will no longer be visible to others, but you can publish it again later.",
       confirmText: "Unpublish",
       confirmVariant: "default" as const,
@@ -147,8 +147,6 @@ export default function PostCard({
     switch (type.toLowerCase()) {
       case "playbook":
         return "bg-blue-100 text-blue-800 border-blue-200";
-      case "combo":
-        return "bg-green-100 text-green-800 border-green-200";
       case "comparison":
         return "bg-purple-100 text-purple-800 border-purple-200";
       default:

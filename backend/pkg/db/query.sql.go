@@ -310,19 +310,20 @@ func (q *Queries) GetUserEmail(ctx context.Context, id uuid.UUID) (string, error
 const createPost = `-- name: CreatePost :one
 
 INSERT INTO posts (
-  author_id, type, name, slug, description
+  author_id, type, name, slug, description, experience_level
 ) VALUES (
-  $1, $2, $3, $4, $5
+  $1, $2, $3, $4, $5, $6
 )
 RETURNING id, slug
 `
 
 type CreatePostParams struct {
-	AuthorID    uuid.UUID `json:"author_id"`
-	Type        string    `json:"type"`
-	Name        string    `json:"name"`
-	Slug        string    `json:"slug"`
-	Description string    `json:"description"`
+	AuthorID        uuid.UUID   `json:"author_id"`
+	Type            string      `json:"type"`
+	Name            string      `json:"name"`
+	Slug            string      `json:"slug"`
+	Description     string      `json:"description"`
+	ExperienceLevel pgtype.Text `json:"experience_level"`
 }
 
 type CreatePostRow struct {
@@ -338,6 +339,7 @@ func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) (CreateP
 		arg.Name,
 		arg.Slug,
 		arg.Description,
+		arg.ExperienceLevel,
 	)
 	var i CreatePostRow
 	err := row.Scan(&i.ID, &i.Slug)
@@ -2679,7 +2681,6 @@ const getPublishedPostTypeCounts = `-- name: GetPublishedPostTypeCounts :one
 SELECT
   COUNT(*)::int AS all_count,
   COUNT(*) FILTER (WHERE p.type = 'playbook')::int AS playbook_count,
-  COUNT(*) FILTER (WHERE p.type = 'combo')::int AS combo_count,
   COUNT(*) FILTER (WHERE p.type = 'comparison')::int AS comparison_count
 FROM posts p
 WHERE p.is_published
@@ -2692,7 +2693,6 @@ WHERE p.is_published
 type GetPublishedPostTypeCountsRow struct {
 	AllCount        int32 `json:"all_count"`
 	PlaybookCount   int32 `json:"playbook_count"`
-	ComboCount      int32 `json:"combo_count"`
 	ComparisonCount int32 `json:"comparison_count"`
 }
 
@@ -2702,7 +2702,6 @@ func (q *Queries) GetPublishedPostTypeCounts(ctx context.Context) (GetPublishedP
 	err := row.Scan(
 		&i.AllCount,
 		&i.PlaybookCount,
-		&i.ComboCount,
 		&i.ComparisonCount,
 	)
 	return i, err
@@ -3667,14 +3666,34 @@ func (q *Queries) UpdateProfile(ctx context.Context, arg UpdateProfileParams) er
 
 const getUserFeed = `-- name: GetUserFeed :many
 -- Activity feed, ranked by how much each event has to do with the viewer:
---   tier 0  about you       — unread stars, comments, new followers, tool approvals
---   tier 1  people you follow — they published a playbook / combo / comparison
---   tier 2  tools you follow  — someone published about one
---   tier 3  discovery filler  — recent playbooks, and ONLY for a viewer who
---                               follows nobody and no tools, so an established
---                               account never sees strangers in its feed
--- Within a tier the newest event wins. Every branch carries an event_key so a
--- post matching several reasons appears once, keeping its strongest reason.
+--   tier 0  about you        — unread stars, comments, new followers, tool approvals
+--   tier 1  people you follow  — they published a playbook or comparison
+--   tier 2  tools in your stack — someone published about one
+--   tier 3  other followed tools — watchlist, plus anything followed by hand
+--   tier 4  discovery filler   — recent playbooks, and ONLY for a viewer who
+--                                follows nobody and no tools, so an established
+--                                account never sees strangers in its feed
+--
+-- Tiers 2 and 3 are how "a watchlist tool carries half the weight of a stack
+-- tool" is expressed: both are followed, but a post about something you
+-- actually run always outranks a post about something you are only watching.
+-- Tools in the old stack are absent entirely — archiving unfollows them.
+--
+-- Recency outranks the tiers. Events from the last 3 days form a "fresh" band
+-- that sorts above everything older, and the tiers order events *within* each
+-- band. Tier alone used to decide absolutely, which let a three-week-old post
+-- from someone you follow sit above a post from this morning about a tool you
+-- run — the feed read as stale even when the site was busy.
+--
+-- The tiers still matter, which is the point of banding rather than sorting by
+-- time alone: among today's events you still see people you follow before
+-- watchlist chatter. Only once an event ages out of the band does recency stop
+-- protecting it.
+--
+-- Within a band and tier the newest event wins. Every branch carries an event_key so a
+-- post matching several reasons appears once, keeping its strongest reason —
+-- which is also what makes a post about both a stack tool and a watchlist tool
+-- rank as a stack post.
 --
 -- Deliberately absent: "someone you follow started following X". Adding a tool
 -- to a stack auto-follows it, so those rows were the highest-volume and least
@@ -3684,6 +3703,8 @@ WITH followed_users AS (
   SELECT followee_id FROM user_follows WHERE follower_id = $1
 ), followed_tools AS (
   SELECT tool_id FROM tool_follows WHERE profile_id = $1
+), stack_tools AS (
+  SELECT tool_id FROM stack_items WHERE profile_id = $1
 ), follows_anything AS (
   SELECT (EXISTS(SELECT 1 FROM followed_users)
        OR EXISTS(SELECT 1 FROM followed_tools)) AS yes
@@ -3710,19 +3731,32 @@ WITH followed_users AS (
     AND p.author_id IN (SELECT followee_id FROM followed_users)
 
   UNION ALL
-  -- Tier 2 — a playbook about a tool the viewer follows.
-  SELECT 'post', 'following_tool', 2, 'post:' || p.id::text,
+  -- Tier 2 — a playbook about a tool in the viewer's ACTIVE STACK.
+  SELECT 'post', 'stack_tool', 2, 'post:' || p.id::text,
          p.last_publish, p.author_id, p.id, pt.tool_id, NULL::text
   FROM posts p
   JOIN post_tools pt ON pt.post_id = p.id
   WHERE p.is_published AND p.last_publish IS NOT NULL
     AND pt.tool_id IN (SELECT tool_id FROM followed_tools)
+    AND pt.tool_id IN (SELECT tool_id FROM stack_tools)
 
   UNION ALL
-  -- Tier 3 — recent playbooks, so a brand-new account still sees something.
+  -- Tier 3 — a playbook about a followed tool that is NOT in the stack: the
+  -- watchlist, plus any tool followed by hand from its page. Half the weight of
+  -- tier 2 in the sense that matters — it never outranks it.
+  SELECT 'post', 'watchlist_tool', 3, 'post:' || p.id::text,
+         p.last_publish, p.author_id, p.id, pt.tool_id, NULL::text
+  FROM posts p
+  JOIN post_tools pt ON pt.post_id = p.id
+  WHERE p.is_published AND p.last_publish IS NOT NULL
+    AND pt.tool_id IN (SELECT tool_id FROM followed_tools)
+    AND pt.tool_id NOT IN (SELECT tool_id FROM stack_tools)
+
+  UNION ALL
+  -- Tier 4 — recent playbooks, so a brand-new account still sees something.
   -- Suppressed the moment the viewer follows anyone or any tool: this branch is
   -- what used to put strangers' posts in an established account's feed.
-  SELECT 'post', 'latest', 3, 'post:' || p.id::text,
+  SELECT 'post', 'latest', 4, 'post:' || p.id::text,
          p.last_publish, p.author_id, p.id, NULL::uuid, NULL::text
   FROM posts p
   WHERE p.is_published AND p.last_publish IS NOT NULL
@@ -3747,7 +3781,9 @@ LEFT JOIN tools t ON t.id = r.tool_id
 WHERE r.rn = 1
   -- A feed is what other people did; your own activity is not news to you.
   AND r.actor_id <> $1
-ORDER BY r.tier, r.occurred_at DESC
+-- 0 for the last 3 days, 1 for everything older: the outermost sort key, so a
+-- fresh event of any tier outranks a stale one of every tier.
+ORDER BY (r.occurred_at < now() - interval '3 days')::int, r.tier, r.occurred_at DESC
 LIMIT $2 OFFSET $3
 `
 
@@ -4204,4 +4240,186 @@ func (q *Queries) GetProfileWithUsernameAuthenticated(ctx context.Context, arg G
 		&i.IsFollowing,
 	)
 	return i, err
+}
+
+const getTrendingPlaybooksForUser = `-- name: GetTrendingPlaybooksForUser :many
+WITH
+  stack_tools AS (
+    SELECT tool_id FROM stack_items WHERE profile_id = $1
+  ),
+  followed_tools AS (
+    SELECT tool_id FROM tool_follows WHERE profile_id = $1
+  ),
+  starred_tools AS (
+    SELECT DISTINCT pt.tool_id
+    FROM post_stars ps
+    JOIN post_tools pt ON pt.post_id = ps.post_id
+    WHERE ps.liker_id = $1
+  ),
+  followed_people_tools AS (
+    SELECT DISTINCT pt.tool_id
+    FROM user_follows uf
+    JOIN posts fp ON fp.author_id = uf.followee_id AND fp.is_published
+    JOIN post_tools pt ON pt.post_id = fp.id
+    WHERE uf.follower_id = $1
+  ),
+  candidates AS (
+    SELECT pt.post_id, 1 AS tier FROM post_tools pt
+      WHERE pt.tool_id IN (SELECT tool_id FROM stack_tools)
+    UNION ALL
+    SELECT pt.post_id, 2 FROM post_tools pt
+      WHERE pt.tool_id IN (SELECT tool_id FROM followed_tools)
+    UNION ALL
+    SELECT pt.post_id, 3 FROM post_tools pt
+      WHERE pt.tool_id IN (SELECT tool_id FROM starred_tools)
+    UNION ALL
+    SELECT pt.post_id, 4 FROM post_tools pt
+      WHERE pt.tool_id IN (SELECT tool_id FROM followed_people_tools)
+  ),
+  ranked AS (
+    SELECT post_id, MIN(tier) AS tier FROM candidates GROUP BY post_id
+  )
+SELECT
+  pwt.id, pwt.type, pwt.name, pwt.slug, pwt.description,
+  pwt.updated_at, pwt.created_at, pwt.last_draft_update, pwt.last_publish,
+  pwt.author_id, pwt.is_published, pwt.author_username, pwt.tools,
+  r.tier::int AS tier,
+  false AS is_starred
+FROM ranked r
+JOIN posts_with_tools_and_tickets pwt ON pwt.id = r.post_id
+JOIN posts p ON p.id = r.post_id
+WHERE p.is_published
+  AND p.last_publish IS NOT NULL
+  AND p.author_id <> $1
+  AND NOT EXISTS (
+    SELECT 1 FROM post_stars ps
+    WHERE ps.post_id = p.id AND ps.liker_id = $1
+  )
+ORDER BY r.tier, p.last_publish DESC
+LIMIT $2
+`
+
+type GetTrendingPlaybooksForUserParams struct {
+	ViewerID  uuid.UUID `json:"viewer_id"`
+	PageLimit int32     `json:"page_limit"`
+}
+
+type GetTrendingPlaybooksForUserRow struct {
+	ID              uuid.UUID          `json:"id"`
+	Type            string             `json:"type"`
+	Name            string             `json:"name"`
+	Slug            string             `json:"slug"`
+	Description     string             `json:"description"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	LastDraftUpdate pgtype.Timestamptz `json:"last_draft_update"`
+	LastPublish     pgtype.Timestamptz `json:"last_publish"`
+	AuthorID        uuid.UUID          `json:"author_id"`
+	IsPublished     pgtype.Bool        `json:"is_published"`
+	AuthorUsername  string             `json:"author_username"`
+	Tools           interface{}        `json:"tools"`
+	Tier            int32              `json:"tier"`
+	IsStarred       pgtype.Bool        `json:"is_starred"`
+}
+
+func (q *Queries) GetTrendingPlaybooksForUser(ctx context.Context, arg GetTrendingPlaybooksForUserParams) ([]GetTrendingPlaybooksForUserRow, error) {
+	rows, err := q.db.Query(ctx, getTrendingPlaybooksForUser, arg.ViewerID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetTrendingPlaybooksForUserRow
+	for rows.Next() {
+		var i GetTrendingPlaybooksForUserRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Type,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.UpdatedAt,
+			&i.CreatedAt,
+			&i.LastDraftUpdate,
+			&i.LastPublish,
+			&i.AuthorID,
+			&i.IsPublished,
+			&i.AuthorUsername,
+			&i.Tools,
+			&i.Tier,
+			&i.IsStarred,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getPopularTools = `-- name: GetPopularTools :many
+SELECT
+  twd.id, twd.name, twd.description, twd.logo_url,
+  twd.created_at, twd.updated_at, twd.categories, twd.vendor,
+  COUNT(DISTINCT si.profile_id) AS stack_count,
+  COUNT(DISTINCT recent.post_id) AS recent_mentions
+FROM tools_with_details twd
+LEFT JOIN stack_items si ON si.tool_id = twd.id
+LEFT JOIN (
+  SELECT pt.tool_id, pt.post_id
+  FROM post_tools pt
+  JOIN posts p ON p.id = pt.post_id
+  WHERE p.is_published
+    AND p.last_publish IS NOT NULL
+    AND p.last_publish >= now() - interval '7 days'
+) recent ON recent.tool_id = twd.id
+GROUP BY twd.id, twd.name, twd.description, twd.logo_url,
+         twd.created_at, twd.updated_at, twd.categories, twd.vendor
+ORDER BY recent_mentions DESC, stack_count DESC, twd.name ASC
+LIMIT $1
+`
+
+type GetPopularToolsRow struct {
+	ID          uuid.UUID          `json:"id"`
+	Name        string             `json:"name"`
+	Description pgtype.Text        `json:"description"`
+	LogoUrl     pgtype.Text        `json:"logo_url"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	Categories  interface{}        `json:"categories"`
+	Vendor         json.RawMessage    `json:"vendor"`
+	StackCount     int64              `json:"stack_count"`
+	RecentMentions int64              `json:"recent_mentions"`
+}
+
+func (q *Queries) GetPopularTools(ctx context.Context, pageLimit int32) ([]GetPopularToolsRow, error) {
+	rows, err := q.db.Query(ctx, getPopularTools, pageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetPopularToolsRow
+	for rows.Next() {
+		var i GetPopularToolsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.LogoUrl,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Categories,
+			&i.Vendor,
+			&i.StackCount,
+			&i.RecentMentions,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

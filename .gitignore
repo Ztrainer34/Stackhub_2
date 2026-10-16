@@ -1,0 +1,19 @@
+# Secrets. frontend/.gitignore and backend/.gitignore only cover their own
+# subtrees, which is how the root .env ended up tracked in the first commit.
+.env
+.env.*
+!.env.example
+
+# Claude Code: shared config IS committed (settings.json, agents/, commands/).
+# Only per-developer overrides and scratch state stay local.
+.claude/settings.local.json
+.claude/.state/
+
+# Playwright MCP scratch output — console logs and page snapshots from browser
+# review runs. Regenerated every run, useful to nobody else.
+.playwright-mcp/
+
+# OS / editor
+.DS_Store
+.idea/
+*.swp

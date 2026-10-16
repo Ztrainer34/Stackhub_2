@@ -87,7 +87,7 @@ DECLARE
     post_name TEXT;
     post_slug TEXT;
     post_description TEXT;
-    post_types TEXT[] := ARRAY['playbook', 'combo', 'comparison'];
+    post_types TEXT[] := ARRAY['playbook', 'playbook', 'comparison'];
     
     -- Sample post templates
     playbook_names TEXT[] := ARRAY[

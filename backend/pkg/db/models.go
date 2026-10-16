@@ -48,6 +48,10 @@ type Post struct {
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 	LastPublish      pgtype.Timestamptz `json:"last_publish"`
 	LastDraftUpdate  pgtype.Timestamptz `json:"last_draft_update"`
+	// Optional: 'beginner', 'intermediate' or 'advanced', NULL when unanswered.
+	// Not yet carried by posts_with_tools_and_tickets, so it is stored on create
+	// but not returned by the queries that read through that view.
+	ExperienceLevel pgtype.Text `json:"experience_level"`
 }
 
 type PostComment struct {

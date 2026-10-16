@@ -11,7 +11,7 @@ import { createClient } from "@/utils/supabase/client";
 import { toast } from "sonner";
 
 interface CreatePostData {
-  type: "playbook" | "combo" | "comparison";
+  type: "playbook" | "comparison";
   name: string;
   tools: string[];
   suggested_tools?: Array<{
@@ -21,6 +21,11 @@ interface CreatePostData {
     categories: number[];
   }>;
   description: string;
+  /**
+   * Optional. "" or omitted means "not answered" and the backend stores NULL.
+   * Anything other than the three levels is rejected with a 400.
+   */
+  experience_level?: "" | "beginner" | "intermediate" | "advanced";
 }
 
 interface CreatePostResponse {
