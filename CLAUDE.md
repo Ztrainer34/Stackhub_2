@@ -40,7 +40,16 @@
 ```
 stackhub/
 ├── backend/
-│   ├── cmd/server/main.go          # Main server entry point
+│   ├── cmd/server/                 # package main — one file per domain
+│   │   ├── main.go                 # startup only: env, db pool, S3, mailer
+│   │   ├── routes.go               # the whole routing table + auth groups
+│   │   ├── posts.go                # handlers, one file per resource:
+│   │   ├── post_editing.go         #   create/save/publish/rename/delete
+│   │   ├── post_social.go          #   stars, comments
+│   │   ├── users.go tools.go tool_page.go tickets.go stacks.go
+│   │   ├── onboarding.go notifications.go feed.go search.go categories.go
+│   │   ├── auth.go pgconv.go httpcache.go content.go storage.go  # helpers
+│   │   └── testdata/routes.golden  # pinned route table (see routes_test.go)
 │   ├── pkg/
 │   │   ├── db/                     # SQLC generated code
 │   │   │   ├── query.sql.go        # Generated queries
@@ -481,8 +490,8 @@ const user = authState.user; // Type-safe
    sqlc checks every query against the migrations, so a misspelled column is a
    generate-time error rather than a 500 in production.
 3. `go build ./...` — fix any handler that used a changed field.
-4. Update handlers in `cmd/server/main.go`.
-5. Run it with `.un-local.ps1` (see LOCAL-DEV.md).
+4. Update the handler in whichever `cmd/server/<domain>.go` file owns it.
+5. Run it with `.\run-local.ps1` (see LOCAL-DEV.md).
 
 **Known sqlc v1.21 limitations in this codebase:**
 - `auth.users` belongs to Supabase, so no migration creates it. It is declared
@@ -649,7 +658,8 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 ```bash
 # Backend
 cd backend
-go run cmd/server/main.go              # Start server
+go run ./cmd/server                     # Start server (the PACKAGE — naming
+                                        # main.go alone misses every handler)
 # Regenerate pkg/db after editing db/query.sql (sqlc needs WSL on Windows):
 wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/Ziagu/Stackhub_2/backend && ~/bin/sqlc generate"
 
@@ -668,7 +678,8 @@ psql $DB_CONNECTION                     # Connect to database
 ### When Working on Posts
 - Check `backend/pkg/post/post.go` for form structs
 - Check `frontend/lib/queries/use-post-actions.ts` for mutations
-- Review `backend/cmd/server/main.go` for API handlers
+- Review `backend/cmd/server/posts.go`, `post_editing.go` and `post_social.go`
+  for the handlers; `routes.go` maps each URL to one
 
 ### When Working on Authentication
 - Check `backend/pkg/middleware/middleware.go` for auth middleware

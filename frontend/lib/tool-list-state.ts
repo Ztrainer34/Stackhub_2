@@ -4,7 +4,7 @@ import { Tool } from "./tool";
  * How a tool's list membership changes when you act on it.
  *
  * These mirror what the Go handlers do inside a transaction — see `addToStack`,
- * `addToWatchlist` and `addToOldStack` in `backend/cmd/server/main.go`. They
+ * `addToWatchlist` and `addToOldStack` in `backend/cmd/server/stacks.go`. They
  * exist separately so the optimistic update in the UI can show the same result
  * immediately, without waiting for a round trip.
  *

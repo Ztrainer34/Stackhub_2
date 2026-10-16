@@ -11,7 +11,7 @@ import {
 /**
  * A tool sits in at most one of stack / watchlist / old stack, and can
  * separately be followed. These mirror the Go handlers in
- * backend/cmd/server/main.go so the optimistic UI update matches what the
+ * backend/cmd/server/stacks.go so the optimistic UI update matches what the
  * database ends up holding — see the module doc comment for the full
  * rationale. If these and the Go handlers drift, the bug "fixes itself" on
  * refresh, which makes it very hard to catch, so the rules are pinned here

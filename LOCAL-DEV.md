@@ -257,7 +257,7 @@ cd backend
 
 ```bash
 cd backend
-env $(cat .env | xargs) go run cmd/server/main.go
+env $(cat .env | xargs) go run ./cmd/server
 ```
 
 You want to see:
@@ -269,9 +269,13 @@ Starting on http://localhost:8080 ...
 
 **and nothing after it.** If a block of red text follows, see Troubleshooting.
 
-> **Do not run `go run cmd/server/main.go` on its own.** The server does not read
+> **Do not run `go run ./cmd/server` on its own.** The server does not read
 > `.env` by itself — it reads the environment of whatever started it, and exits
 > on the first value it cannot find. The commands above load the file for it.
+>
+> Note the `./cmd/server` — that builds the whole package. Naming a single file
+> (`go run cmd/server/main.go`) compiles only that file, and every handler lives
+> in the other files in that folder, so the build fails.
 
 Leave this terminal running. It prints every request, which is useful when
 something misbehaves.
@@ -409,7 +413,7 @@ npx supabase stop
 npx supabase start                              # terminal 1
 
 cd backend && .\run-local.ps1                   # terminal 2 (Windows)
-cd backend && env $(cat .env | xargs) go run cmd/server/main.go   # terminal 2 (macOS/Linux)
+cd backend && env $(cat .env | xargs) go run ./cmd/server   # terminal 2 (macOS/Linux)
 
 cd frontend && pnpm dev                         # terminal 3
 ```
