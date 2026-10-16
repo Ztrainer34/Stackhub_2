@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"sort"
@@ -218,6 +219,24 @@ func (app *App) saveOnboarding(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Each tool costs two queries inside one transaction, so an uncapped list
+	// let one request hold a pooled connection for ~100k round trips. The
+	// picker offers at most onboardingToolLimit tools; anything past that, and
+	// any duplicate or malformed id, is dropped.
+	toolIDs := make([]uuid.UUID, 0, len(form.ToolIDs))
+	seen := make(map[uuid.UUID]bool, len(form.ToolIDs))
+	for _, raw := range form.ToolIDs {
+		if len(toolIDs) == onboardingToolLimit {
+			break
+		}
+		toolID, parseErr := uuid.Parse(raw)
+		if parseErr != nil || seen[toolID] {
+			continue // ignore malformed ids rather than failing the whole step
+		}
+		seen[toolID] = true
+		toolIDs = append(toolIDs, toolID)
+	}
+
 	tx, err := app.db.Begin(r.Context())
 	if err != nil {
 		log.Println(err)
@@ -237,11 +256,7 @@ func (app *App) saveOnboarding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for _, raw := range form.ToolIDs {
-		toolID, parseErr := uuid.Parse(raw)
-		if parseErr != nil {
-			continue // ignore malformed ids rather than failing the whole step
-		}
+	for _, toolID := range toolIDs {
 		if err := qtx.AddToStack(r.Context(), db.AddToStackParams{
 			ProfileID: userID,
 			ToolID:    toolID,
@@ -294,6 +309,15 @@ func (app *App) completeOnboarding(w http.ResponseWriter, r *http.Request) {
 	// Validate username
 	if req.Username == "" {
 		http.Error(w, "Username is required", http.StatusBadRequest)
+		return
+	}
+	if problem := usernameProblem(req.Username); problem != "" {
+		http.Error(w, problem, http.StatusBadRequest)
+		return
+	}
+	req.DisplayName = strings.TrimSpace(req.DisplayName)
+	if tooLong(req.DisplayName, maxDisplayNameLen) {
+		http.Error(w, fmt.Sprintf("Display name must be at most %d characters", maxDisplayNameLen), http.StatusBadRequest)
 		return
 	}
 

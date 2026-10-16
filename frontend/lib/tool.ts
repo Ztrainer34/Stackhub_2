@@ -1,6 +1,7 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { Vendor } from "./vendor";
 import { fetchApi, fetchApiAuthenticated } from "./api";
+import { apiPath } from "@/lib/api-path";
 
 export type Category = {
   id: number;
@@ -131,7 +132,7 @@ export async function getTool(
   id: string
 ): Promise<Tool> {
 
-  const response = await fetchApiAuthenticated(supabaseClient, `/tool/${id}`);
+  const response = await fetchApiAuthenticated(supabaseClient, apiPath`/tool/${id}`);
 
   if (!response.ok) {
     throw new Error(`Failed to fetch tool: ${response.status}`);
@@ -179,7 +180,7 @@ export async function addToStack(
 ): Promise<void> {
   const response = await fetchApiAuthenticated(
     supabaseClient,
-    `/user/stack/${toolId}`,
+    apiPath`/user/stack/${toolId}`,
     { method: "PUT" }
   );
 
@@ -192,7 +193,7 @@ export async function removeFromStack(
 ): Promise<void> {
   const response = await fetchApiAuthenticated(
     supabaseClient,
-    `/user/stack/${toolId}`,
+    apiPath`/user/stack/${toolId}`,
     { method: "DELETE" }
   );
 
@@ -205,7 +206,7 @@ export async function addToOldStack(
 ): Promise<void> {
   const response = await fetchApiAuthenticated(
     supabaseClient,
-    `/user/old-stack/${toolId}`,
+    apiPath`/user/old-stack/${toolId}`,
     { method: "PUT" }
   );
 
@@ -218,7 +219,7 @@ export async function removeFromOldStack(
 ): Promise<void> {
   const response = await fetchApiAuthenticated(
     supabaseClient,
-    `/user/old-stack/${toolId}`,
+    apiPath`/user/old-stack/${toolId}`,
     { method: "DELETE" }
   );
 
@@ -231,7 +232,7 @@ export async function addToWatchlist(
 ): Promise<void> {
   const response = await fetchApiAuthenticated(
     supabaseClient,
-    `/user/watchlist/${toolId}`,
+    apiPath`/user/watchlist/${toolId}`,
     { method: "PUT" }
   );
 
@@ -244,7 +245,7 @@ export async function removeFromWatchlist(
 ): Promise<void> {
   const response = await fetchApiAuthenticated(
     supabaseClient,
-    `/user/watchlist/${toolId}`,
+    apiPath`/user/watchlist/${toolId}`,
     { method: "DELETE" }
   );
 
@@ -257,7 +258,7 @@ export async function followTool(
 ): Promise<void> {
   const response = await fetchApiAuthenticated(
     supabaseClient,
-    `/user/followed-tools/${toolId}`,
+    apiPath`/user/followed-tools/${toolId}`,
     { method: "PUT" }
   );
 
@@ -270,7 +271,7 @@ export async function unfollowTool(
 ): Promise<void> {
   const response = await fetchApiAuthenticated(
     supabaseClient,
-    `/user/followed-tools/${toolId}`,
+    apiPath`/user/followed-tools/${toolId}`,
     { method: "DELETE" }
   );
 
@@ -379,7 +380,7 @@ export async function updateToolPage(
 ): Promise<Tool> {
   const response = await fetchApiAuthenticated(
     supabaseClient,
-    `/tool/${toolId}/page`,
+    apiPath`/tool/${toolId}/page`,
     {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -406,7 +407,7 @@ export async function uploadToolLogo(
 
   const response = await fetchApiAuthenticated(
     supabaseClient,
-    `/tool/${toolId}/logo`,
+    apiPath`/tool/${toolId}/logo`,
     { method: "POST", body }
   );
 

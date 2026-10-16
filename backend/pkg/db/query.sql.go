@@ -275,6 +275,19 @@ func (q *Queries) CheckUsernameAvailable(ctx context.Context, username string) (
 	return available, err
 }
 
+const countToolsUsingVendor = `-- name: CountToolsUsingVendor :one
+SELECT COUNT(*) FROM tools WHERE vendor_id = $1
+`
+
+// A vendors row can be shared between tools. A page owner may only edit a row
+// no other tool uses; otherwise they would rewrite another tool's vendor card.
+func (q *Queries) CountToolsUsingVendor(ctx context.Context, vendorID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countToolsUsingVendor, vendorID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createCategoryIfNotExist = `-- name: CreateCategoryIfNotExist :one
 INSERT INTO categories (
   name
@@ -299,9 +312,9 @@ SELECT $1, $2, $3, $4, $5, $6, $7
 WHERE NOT EXISTS (
   SELECT 1 FROM notifications
   WHERE recipient_id = $1
-  AND actor_id = $2
+  AND actor_id IS NOT DISTINCT FROM $2
   AND type = $3
-  AND entity_id = $4
+  AND entity_id IS NOT DISTINCT FROM $4
   AND created_at > NOW() - INTERVAL '1 hour'
 )
 `
@@ -316,6 +329,10 @@ type CreateNotificationParams struct {
 	Message     string      `json:"message"`
 }
 
+// At most one notification per (recipient, actor, type, entity) per hour; the
+// caller emails only when a row was inserted. entity_id is NULL for follows
+// and standalone tool suggestions, and `entity_id = $4` is never true for
+// NULL, so the dedup used to pass every time — one email per request.
 func (q *Queries) CreateNotification(ctx context.Context, arg CreateNotificationParams) (int64, error) {
 	result, err := q.db.Exec(ctx, createNotification,
 		arg.RecipientID,
@@ -617,7 +634,7 @@ func (q *Queries) FollowTool(ctx context.Context, arg FollowToolParams) error {
 	return err
 }
 
-const followUser = `-- name: FollowUser :exec
+const followUser = `-- name: FollowUser :execrows
 INSERT INTO user_follows (follower_id, followee_id)
 VALUES ($1, $2)
 ON CONFLICT (follower_id, followee_id) DO NOTHING
@@ -628,9 +645,13 @@ type FollowUserParams struct {
 	FolloweeID uuid.UUID `json:"followee_id"`
 }
 
-func (q *Queries) FollowUser(ctx context.Context, arg FollowUserParams) error {
-	_, err := q.db.Exec(ctx, followUser, arg.FollowerID, arg.FolloweeID)
-	return err
+// Returns 0 when already following, so the caller only notifies on a new follow.
+func (q *Queries) FollowUser(ctx context.Context, arg FollowUserParams) (int64, error) {
+	result, err := q.db.Exec(ctx, followUser, arg.FollowerID, arg.FolloweeID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const getCategoryBySlug = `-- name: GetCategoryBySlug :one
@@ -644,6 +665,19 @@ func (q *Queries) GetCategoryBySlug(ctx context.Context, slug string) (Category,
 	var i Category
 	err := row.Scan(&i.ID, &i.Name, &i.Slug)
 	return i, err
+}
+
+const getEmailHashByUsername = `-- name: GetEmailHashByUsername :one
+SELECT email_hash FROM profiles WHERE username = $1
+`
+
+// Only for the server-side Gravatar proxy. The hash is an unsalted SHA-256 of
+// the email, so it must never be sent to a client.
+func (q *Queries) GetEmailHashByUsername(ctx context.Context, username string) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getEmailHashByUsername, username)
+	var email_hash pgtype.Text
+	err := row.Scan(&email_hash)
+	return email_hash, err
 }
 
 const getFacetCounts = `-- name: GetFacetCounts :one
@@ -750,11 +784,18 @@ func (q *Queries) GetPopularTools(ctx context.Context, pageLimit int32) ([]GetPo
 const getPost = `-- name: GetPost :one
 SELECT id, type, name, slug, description, updated_at, created_at, last_draft_update, last_publish, author_id, is_published, author_username, tools
 FROM posts_with_tools_and_tickets
-WHERE id = $1
+WHERE id = $1 AND (is_published OR author_id = $2)
 `
 
-func (q *Queries) GetPost(ctx context.Context, id uuid.UUID) (PostsWithToolsAndTicket, error) {
-	row := q.db.QueryRow(ctx, getPost, id)
+type GetPostParams struct {
+	ID       uuid.UUID `json:"id"`
+	ViewerID uuid.UUID `json:"viewer_id"`
+}
+
+// Visible to everyone once published; otherwise only to its author. viewer_id
+// is the zero UUID for anonymous callers, which matches no author.
+func (q *Queries) GetPost(ctx context.Context, arg GetPostParams) (PostsWithToolsAndTicket, error) {
+	row := q.db.QueryRow(ctx, getPost, arg.ID, arg.ViewerID)
 	var i PostsWithToolsAndTicket
 	err := row.Scan(
 		&i.ID,
@@ -776,16 +817,24 @@ func (q *Queries) GetPost(ctx context.Context, id uuid.UUID) (PostsWithToolsAndT
 
 const getPostContent = `-- name: GetPostContent :one
 SELECT id, content FROM posts
-WHERE id = $1 LIMIT 1
+WHERE id = $1 AND (is_published OR author_id = $2)
+LIMIT 1
 `
+
+type GetPostContentParams struct {
+	ID       uuid.UUID `json:"id"`
+	ViewerID uuid.UUID `json:"viewer_id"`
+}
 
 type GetPostContentRow struct {
 	ID      uuid.UUID `json:"id"`
 	Content []byte    `json:"content"`
 }
 
-func (q *Queries) GetPostContent(ctx context.Context, id uuid.UUID) (GetPostContentRow, error) {
-	row := q.db.QueryRow(ctx, getPostContent, id)
+// Same rule as GetPost. Unpublishing leaves `content` in place, so without the
+// check an unpublished post's text stayed readable by id.
+func (q *Queries) GetPostContent(ctx context.Context, arg GetPostContentParams) (GetPostContentRow, error) {
+	row := q.db.QueryRow(ctx, getPostContent, arg.ID, arg.ViewerID)
 	var i GetPostContentRow
 	err := row.Scan(&i.ID, &i.Content)
 	return i, err
@@ -841,7 +890,6 @@ SELECT
   location,
   linkedin,
   twitter,
-  email_hash,
   avatar_url,
   created_at,
   updated_at
@@ -861,7 +909,6 @@ type GetProfileRow struct {
 	Location    pgtype.Text        `json:"location"`
 	Linkedin    pgtype.Text        `json:"linkedin"`
 	Twitter     pgtype.Text        `json:"twitter"`
-	EmailHash   pgtype.Text        `json:"email_hash"`
 	AvatarUrl   pgtype.Text        `json:"avatar_url"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
@@ -880,7 +927,6 @@ func (q *Queries) GetProfile(ctx context.Context, id uuid.UUID) (GetProfileRow, 
 		&i.Location,
 		&i.Linkedin,
 		&i.Twitter,
-		&i.EmailHash,
 		&i.AvatarUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -899,7 +945,6 @@ SELECT
   location,
   linkedin,
   twitter,
-  email_hash,
   avatar_url,
   created_at,
   updated_at
@@ -919,7 +964,6 @@ type GetProfileWithUsernameRow struct {
 	Location    pgtype.Text        `json:"location"`
 	Linkedin    pgtype.Text        `json:"linkedin"`
 	Twitter     pgtype.Text        `json:"twitter"`
-	EmailHash   pgtype.Text        `json:"email_hash"`
 	AvatarUrl   pgtype.Text        `json:"avatar_url"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
@@ -938,7 +982,6 @@ func (q *Queries) GetProfileWithUsername(ctx context.Context, username string) (
 		&i.Location,
 		&i.Linkedin,
 		&i.Twitter,
-		&i.EmailHash,
 		&i.AvatarUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -957,7 +1000,6 @@ SELECT
   location,
   linkedin,
   twitter,
-  email_hash,
   avatar_url,
   created_at,
   updated_at,
@@ -986,7 +1028,6 @@ type GetProfileWithUsernameAuthenticatedRow struct {
 	Location    pgtype.Text        `json:"location"`
 	Linkedin    pgtype.Text        `json:"linkedin"`
 	Twitter     pgtype.Text        `json:"twitter"`
-	EmailHash   pgtype.Text        `json:"email_hash"`
 	AvatarUrl   pgtype.Text        `json:"avatar_url"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
@@ -1009,7 +1050,6 @@ func (q *Queries) GetProfileWithUsernameAuthenticated(ctx context.Context, arg G
 		&i.Location,
 		&i.Linkedin,
 		&i.Twitter,
-		&i.EmailHash,
 		&i.AvatarUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -2549,6 +2589,45 @@ func (q *Queries) IsFollowing(ctx context.Context, arg IsFollowingParams) (bool,
 	return is_following, err
 }
 
+const isPostAuthor = `-- name: IsPostAuthor :one
+SELECT EXISTS (
+  SELECT 1 FROM posts
+  WHERE id = $1 AND author_id = $2
+)
+`
+
+type IsPostAuthorParams struct {
+	PostID   uuid.UUID `json:"post_id"`
+	AuthorID uuid.UUID `json:"author_id"`
+}
+
+func (q *Queries) IsPostAuthor(ctx context.Context, arg IsPostAuthorParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isPostAuthor, arg.PostID, arg.AuthorID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const isPostVisible = `-- name: IsPostVisible :one
+SELECT EXISTS (
+  SELECT 1 FROM posts
+  WHERE id = $1 AND (is_published OR author_id = $2)
+)
+`
+
+type IsPostVisibleParams struct {
+	PostID   uuid.UUID `json:"post_id"`
+	ViewerID uuid.UUID `json:"viewer_id"`
+}
+
+// Whether a viewer may see — and so star or comment on — a post.
+func (q *Queries) IsPostVisible(ctx context.Context, arg IsPostVisibleParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isPostVisible, arg.PostID, arg.ViewerID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const isToolOwner = `-- name: IsToolOwner :one
 SELECT EXISTS(
   SELECT 1 FROM tool_owners WHERE tool_id = $1 AND profile_id = $2
@@ -2575,7 +2654,6 @@ SELECT
   p.username,
   p.display_name,
   p.bio,
-  p.email_hash,
   p.avatar_url,
   ($1::bool AND EXISTS(
     SELECT 1 FROM user_follows uf2
@@ -2602,7 +2680,6 @@ type ListFollowersRow struct {
 	Username    string      `json:"username"`
 	DisplayName string      `json:"display_name"`
 	Bio         pgtype.Text `json:"bio"`
-	EmailHash   pgtype.Text `json:"email_hash"`
 	AvatarUrl   pgtype.Text `json:"avatar_url"`
 	IsFollowing pgtype.Bool `json:"is_following"`
 	TotalCount  int64       `json:"total_count"`
@@ -2628,7 +2705,6 @@ func (q *Queries) ListFollowers(ctx context.Context, arg ListFollowersParams) ([
 			&i.Username,
 			&i.DisplayName,
 			&i.Bio,
-			&i.EmailHash,
 			&i.AvatarUrl,
 			&i.IsFollowing,
 			&i.TotalCount,
@@ -2649,7 +2725,6 @@ SELECT
   p.username,
   p.display_name,
   p.bio,
-  p.email_hash,
   p.avatar_url,
   ($1::bool AND EXISTS(
     SELECT 1 FROM user_follows uf2
@@ -2676,7 +2751,6 @@ type ListFollowingRow struct {
 	Username    string      `json:"username"`
 	DisplayName string      `json:"display_name"`
 	Bio         pgtype.Text `json:"bio"`
-	EmailHash   pgtype.Text `json:"email_hash"`
 	AvatarUrl   pgtype.Text `json:"avatar_url"`
 	IsFollowing pgtype.Bool `json:"is_following"`
 	TotalCount  int64       `json:"total_count"`
@@ -2702,7 +2776,6 @@ func (q *Queries) ListFollowing(ctx context.Context, arg ListFollowingParams) ([
 			&i.Username,
 			&i.DisplayName,
 			&i.Bio,
-			&i.EmailHash,
 			&i.AvatarUrl,
 			&i.IsFollowing,
 			&i.TotalCount,
@@ -3781,14 +3854,14 @@ func (q *Queries) PublishPost(ctx context.Context, arg PublishPostParams) error 
 	return err
 }
 
-const rejectToolTicket = `-- name: RejectToolTicket :exec
+const rejectToolTicket = `-- name: RejectToolTicket :execrows
 UPDATE tool_tickets
 SET
   status = 'rejected',
   resolved_by = $2,
   resolved_at = now(),
   updated_at = now()
-WHERE id = $1
+WHERE id = $1 AND status <> 'resolved'
 `
 
 type RejectToolTicketParams struct {
@@ -3796,9 +3869,15 @@ type RejectToolTicketParams struct {
 	ResolvedBy pgtype.UUID `json:"resolved_by"`
 }
 
-func (q *Queries) RejectToolTicket(ctx context.Context, arg RejectToolTicketParams) error {
-	_, err := q.db.Exec(ctx, rejectToolTicket, arg.ID, arg.ResolvedBy)
-	return err
+// "resolved" is final. Without this, rejecting a resolved ticket and resolving
+// it again re-sent the requester's "tool approved" email each cycle, and two
+// concurrent resolves both succeeded. Zero rows means the caller answers 409.
+func (q *Queries) RejectToolTicket(ctx context.Context, arg RejectToolTicketParams) (int64, error) {
+	result, err := q.db.Exec(ctx, rejectToolTicket, arg.ID, arg.ResolvedBy)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const removeAllKeyPlaybooks = `-- name: RemoveAllKeyPlaybooks :exec
@@ -3903,6 +3982,7 @@ history_insert AS (
 UPDATE post_slug_history AS h
 SET current_slug = $4
 WHERE h.post_id = $1 AND h.current_slug != $4
+  AND EXISTS (SELECT 1 FROM post_update)
 `
 
 type RenamePostWithSlugHistoryParams struct {
@@ -3913,6 +3993,8 @@ type RenamePostWithSlugHistoryParams struct {
 	Description string    `json:"description"`
 }
 
+// Scoped to the rename having happened: without the EXISTS, a caller who does
+// not own the post still rewrote its history rows.
 func (q *Queries) RenamePostWithSlugHistory(ctx context.Context, arg RenamePostWithSlugHistoryParams) error {
 	_, err := q.db.Exec(ctx, renamePostWithSlugHistory,
 		arg.PostID,
@@ -3924,7 +4006,7 @@ func (q *Queries) RenamePostWithSlugHistory(ctx context.Context, arg RenamePostW
 	return err
 }
 
-const resolveToolTicketWithExisting = `-- name: ResolveToolTicketWithExisting :exec
+const resolveToolTicketWithExisting = `-- name: ResolveToolTicketWithExisting :execrows
 UPDATE tool_tickets
 SET
   status = 'resolved',
@@ -3932,7 +4014,7 @@ SET
   resolved_by = $3,
   resolved_at = now(),
   updated_at = now()
-WHERE id = $1
+WHERE id = $1 AND status <> 'resolved'
 `
 
 type ResolveToolTicketWithExistingParams struct {
@@ -3941,12 +4023,18 @@ type ResolveToolTicketWithExistingParams struct {
 	ResolvedBy     pgtype.UUID `json:"resolved_by"`
 }
 
-func (q *Queries) ResolveToolTicketWithExisting(ctx context.Context, arg ResolveToolTicketWithExistingParams) error {
-	_, err := q.db.Exec(ctx, resolveToolTicketWithExisting, arg.ID, arg.ResolvedToolID, arg.ResolvedBy)
-	return err
+// "resolved" is final. Without this, rejecting a resolved ticket and resolving
+// it again re-sent the requester's "tool approved" email each cycle, and two
+// concurrent resolves both succeeded. Zero rows means the caller answers 409.
+func (q *Queries) ResolveToolTicketWithExisting(ctx context.Context, arg ResolveToolTicketWithExistingParams) (int64, error) {
+	result, err := q.db.Exec(ctx, resolveToolTicketWithExisting, arg.ID, arg.ResolvedToolID, arg.ResolvedBy)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
-const resolveToolTicketWithNew = `-- name: ResolveToolTicketWithNew :exec
+const resolveToolTicketWithNew = `-- name: ResolveToolTicketWithNew :execrows
 UPDATE tool_tickets
 SET
   status = 'resolved',
@@ -3954,7 +4042,7 @@ SET
   resolved_by = $3,
   resolved_at = now(),
   updated_at = now()
-WHERE id = $1
+WHERE id = $1 AND status <> 'resolved'
 `
 
 type ResolveToolTicketWithNewParams struct {
@@ -3963,9 +4051,15 @@ type ResolveToolTicketWithNewParams struct {
 	ResolvedBy     pgtype.UUID `json:"resolved_by"`
 }
 
-func (q *Queries) ResolveToolTicketWithNew(ctx context.Context, arg ResolveToolTicketWithNewParams) error {
-	_, err := q.db.Exec(ctx, resolveToolTicketWithNew, arg.ID, arg.ResolvedToolID, arg.ResolvedBy)
-	return err
+// "resolved" is final. Without this, rejecting a resolved ticket and resolving
+// it again re-sent the requester's "tool approved" email each cycle, and two
+// concurrent resolves both succeeded. Zero rows means the caller answers 409.
+func (q *Queries) ResolveToolTicketWithNew(ctx context.Context, arg ResolveToolTicketWithNewParams) (int64, error) {
+	result, err := q.db.Exec(ctx, resolveToolTicketWithNew, arg.ID, arg.ResolvedToolID, arg.ResolvedBy)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const saveDraftAndPublishPost = `-- name: SaveDraftAndPublishPost :execrows
@@ -4110,7 +4204,6 @@ SELECT
   p.id,
   p.username,
   p.display_name,
-  p.email_hash,
   p.avatar_url,
   p.created_at,
   p.updated_at,
@@ -4135,7 +4228,6 @@ type SearchProfileRow struct {
 	ID          uuid.UUID          `json:"id"`
 	Username    string             `json:"username"`
 	DisplayName string             `json:"display_name"`
-	EmailHash   pgtype.Text        `json:"email_hash"`
 	AvatarUrl   pgtype.Text        `json:"avatar_url"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
@@ -4156,7 +4248,6 @@ func (q *Queries) SearchProfile(ctx context.Context, arg SearchProfileParams) ([
 			&i.ID,
 			&i.Username,
 			&i.DisplayName,
-			&i.EmailHash,
 			&i.AvatarUrl,
 			&i.CreatedAt,
 			&i.UpdatedAt,

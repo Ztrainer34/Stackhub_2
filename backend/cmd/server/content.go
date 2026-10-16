@@ -6,32 +6,12 @@ import (
 	"strings"
 )
 
-func extractTextFromPost(state map[string]interface{}) string {
-	blocks, ok := state["blocks"].([]interface{})
-	if !ok {
-		return ""
-	}
-
-	var textSlice []string
-
-	for _, block := range blocks {
-		blockMap, ok := block.(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		data, ok := blockMap["data"].(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		text, ok := data["text"].(string)
-		if ok && len(text) > 0 {
-			textSlice = append(textSlice, text)
-		}
-	}
-
-	return strings.Join(textSlice, "\n")
+// isJSONObject reports whether raw is a JSON object — the only shape an editor
+// document can have. A bare string, number or array is valid JSON but not a
+// document, and would be stored and later handed to the renderer.
+func isJSONObject(raw string) bool {
+	var obj map[string]json.RawMessage
+	return json.Unmarshal([]byte(raw), &obj) == nil && obj != nil
 }
 
 // blankLineRun collapses the runs of newlines that flattening a Tiptap document
@@ -41,6 +21,13 @@ var blankLineRun = regexp.MustCompile(`\n{3,}`)
 // tiptapPlainText flattens a Tiptap document to plain text. tools.description
 // feeds full-text search, the embeddings and the catalogue cards, so it is kept
 // as a readable projection of whatever the owner wrote in the rich editor.
+//
+// Posts use it too, for content_text and draft_content_text. Until October 2026
+// they went through an extractor written for Editor.js documents
+// (blocks[].data.text), which found nothing in a Tiptap document — so every
+// post was stored with an empty content_text, and full-text search never saw a
+// post's body. Migration 20261016120000_backfill_post_content_text.sql filled
+// in the existing rows.
 func tiptapPlainText(raw string) string {
 	var doc any
 	if err := json.Unmarshal([]byte(raw), &doc); err != nil {

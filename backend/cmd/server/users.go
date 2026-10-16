@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -62,10 +61,6 @@ func (app *App) updateProfile(w http.ResponseWriter, r *http.Request) {
 		form.Username = &normalized
 
 		username := normalized
-		if len(username) < 3 {
-			http.Error(w, "Username must be at least 3 characters long", http.StatusBadRequest)
-			return
-		}
 
 		// Get current user to check if username is the same
 		currentUser, err := app.queries.GetProfile(r.Context(), userID)
@@ -75,8 +70,16 @@ func (app *App) updateProfile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Only check availability if username is different from current
+		// Only a CHANGED username is validated and checked for availability.
+		// Usernames chosen before the format rule existed stay valid: a user
+		// whose name breaks it can still save the rest of their profile, and
+		// can only change it to a name that follows the rule.
 		if username != currentUser.Username {
+			if problem := usernameProblem(username); problem != "" {
+				http.Error(w, problem, http.StatusBadRequest)
+				return
+			}
+
 			available, err := app.queries.CheckUsernameAvailable(r.Context(), username)
 			if err != nil {
 				log.Println(err)
@@ -205,36 +208,20 @@ func (app *App) uploadAvatar(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := extractUserIDFromRequest(r)
 
-	if err := r.ParseMultipartForm(5 << 20); err != nil { // 5 MB
-		http.Error(w, "Image must be smaller than 5MB", http.StatusBadRequest)
-		return
-	}
-
-	file, fileHeader, err := r.FormFile("image")
-	if err != nil {
-		http.Error(w, "No image supplied", http.StatusBadRequest)
-		return
-	}
-	defer file.Close()
-
-	ok, err := isImage(file)
-	if err != nil {
-		http.Error(w, "Could not read the image", http.StatusBadRequest)
-		return
-	}
+	img, ok := receiveImage(w, r, 5<<20) // 5 MB
 	if !ok {
-		http.Error(w, "That file type isn't supported. Use a PNG, JPEG or GIF.", http.StatusBadRequest)
 		return
 	}
+	defer img.File.Close()
 
-	filename := fmt.Sprintf("avatars/%s%s", uuid.NewString(), filepath.Ext(fileHeader.Filename))
+	filename := fmt.Sprintf("avatars/%s%s", uuid.NewString(), img.Ext)
 
 	uploader := manager.NewUploader(app.bucket)
-	_, err = uploader.Upload(ctx, &s3.PutObjectInput{
+	_, err := uploader.Upload(ctx, &s3.PutObjectInput{
 		Bucket:      app.bucketName,
 		Key:         aws.String(filename),
-		Body:        file,
-		ContentType: aws.String(fileHeader.Header.Get("Content-Type")),
+		Body:        img.File,
+		ContentType: aws.String(img.ContentType),
 	})
 	if err != nil {
 		log.Println(err)
@@ -454,32 +441,38 @@ func (app *App) followUser(w http.ResponseWriter, r *http.Request) {
 		FolloweeID: followeeID,
 	}
 
-	err = qtx.FollowUser(r.Context(), followUserParams)
+	followed, err := qtx.FollowUser(r.Context(), followUserParams)
 	if err != nil {
 		log.Println(err)
 		http.Error(w, "Failed to follow user", http.StatusInternalServerError)
 		return
 	}
 
-	// Create notification (with spam protection built-in)
-	actorName, actorUsername := actorNameAndUsername(qtx, r.Context(), userID)
-	notificationParams := db.CreateNotificationParams{
-		RecipientID: followeeID,
-		ActorID:     ToPgUUID(userID),
-		Type:        "follow",
-		EntityID:    pgtype.UUID{Valid: false},
-		EntityType:  pgtype.Text{Valid: false},
-		Title:       "New follower",
-		Message:     fmt.Sprintf("%s is now following you", actorName),
-	}
-
+	// Notify only on a NEW follow. Repeating the request while already
+	// following used to send the followee an email every time.
 	emailNotify := false
-	rows, nerr := qtx.CreateNotification(r.Context(), notificationParams)
-	if nerr != nil {
-		log.Println(nerr)
-		// Don't fail the follow if notification fails
-	} else if rows > 0 {
-		emailNotify = true
+	actorName, actorUsername := "", ""
+	if followed > 0 {
+		actorName, actorUsername = actorNameAndUsername(qtx, r.Context(), userID)
+		notificationParams := db.CreateNotificationParams{
+			RecipientID: followeeID,
+			ActorID:     ToPgUUID(userID),
+			Type:        "follow",
+			EntityID:    pgtype.UUID{Valid: false},
+			EntityType:  pgtype.Text{Valid: false},
+			Title:       "New follower",
+			Message:     fmt.Sprintf("%s is now following you", actorName),
+		}
+
+		// Deduplicated per hour, so following and unfollowing in a loop still
+		// sends at most one email an hour.
+		rows, nerr := qtx.CreateNotification(r.Context(), notificationParams)
+		if nerr != nil {
+			log.Println(nerr)
+			// Don't fail the follow if notification fails
+		} else if rows > 0 {
+			emailNotify = true
+		}
 	}
 
 	err = tx.Commit(r.Context())
@@ -547,6 +540,10 @@ func (app *App) checkUsernameAvailable(w http.ResponseWriter, r *http.Request) {
 
 	if username == "" {
 		http.Error(w, "Username parameter is required", http.StatusBadRequest)
+		return
+	}
+	if problem := usernameProblem(username); problem != "" {
+		http.Error(w, problem, http.StatusBadRequest)
 		return
 	}
 

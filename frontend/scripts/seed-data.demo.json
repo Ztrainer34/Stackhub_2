@@ -18,8 +18,10 @@
     "take an account over by owning the domain. The claim flow replaces the",
     "address with the client's own, so it only has to exist, not work.",
     "",
-    "Passwords are never usable: the login screen is magic-link only and has no",
-    "password field. seed.mjs requires one, so they are set and ignored.",
+    "No passwords here. seed.mjs gives every account a random one it never",
+    "prints. (These files once carried passwords on the claim that they were",
+    "unusable because the login screen has no password field. That was wrong:",
+    "Supabase accepts a password sign-in with the public anon key regardless.)",
     "",
     "Tools are LOOKUP-ONLY in seed.mjs. All names here were checked against",
     "production and exist. An unmatched name is reported and skipped, not created.",
@@ -29,7 +31,6 @@
   "users": [
     {
       "email": "demo_growth@stackhub.invalid",
-      "password": "ReplacedByClaimFlow1!",
       "username": "demo_growth",
       "display_name": "Demo Account",
       "bio": "Demo profile for walking through StackHub. Claim it and make it yours.",
@@ -51,7 +52,6 @@
     },
     {
       "email": "demo_ops@stackhub.invalid",
-      "password": "ReplacedByClaimFlow2!",
       "username": "demo_ops",
       "display_name": "Demo Account 2",
       "bio": "Second demo profile. Spare, for a second run through the claim flow.",

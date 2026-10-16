@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"html/template"
+	"net/url"
 
 	"github.com/resend/resend-go/v2"
 )
@@ -62,7 +63,10 @@ func nameLink(name, username string) string {
 	)
 }
 
-// ctaButton renders a call-to-action button.
+// ctaButton renders a call-to-action button. href is escaped: it carries
+// user-controlled parts (a username, a post slug), and unescaped, a quote in
+// one closed the attribute and let a user write their own markup — a fake
+// "verify your account" link — into an email sent from StackHub's domain.
 func ctaButton(href, label string, primary bool) string {
 	bg := "#000000"
 	color := "#ffffff"
@@ -73,7 +77,7 @@ func ctaButton(href, label string, primary bool) string {
 	}
 	return fmt.Sprintf(
 		`<a href="%s" style="display:inline-block;background:%s;color:%s;border:1px solid %s;text-decoration:none;font-size:15px;font-weight:600;padding:11px 22px;border-radius:6px;margin:0 8px 8px 0">%s</a>`,
-		href, bg, color, border, template.HTMLEscapeString(label),
+		template.HTMLEscapeString(href), bg, color, border, template.HTMLEscapeString(label),
 	)
 }
 
@@ -84,7 +88,7 @@ func (m *Mailer) SendPlaybookStarred(ctx context.Context, to, actorName, actorUs
 		ctas += ctaButton(playbookURL, "View playbook", true)
 	}
 	if actorUsername != "" {
-		ctas += ctaButton(siteURL+"/"+actorUsername, "View profile", false)
+		ctas += ctaButton(siteURL+"/"+url.PathEscape(actorUsername), "View profile", false)
 	}
 	ctaBlock := ""
 	if ctas != "" {
@@ -135,7 +139,7 @@ func (m *Mailer) SendNewFollower(ctx context.Context, to, actorName, actorUserna
 	ctaBlock := ""
 	if actorUsername != "" {
 		ctaBlock = `<div style="margin:0 0 24px">` +
-			ctaButton(siteURL+"/"+actorUsername, "View profile", true) +
+			ctaButton(siteURL+"/"+url.PathEscape(actorUsername), "View profile", true) +
 			`</div>`
 	}
 

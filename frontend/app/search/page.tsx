@@ -13,6 +13,7 @@ import { ToolLogo } from "@/components/tool-logo";
 import { useEffect, useMemo } from "react";
 import { Tool, toolHref } from "@/lib/tool";
 import { Post } from "@/lib/post";
+import { safeExternalUrl } from "@/lib/safe-url";
 import { SearchableCategory, searchableCategoryValues } from "@/lib/search";
 import Link from "next/link";
 import { ToolActions } from "@/components/tool-actions";
@@ -112,8 +113,12 @@ function ToolCard({ tool }: ToolCardProps) {
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              if (tool.vendor.website) {
-                window.open(tool.vendor.website, '_blank');
+              // window.open is not covered by React's javascript: blocking,
+              // so only an http(s) URL is ever opened. noopener keeps the new
+              // tab from reaching back into this one.
+              const website = safeExternalUrl(tool.vendor.website);
+              if (website) {
+                window.open(website, '_blank', 'noopener,noreferrer');
               }
             }}
           >

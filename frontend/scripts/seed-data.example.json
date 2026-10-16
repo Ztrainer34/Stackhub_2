@@ -2,7 +2,6 @@
   "users": [
     {
       "email": "alice@example.com",
-      "password": "Password123!",
       "username": "alice",
       "display_name": "Alice Martin",
       "bio": "Growth marketer sharing her stack.",

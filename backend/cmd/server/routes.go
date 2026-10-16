@@ -61,18 +61,36 @@ func (app *App) routes(tokenAuth *jwtauth.JWTAuth) http.Handler {
 		MaxAge:           300, // Maximum value not ignored by any of major browsers
 	}))
 
+	// Image uploads. Authenticated exactly like the private routes below, but
+	// the only routes allowed a body bigger than limitJSONBody's cap — and a
+	// body limit can only be tightened, never raised, so they cannot share that
+	// group's middleware. routes.golden pins both chains, so they cannot drift.
+	r.Group(func(r chi.Router) {
+		r.Use(jwtauth.Verifier(tokenAuth))
+		r.Use(shmiddleware.Authenticator(tokenAuth))
+		r.Use(shmiddleware.OnboardingEnforcer())
+		r.Use(limitUploadBody)
+
+		r.Post("/user/avatar", app.uploadAvatar)
+		// Checks tool_owners itself, like updateToolPage.
+		r.Post("/tool/{id}/logo", app.uploadToolLogo)
+		// Both check the caller authored the post.
+		r.Post("/post/{id}/upload_file", app.uploadImage)
+		r.Post("/post/{id}/upload_url", app.uploadImage)
+	})
+
 	// Private routes
 	r.Group(func(r chi.Router) {
 		r.Use(jwtauth.Verifier(tokenAuth))
 		r.Use(shmiddleware.Authenticator(tokenAuth))
 		r.Use(shmiddleware.OnboardingEnforcer())
+		r.Use(limitJSONBody)
 
 		// Authenticated user routes
 		r.Get("/me", app.getAuthenticatedUser)
 		r.Get("/feed", app.getFeed)
 		r.Get("/onboarding/options", app.getOnboardingOptions)
 		r.Post("/onboarding/save", app.saveOnboarding)
-		r.Post("/user/avatar", app.uploadAvatar)
 		r.Delete("/user/avatar", app.removeAvatar)
 		r.Put("/me", app.updateProfile)
 
@@ -89,22 +107,22 @@ func (app *App) routes(tokenAuth *jwtauth.JWTAuth) http.Handler {
 		// Standalone tool suggestion from the /tools "Add tool" flow.
 		r.Post("/tool/suggest", app.suggestTool)
 
-		// Tool page editing. Both handlers check tool_owners themselves, so a
-		// signed-in user who does not own the page gets a 403.
+		// Tool page editing. Checks tool_owners itself, so a signed-in user who
+		// does not own the page gets a 403. (The logo upload is in the upload
+		// group above.)
 		r.Put("/tool/{id}/page", app.updateToolPage)
-		r.Post("/tool/{id}/logo", app.uploadToolLogo)
 		r.Post("/post/{id}/save", app.savePost)
 		r.Post("/post/{id}/publish", app.publishPost)
-		r.Get("/post/{id}/unpublish", app.unpublishPost)
+		// POST, not GET: a state-changing GET runs whenever anything fetches
+		// the URL with the user's token — a server-side render with a crafted
+		// path, a link preview, a prefetch.
+		r.Post("/post/{id}/unpublish", app.unpublishPost)
 		r.Put("/post/{id}/rename", app.renamePost)
 		r.Put("/post/{id}/star", app.starPost)
 		r.Delete("/post/{id}/star", app.unstarPost)
 		r.Post("/post/{id}/comment", app.createPostComment)
-		r.Post("/post/{id}/upload_file", app.uploadImage)
 		r.Get("/post/{slug}/draft", app.getPostDraftContent)
 		r.Delete("/post/{id}", app.deletePost)
-
-		r.Post("/post/{id}/upload_url", app.uploadImage)
 
 		r.Put("/user/stack/{tool_id}", app.addToStack)
 		r.Delete("/user/stack/{tool_id}", app.removeFromStack)
@@ -147,6 +165,7 @@ func (app *App) routes(tokenAuth *jwtauth.JWTAuth) http.Handler {
 	r.Group(func(r chi.Router) {
 		r.Use(jwtauth.Verifier(tokenAuth))
 		r.Use(shmiddleware.OptionalAuthenticator(tokenAuth))
+		r.Use(limitJSONBody)
 
 		r.Get("/tool/{id}", app.getTool)
 
@@ -171,6 +190,7 @@ func (app *App) routes(tokenAuth *jwtauth.JWTAuth) http.Handler {
 
 	// Public routes
 	r.Group(func(r chi.Router) {
+		r.Use(limitJSONBody)
 
 		// Tool routes
 		r.Get("/tools", app.listTools)
@@ -187,6 +207,8 @@ func (app *App) routes(tokenAuth *jwtauth.JWTAuth) http.Handler {
 		r.Get("/user/{slug}/key-playbooks", app.listUserKeyPlaybooks)
 		r.Get("/user/{slug}/followed-tools", app.listUserFollowedTools)
 		r.Get("/user/{slug}/stats", app.getUserStats)
+		// Gravatar, fetched server-side so the email hash never leaves us.
+		r.Get("/user/{slug}/gravatar", app.getGravatar)
 
 		// Public browse listing for /playbooks
 		r.Get("/posts", app.listPublishedPosts)

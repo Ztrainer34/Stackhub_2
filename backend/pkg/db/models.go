@@ -11,6 +11,16 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AccountClaim struct {
+	Token         string             `json:"token"`
+	UserID        uuid.UUID          `json:"user_id"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	ClaimedAt     pgtype.Timestamptz `json:"claimed_at"`
+	ClaimedEmail  pgtype.Text        `json:"claimed_email"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	ClaimantNonce pgtype.Text        `json:"claimant_nonce"`
+}
+
 type AuthUser struct {
 	ID    uuid.UUID   `json:"id"`
 	Email pgtype.Text `json:"email"`

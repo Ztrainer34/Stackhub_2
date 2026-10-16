@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -48,6 +49,30 @@ type SuggestToolRequest struct {
 	Categories  []int  `json:"categories"`
 }
 
+// cleanSuggestedTool checks a tool suggestion and returns its name and website
+// trimmed and normalised. Shared by the standalone "Add tool" flow and the
+// suggestions made while creating a post, which both end up as tool tickets.
+//
+// The website is rendered as a link in the admin ticket list — which any
+// signed-in user can open — so only http(s) gets through.
+func cleanSuggestedTool(name, description, website string) (string, string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", "", errors.New("Tool name is required")
+	}
+	if tooLong(name, maxToolNameLen) {
+		return "", "", fmt.Errorf("Tool name must be at most %d characters", maxToolNameLen)
+	}
+	if tooLong(description, maxToolDescriptionLen) {
+		return "", "", fmt.Errorf("Tool description must be at most %d characters", maxToolDescriptionLen)
+	}
+	website, ok := normalizeWebURL(website)
+	if !ok {
+		return "", "", errors.New("Tool website must be an http or https address")
+	}
+	return name, website, nil
+}
+
 // suggestTool creates a standalone tool suggestion (a tool ticket with no
 // associated playbook) from the /tools "Add tool" flow. Admins resolve it the
 // same way as playbook-originated tickets.
@@ -62,8 +87,9 @@ func (app *App) suggestTool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if strings.TrimSpace(req.Name) == "" {
-		http.Error(w, "Tool name is required", http.StatusBadRequest)
+	name, website, err := cleanSuggestedTool(req.Name, req.Description, req.Website)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -79,9 +105,9 @@ func (app *App) suggestTool(w http.ResponseWriter, r *http.Request) {
 
 	ticketID, err := qtx.CreateStandaloneToolTicket(r.Context(), db.CreateStandaloneToolTicketParams{
 		RequestedBy:     userID,
-		ToolName:        strings.TrimSpace(req.Name),
+		ToolName:        name,
 		ToolDescription: pgtype.Text{String: req.Description, Valid: true},
-		ToolWebsite:     pgtype.Text{String: req.Website, Valid: true},
+		ToolWebsite:     pgtype.Text{String: website, Valid: true},
 	})
 	if err != nil {
 		log.Println(err)
@@ -234,6 +260,12 @@ func (app *App) resolveTicketWithExisting(w http.ResponseWriter, r *http.Request
 		http.Error(w, "Tool ticket not found", http.StatusNotFound)
 		return
 	}
+	if ticket.Status == "resolved" {
+		// Resolving again changed nothing useful but re-sent the "tool
+		// approved" email every time — and /admin has no role check.
+		http.Error(w, "This ticket has already been resolved", http.StatusConflict)
+		return
+	}
 
 	// Resolve the ticket
 	resolveParams := db.ResolveToolTicketWithExistingParams{
@@ -242,10 +274,16 @@ func (app *App) resolveTicketWithExisting(w http.ResponseWriter, r *http.Request
 		ResolvedBy:     ToPgUUID(userID),
 	}
 
-	err = qtx.ResolveToolTicketWithExisting(r.Context(), resolveParams)
+	updated, err := qtx.ResolveToolTicketWithExisting(r.Context(), resolveParams)
 	if err != nil {
 		log.Println(err)
 		http.Error(w, "Could not resolve ticket", http.StatusInternalServerError)
+		return
+	}
+	if updated == 0 {
+		// Already resolved (the query refuses to touch a resolved ticket), or
+		// resolved by a concurrent request since it was read above.
+		http.Error(w, "This ticket has already been resolved", http.StatusConflict)
 		return
 	}
 
@@ -314,6 +352,15 @@ func (app *App) resolveTicketWithNew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The logo is shown on the public tool page, and /admin has no role check,
+	// so this is effectively any signed-in user's input.
+	logoURL, ok := normalizeWebURL(req.LogoURL)
+	if !ok {
+		http.Error(w, "Logo URL must be an http or https address", http.StatusBadRequest)
+		return
+	}
+	req.LogoURL = logoURL
+
 	tx, err := app.db.Begin(r.Context())
 	if err != nil {
 		log.Println(err)
@@ -329,6 +376,12 @@ func (app *App) resolveTicketWithNew(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Println(err)
 		http.Error(w, "Tool ticket not found", http.StatusNotFound)
+		return
+	}
+	if ticket.Status == "resolved" {
+		// Resolving again changed nothing useful but re-sent the "tool
+		// approved" email every time — and /admin has no role check.
+		http.Error(w, "This ticket has already been resolved", http.StatusConflict)
 		return
 	}
 
@@ -374,10 +427,16 @@ func (app *App) resolveTicketWithNew(w http.ResponseWriter, r *http.Request) {
 		ResolvedBy:     pgtype.UUID{Bytes: userID, Valid: true},
 	}
 
-	err = qtx.ResolveToolTicketWithNew(r.Context(), resolveParams)
+	updated, err := qtx.ResolveToolTicketWithNew(r.Context(), resolveParams)
 	if err != nil {
 		log.Println(err)
 		http.Error(w, "Could not resolve ticket", http.StatusInternalServerError)
+		return
+	}
+	if updated == 0 {
+		// Already resolved (the query refuses to touch a resolved ticket), or
+		// resolved by a concurrent request since it was read above.
+		http.Error(w, "This ticket has already been resolved", http.StatusConflict)
 		return
 	}
 
@@ -438,10 +497,16 @@ func (app *App) rejectTicket(w http.ResponseWriter, r *http.Request) {
 		ResolvedBy: pgtype.UUID{Bytes: userID, Valid: true},
 	}
 
-	err = app.queries.RejectToolTicket(r.Context(), params)
+	updated, err := app.queries.RejectToolTicket(r.Context(), params)
 	if err != nil {
 		log.Println(err)
 		http.Error(w, "Could not reject ticket", http.StatusInternalServerError)
+		return
+	}
+	if updated == 0 {
+		// Already resolved (the query refuses to touch a resolved ticket), or
+		// resolved by a concurrent request since it was read above.
+		http.Error(w, "This ticket has already been resolved", http.StatusConflict)
 		return
 	}
 

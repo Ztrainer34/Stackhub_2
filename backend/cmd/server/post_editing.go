@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
-	"path/filepath"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -33,7 +33,30 @@ func (app *App) createPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Println(form)
+	// Same rule as renamePost: an empty name makes an empty slug.
+	form.Name = strings.TrimSpace(form.Name)
+	if form.Name == "" {
+		http.Error(w, "Post name cannot be empty", http.StatusBadRequest)
+		return
+	}
+	if tooLong(form.Name, maxPostNameLen) {
+		http.Error(w, fmt.Sprintf("Post name must be at most %d characters", maxPostNameLen), http.StatusBadRequest)
+		return
+	}
+	if tooLong(form.Description, maxPostDescriptionLen) {
+		http.Error(w, fmt.Sprintf("Goal must be at most %d characters", maxPostDescriptionLen), http.StatusBadRequest)
+		return
+	}
+
+	for i, s := range form.SuggestedTools {
+		name, website, err := cleanSuggestedTool(s.Name, s.Description, s.Website)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		form.SuggestedTools[i].Name = name
+		form.SuggestedTools[i].Website = website
+	}
 
 	if len(form.Tools) == 0 && len(form.SuggestedTools) == 0 {
 		http.Error(w, "Missing tools", http.StatusBadRequest)
@@ -88,13 +111,13 @@ func (app *App) createPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tx, err := app.db.Begin(r.Context())
-	defer tx.Rollback(r.Context())
-
 	if err != nil {
 		log.Println(err)
-		http.Error(w, "", http.StatusInternalServerError)
+		http.Error(w, "Failed to start transaction", http.StatusInternalServerError)
 		return
 	}
+	// After the error check: on a failed Begin, tx is nil and Rollback panics.
+	defer tx.Rollback(r.Context())
 
 	qtx := app.queries.WithTx(tx)
 
@@ -179,7 +202,13 @@ func (app *App) createPost(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	tx.Commit(r.Context())
+	// Unchecked, a failed commit still answered 200 with a post that was never
+	// saved, and the client redirected to an edit page that 404'd.
+	if err := tx.Commit(r.Context()); err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to create post", http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -208,10 +237,7 @@ func (app *App) savePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var contentJson map[string]interface{}
-	err = json.Unmarshal([]byte(form.Content), &contentJson)
-	if err != nil {
-		log.Println(err)
+	if !isJSONObject(form.Content) {
 		http.Error(w, "Invalid encoding for post content", http.StatusBadRequest)
 		return
 	}
@@ -219,7 +245,7 @@ func (app *App) savePost(w http.ResponseWriter, r *http.Request) {
 	savePostParams := db.SavePostDraftParams{
 		ID:               id,
 		DraftContent:     []byte(form.Content),
-		DraftContentText: pgtype.Text{Valid: true, String: extractTextFromPost(contentJson)},
+		DraftContentText: pgtype.Text{Valid: true, String: tiptapPlainText(form.Content)},
 		AuthorID:         userID,
 	}
 
@@ -259,13 +285,18 @@ func (app *App) publishPost(w http.ResponseWriter, r *http.Request) {
 	// Decode the editor content sent with the publish request. Without this the
 	// content stays nil and we fall through to PublishPost, which copies the
 	// (possibly stale/empty) draft_content into content — wiping the post.
-	decodeErr := json.NewDecoder(r.Body).Decode(&form)
+	//
+	// An empty body (io.EOF) is the "publish the saved draft" form some callers
+	// use. Any other decode failure is a 400: falling through to the draft
+	// branch would publish stale content after an error the client never sees.
+	if err := json.NewDecoder(r.Body).Decode(&form); err != nil && !errors.Is(err, io.EOF) {
+		log.Println(err)
+		http.Error(w, "Malformed request body", http.StatusBadRequest)
+		return
+	}
 
-	if form.Content != nil && decodeErr == nil {
-		var contentJson map[string]interface{}
-		err = json.Unmarshal([]byte(*form.Content), &contentJson)
-		if err != nil {
-			log.Println(err)
+	if form.Content != nil {
+		if !isJSONObject(*form.Content) {
 			http.Error(w, "Invalid encoding for post content", http.StatusBadRequest)
 			return
 		}
@@ -274,7 +305,7 @@ func (app *App) publishPost(w http.ResponseWriter, r *http.Request) {
 			ID:               id,
 			AuthorID:         userID,
 			DraftContent:     []byte(*form.Content),
-			DraftContentText: pgtype.Text{Valid: true, String: extractTextFromPost(contentJson)},
+			DraftContentText: pgtype.Text{Valid: true, String: tiptapPlainText(*form.Content)},
 		}
 
 		rowsAffected, err := app.queries.SaveDraftAndPublishPost(r.Context(), saveAndPublishParams)
@@ -331,6 +362,27 @@ func (app *App) renamePost(w http.ResponseWriter, r *http.Request) {
 	// Validate input
 	if strings.TrimSpace(form.Name) == "" {
 		http.Error(w, "Post name cannot be empty", http.StatusBadRequest)
+		return
+	}
+	if tooLong(form.Name, maxPostNameLen) {
+		http.Error(w, fmt.Sprintf("Post name must be at most %d characters", maxPostNameLen), http.StatusBadRequest)
+		return
+	}
+	if tooLong(form.Description, maxPostDescriptionLen) {
+		http.Error(w, fmt.Sprintf("Goal must be at most %d characters", maxPostDescriptionLen), http.StatusBadRequest)
+		return
+	}
+
+	// The rename query scopes its writes by author, but on someone else's post
+	// it still answered 200 with a new_slug. Refuse it up front instead.
+	isAuthor, err := app.queries.IsPostAuthor(r.Context(), db.IsPostAuthorParams{PostID: id, AuthorID: userID})
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to rename post", http.StatusInternalServerError)
+		return
+	}
+	if !isAuthor {
+		http.Error(w, "Post not found", http.StatusNotFound)
 		return
 	}
 
@@ -490,33 +542,30 @@ func (app *App) uploadImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = r.ParseMultipartForm(10 << 20) // 10 MB
+	// Checked before reading the body, so a stranger's upload is refused
+	// before a byte of it reaches the bucket.
+	isAuthor, err := app.queries.IsPostAuthor(ctx, db.IsPostAuthorParams{
+		PostID:   id,
+		AuthorID: extractUserIDFromRequest(r),
+	})
 	if err != nil {
-		http.Error(w, "Could not parse multipart form", http.StatusBadRequest)
+		log.Println(err)
+		http.Error(w, "Could not check post ownership", http.StatusInternalServerError)
+		return
+	}
+	if !isAuthor {
+		http.Error(w, "You can only add images to your own posts", http.StatusForbidden)
 		return
 	}
 
-	file, fileHeader, err := r.FormFile("image")
-	if err != nil {
-		http.Error(w, "Could not get uploaded file", http.StatusBadRequest)
-		return
-	}
-	defer file.Close()
-
-	ok, err := isImage(file)
-
+	img, ok := receiveImage(w, r, 10<<20) // 10 MB
 	if !ok {
-		http.Error(w, "Unsupported file type", http.StatusBadRequest)
 		return
 	}
-
-	if err != nil {
-		http.Error(w, "Could not read multipart form", http.StatusBadRequest)
-		return
-	}
+	defer img.File.Close()
 
 	// Create a unique filename
-	filename := fmt.Sprintf("%s%s", uuid.NewString(), filepath.Ext(fileHeader.Filename))
+	filename := fmt.Sprintf("%s%s", uuid.NewString(), img.Ext)
 
 	uploader := manager.NewUploader(app.bucket)
 
@@ -524,8 +573,8 @@ func (app *App) uploadImage(w http.ResponseWriter, r *http.Request) {
 	_, err = uploader.Upload(ctx, &s3.PutObjectInput{
 		Bucket:      app.bucketName,
 		Key:         aws.String(filename),
-		Body:        file,
-		ContentType: aws.String(fileHeader.Header.Get("Content-Type")),
+		Body:        img.File,
+		ContentType: aws.String(img.ContentType),
 	})
 	if err != nil {
 		log.Println(err)
@@ -536,7 +585,7 @@ func (app *App) uploadImage(w http.ResponseWriter, r *http.Request) {
 	createMediaParams := db.CreatePostMediaParams{
 		PostID:   id,
 		S3Key:    filename,
-		FileName: fileHeader.Filename,
+		FileName: img.Name,
 	}
 
 	err = app.queries.CreatePostMedia(ctx, createMediaParams)

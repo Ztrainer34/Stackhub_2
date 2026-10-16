@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"path/filepath"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -86,6 +85,31 @@ func (app *App) updateToolPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// These three are rendered as a link or an image source on the public
+	// page, so they must be http(s). x_profile is a handle the page turns into
+	// a twitter.com URL itself, so it is free text.
+	if form.LogoURL != nil {
+		logo, ok := normalizeWebURL(*form.LogoURL)
+		if !ok {
+			http.Error(w, "Logo URL must be an http or https address", http.StatusBadRequest)
+			return
+		}
+		form.LogoURL = &logo
+	}
+	if form.Vendor != nil {
+		website, ok := normalizeWebURL(form.Vendor.Website)
+		if !ok {
+			http.Error(w, "Website must be an http or https address", http.StatusBadRequest)
+			return
+		}
+		linkedin, ok := normalizeWebURL(form.Vendor.LinkedinProfile)
+		if !ok {
+			http.Error(w, "LinkedIn profile must be an http or https address", http.StatusBadRequest)
+			return
+		}
+		form.Vendor.Website, form.Vendor.LinkedinProfile = website, linkedin
+	}
+
 	tx, err := app.db.Begin(r.Context())
 	if err != nil {
 		log.Println(err)
@@ -122,8 +146,23 @@ func (app *App) updateToolPage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		var vid uuid.UUID
+		// A vendors row can be shared between tools. Editing a shared row would
+		// rewrite another tool's public vendor card, which this owner does not
+		// own — so a shared row is left alone and this tool gets its own. The
+		// card is always sent whole, so nothing is lost by starting fresh.
+		shared := false
 		if vendorID.Valid {
+			users, err := qtx.CountToolsUsingVendor(r.Context(), vendorID)
+			if err != nil {
+				log.Println(err)
+				http.Error(w, "Failed to save the vendor details", http.StatusInternalServerError)
+				return
+			}
+			shared = users > 1
+		}
+
+		var vid uuid.UUID
+		if vendorID.Valid && !shared {
 			vid = uuid.UUID(vendorID.Bytes)
 		} else {
 			vid, err = qtx.CreateVendorForTool(r.Context(), toolID)
@@ -213,36 +252,20 @@ func (app *App) uploadToolLogo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := r.ParseMultipartForm(5 << 20); err != nil { // 5 MB
-		http.Error(w, "Image must be smaller than 5MB", http.StatusBadRequest)
-		return
-	}
-
-	file, fileHeader, err := r.FormFile("image")
-	if err != nil {
-		http.Error(w, "No image supplied", http.StatusBadRequest)
-		return
-	}
-	defer file.Close()
-
-	ok, err = isImage(file)
-	if err != nil {
-		http.Error(w, "Could not read the image", http.StatusBadRequest)
-		return
-	}
+	img, ok := receiveImage(w, r, 5<<20) // 5 MB
 	if !ok {
-		http.Error(w, "That file type isn't supported. Use a PNG, JPEG or GIF.", http.StatusBadRequest)
 		return
 	}
+	defer img.File.Close()
 
-	filename := fmt.Sprintf("tool-logos/%s%s", uuid.NewString(), filepath.Ext(fileHeader.Filename))
+	filename := fmt.Sprintf("tool-logos/%s%s", uuid.NewString(), img.Ext)
 
 	uploader := manager.NewUploader(app.bucket)
-	_, err = uploader.Upload(ctx, &s3.PutObjectInput{
+	_, err := uploader.Upload(ctx, &s3.PutObjectInput{
 		Bucket:      app.bucketName,
 		Key:         aws.String(filename),
-		Body:        file,
-		ContentType: aws.String(fileHeader.Header.Get("Content-Type")),
+		Body:        img.File,
+		ContentType: aws.String(img.ContentType),
 	})
 	if err != nil {
 		log.Println(err)

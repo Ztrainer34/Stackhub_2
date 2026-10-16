@@ -41,7 +41,12 @@ func (app *App) getPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := app.queries.GetPost(r.Context(), id)
+	// Unpublished posts are visible only to their author; everyone else gets the
+	// same 404 as for a post that does not exist.
+	res, err := app.queries.GetPost(r.Context(), db.GetPostParams{
+		ID:       id,
+		ViewerID: extractUserIDFromRequestIfPresent(r),
+	})
 
 	if err != nil {
 		log.Println(err)
@@ -65,7 +70,10 @@ func (app *App) getPostContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := app.queries.GetPostContent(r.Context(), id)
+	res, err := app.queries.GetPostContent(r.Context(), db.GetPostContentParams{
+		ID:       id,
+		ViewerID: extractUserIDFromRequestIfPresent(r),
+	})
 
 	if err != nil {
 		log.Println(err)

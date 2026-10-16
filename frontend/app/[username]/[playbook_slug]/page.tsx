@@ -1,5 +1,3 @@
-"use server";
-
 import VisitorActions from "./VisitorActions";
 import Link from "next/link";
 import { getPostWithRedirectInfo, getPostContent, getPostDraftContent } from "@/lib/post";

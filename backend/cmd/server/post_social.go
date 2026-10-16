@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"stackhub.com/stackhub/pkg/db"
 	"stackhub.com/stackhub/pkg/post"
 )
@@ -39,6 +41,19 @@ func (app *App) starPost(w http.ResponseWriter, r *http.Request) {
 
 	qtx := app.queries.WithTx(tx)
 
+	// Looked up before starring, with the caller as viewer: a post they cannot
+	// see — someone else's draft — is a 404, not a star and an email to its
+	// author.
+	post, err := qtx.GetPost(r.Context(), db.GetPostParams{ID: id, ViewerID: userID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		http.Error(w, "Post not found", http.StatusNotFound)
+		return
+	} else if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to star post", http.StatusInternalServerError)
+		return
+	}
+
 	starPostParams := db.StarPostParams{
 		PostID:  id,
 		LikerID: userID,
@@ -51,7 +66,6 @@ func (app *App) starPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get post info for notification
 	var (
 		emailNotify   bool
 		recipientID   uuid.UUID
@@ -60,11 +74,7 @@ func (app *App) starPost(w http.ResponseWriter, r *http.Request) {
 		playbookName  string
 		playbookURL   string
 	)
-	post, err := qtx.GetPost(r.Context(), id)
-	if err != nil {
-		log.Println(err)
-		// Continue even if we can't get post info
-	} else if post.AuthorID != userID { // Don't notify if starring own post
+	if post.AuthorID != userID { // Don't notify if starring own post
 		actorName, actorUsername = actorNameAndUsername(qtx, r.Context(), userID)
 
 		// Create notification (with spam protection built-in)
@@ -166,6 +176,15 @@ func (app *App) createPostComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if strings.TrimSpace(args.Content) == "" {
+		http.Error(w, "Comment cannot be empty", http.StatusBadRequest)
+		return
+	}
+	if tooLong(args.Content, maxCommentLen) {
+		http.Error(w, fmt.Sprintf("Comment must be at most %d characters", maxCommentLen), http.StatusBadRequest)
+		return
+	}
+
 	// Use transaction for comment + notification
 	tx, err := app.db.Begin(r.Context())
 	if err != nil {
@@ -176,6 +195,17 @@ func (app *App) createPostComment(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback(r.Context())
 
 	qtx := app.queries.WithTx(tx)
+
+	// Same rule as starPost: no commenting on a post the caller cannot see.
+	post, err := qtx.GetPost(r.Context(), db.GetPostParams{ID: postID, ViewerID: userID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		http.Error(w, "Post not found", http.StatusNotFound)
+		return
+	} else if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to create comment", http.StatusInternalServerError)
+		return
+	}
 
 	createPostCommentParams := db.CreatePostCommentParams{
 		PostID:      postID,
@@ -190,12 +220,7 @@ func (app *App) createPostComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get post info for notification
-	post, err := qtx.GetPost(r.Context(), postID)
-	if err != nil {
-		log.Println(err)
-		// Continue even if we can't get post info
-	} else if post.AuthorID != userID { // Don't notify if commenting on own post
+	if post.AuthorID != userID { // Don't notify if commenting on own post
 		// Create notification (with spam protection built-in)
 		entityType := "post"
 		notificationParams := db.CreateNotificationParams{

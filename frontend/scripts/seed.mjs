@@ -1,5 +1,5 @@
 /**
- * Seed script: creates predefined users (email + password), tools and playbooks
+ * Seed script: creates predefined users (email; random, never-shown password), tools and playbooks
  * from a JSON file. See scripts/seed-data.example.json for the format.
  *
  * Users are created through the Supabase Admin API (they need a real auth.users
@@ -76,12 +76,15 @@ async function findUserIdByEmail(email) {
 async function main() {
   const usernameToId = {};
   const emailToId = {};
-  const generatedCreds = [];
 
   // 1) Users + profiles
   for (const u of users) {
-    const password = u.password || genPassword();
-    if (!u.password) generatedCreds.push({ email: u.email, password });
+    // Always random and never shown. Nobody signs in with a password — the
+    // app is magic-link and Google only, and seeded accounts are handed over
+    // through the claim flow — but Supabase's password grant is reachable with
+    // the public anon key, so a password anyone knows is a way in. Passwords
+    // used to come from the seed files, which are committed to a public repo.
+    const password = genPassword();
 
     let userId;
     const { data, error } = await supabase.auth.admin.createUser({
@@ -235,11 +238,6 @@ async function main() {
         .from("post_tools")
         .upsert({ post_id: post.id, tool_id: toolId }, { onConflict: "post_id,tool_id" });
     }
-  }
-
-  if (generatedCreds.length > 0) {
-    console.log("\nGenerated passwords (share securely):");
-    for (const c of generatedCreds) console.log(`  ${c.email}  →  ${c.password}`);
   }
 
   console.log("\nDone.");
