@@ -232,7 +232,7 @@ function ToolSection({
               // for several at once is discoverable without cluttering the
               // placeholder.
               title={
-                'Search for several things at once — anything matching any ' +
+                'Search for several things at once. Anything matching any ' +
                 'of them is shown:\n' +
                 '  adobe|content\n' +
                 '  adobe content\n' +

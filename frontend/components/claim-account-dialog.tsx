@@ -132,7 +132,7 @@ export function ClaimAccountDialog({ username }: { username: string }) {
               <br />
               Not in spam?{" "}
               {resent ? (
-                <span className="text-foreground">Sent again — give it a minute.</span>
+                <span className="text-foreground">Sent again. Give it a minute.</span>
               ) : (
                 <button
                   type="button"

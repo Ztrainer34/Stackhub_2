@@ -101,7 +101,7 @@ export function ToolPageCategories({ tool }: { tool: Tool }) {
           ) : (
             <p className="text-sm text-muted-foreground">
               {current.is_owner
-                ? "No categories yet — use the pencil to pick some."
+                ? "No categories yet. Use the pencil to pick some."
                 : "Not categorised yet."}
             </p>
           )}

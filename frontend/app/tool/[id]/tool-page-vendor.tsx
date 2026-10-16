@@ -153,7 +153,7 @@ export function ToolPageVendor({ tool }: { tool: Tool }) {
           {isEmpty && (
             <p className="text-sm text-muted-foreground">
               {current.is_owner
-                ? "Nothing here yet — use the pencil to add your company details."
+                ? "Nothing here yet. Use the pencil to add your company details."
                 : "No vendor details yet."}
             </p>
           )}
