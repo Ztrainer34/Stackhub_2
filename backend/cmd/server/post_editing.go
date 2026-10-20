@@ -14,8 +14,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/go-chi/chi"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"stackhub.com/stackhub/pkg/db"
 	"stackhub.com/stackhub/pkg/post"
@@ -33,186 +31,15 @@ func (app *App) createPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Same rule as renamePost: an empty name makes an empty slug.
-	form.Name = strings.TrimSpace(form.Name)
-	if form.Name == "" {
-		http.Error(w, "Post name cannot be empty", http.StatusBadRequest)
-		return
-	}
-	if tooLong(form.Name, maxPostNameLen) {
-		http.Error(w, fmt.Sprintf("Post name must be at most %d characters", maxPostNameLen), http.StatusBadRequest)
-		return
-	}
-	if tooLong(form.Description, maxPostDescriptionLen) {
-		http.Error(w, fmt.Sprintf("Goal must be at most %d characters", maxPostDescriptionLen), http.StatusBadRequest)
-		return
-	}
-
-	for i, s := range form.SuggestedTools {
-		name, website, err := cleanSuggestedTool(s.Name, s.Description, s.Website)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		form.SuggestedTools[i].Name = name
-		form.SuggestedTools[i].Website = website
-	}
-
-	if len(form.Tools) == 0 && len(form.SuggestedTools) == 0 {
-		http.Error(w, "Missing tools", http.StatusBadRequest)
-		return
-	}
-
-	totalTools := len(form.Tools) + len(form.SuggestedTools)
-
-	switch form.Type {
-	case "playbook":
-		// One or more. A playbook used to mean exactly one tool and a "combo"
-		// meant several; combos were folded into playbooks because the split
-		// made authors categorise their writing before they had written it.
-		if totalTools > maxPostTools {
-			http.Error(w, fmt.Sprintf("Too many tools (maximum %d)", maxPostTools), http.StatusBadRequest)
-			return
-		}
-	case "comparison":
-		// A comparison of one thing is not a comparison.
-		if totalTools < 2 {
-			http.Error(w, "Comparisons require at least two tools or tool suggestions", http.StatusBadRequest)
-			return
-		}
-		if totalTools > maxPostTools {
-			http.Error(w, fmt.Sprintf("Too many tools (maximum %d)", maxPostTools), http.StatusBadRequest)
-			return
-		}
-	default:
-		http.Error(w, "Unknown post type", http.StatusBadRequest)
-		return
-	}
-
-	// Optional, so an empty string is "not answered" and stores NULL. Anything
-	// else must be one of the three levels; rejecting it here turns a CHECK
-	// constraint violation into a 400 that names the field.
-	experienceLevel := pgtype.Text{}
-	if trimmed := strings.TrimSpace(strings.ToLower(form.ExperienceLevel)); trimmed != "" {
-		if !post.ValidExperienceLevels[trimmed] {
-			http.Error(w, "Unknown experience level", http.StatusBadRequest)
-			return
-		}
-		experienceLevel = pgtype.Text{String: trimmed, Valid: true}
-	}
-
-	createPostParams := db.CreatePostParams{
-		AuthorID:        userID,
-		Type:            form.Type,
-		Name:            form.Name,
-		Slug:            post.NameToSlug(form.Name),
-		Description:     form.Description,
-		ExperienceLevel: experienceLevel,
-	}
-
-	tx, err := app.db.Begin(r.Context())
+	created, err := postService{db: app.db}.create(r.Context(), userID, form)
 	if err != nil {
-		log.Println(err)
-		http.Error(w, "Failed to start transaction", http.StatusInternalServerError)
-		return
-	}
-	// After the error check: on a failed Begin, tx is nil and Rollback panics.
-	defer tx.Rollback(r.Context())
-
-	qtx := app.queries.WithTx(tx)
-
-	post, err := qtx.CreatePost(r.Context(), createPostParams)
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		log.Println(err)
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	} else if err != nil {
-		// Check for unique constraint violation on author_id, slug
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" && strings.Contains(pgErr.ConstraintName, "posts_author_slug") {
-			http.Error(w, "You already have a post with this slug. Please choose a different title.", http.StatusConflict)
-			return
-		}
-		log.Println(err)
-		http.Error(w, "Failed to create post", http.StatusBadRequest)
-		return
-	}
-
-	// Handle regular tools
-	if len(form.Tools) > 0 {
-		var toolLinks []db.AddPostToolsParams
-		for _, toolID := range form.Tools {
-			link := db.AddPostToolsParams{
-				PostID: post.ID,
-				ToolID: toolID,
-			}
-			toolLinks = append(toolLinks, link)
-		}
-
-		_, err = qtx.AddPostTools(r.Context(), toolLinks)
-		if err != nil {
-			log.Println(err)
-			http.Error(w, "Failed to create post", http.StatusBadRequest)
-			return
-		}
-	}
-
-	// Handle suggested tools
-	if len(form.SuggestedTools) > 0 {
-		// var suggestedToolLinks []db
-
-		for _, suggestedTool := range form.SuggestedTools {
-			// Create the suggested tool
-			toolTicketParams := db.CreateToolTicketParams{
-				// Nullable since tickets can be filed without a post (the
-				// standalone-ticket migration); here a post always exists.
-				PostID:          pgtype.UUID{Bytes: post.ID, Valid: true},
-				RequestedBy:     userID,
-				ToolName:        suggestedTool.Name,
-				ToolDescription: pgtype.Text{String: suggestedTool.Description, Valid: true},
-				ToolWebsite:     pgtype.Text{String: suggestedTool.Website, Valid: true},
-			}
-
-			toolTicketID, err := qtx.CreateToolTicket(r.Context(), toolTicketParams)
-			if err != nil {
-				log.Println(err)
-				http.Error(w, "Failed to create suggested tool", http.StatusBadRequest)
-				return
-			}
-
-			// Add categories for the suggested tool
-			if len(suggestedTool.Categories) > 0 {
-				var categoryLinks []db.AddToolTicketCategoriesParams
-				for _, categoryID := range suggestedTool.Categories {
-					link := db.AddToolTicketCategoriesParams{
-						TicketID:   toolTicketID,
-						CategoryID: int32(categoryID),
-					}
-					categoryLinks = append(categoryLinks, link)
-				}
-
-				_, err = qtx.AddToolTicketCategories(r.Context(), categoryLinks)
-				if err != nil {
-					log.Println(err)
-					http.Error(w, "Failed to add suggested tool categories", http.StatusBadRequest)
-					return
-				}
-			}
-		}
-	}
-
-	// Unchecked, a failed commit still answered 200 with a post that was never
-	// saved, and the client redirected to an edit page that 404'd.
-	if err := tx.Commit(r.Context()); err != nil {
-		log.Println(err)
-		http.Error(w, "Failed to create post", http.StatusInternalServerError)
+		writeServiceError(w, err)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(post)
+	json.NewEncoder(w).Encode(created)
 }
 
 func (app *App) savePost(w http.ResponseWriter, r *http.Request) {
@@ -399,10 +226,8 @@ func (app *App) renamePost(w http.ResponseWriter, r *http.Request) {
 
 	err = app.queries.RenamePostWithSlugHistory(r.Context(), renameParams)
 	if err != nil {
-		// Check for unique constraint violation on author_id, slug
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" && strings.Contains(pgErr.ConstraintName, "posts_author_slug") {
-			http.Error(w, "You already have a post with this slug. Please choose a different title.", http.StatusConflict)
+		if isPostSlugConflict(err) {
+			http.Error(w, postSlugTakenMsg, http.StatusConflict)
 			return
 		}
 		log.Println(err)
@@ -518,11 +343,6 @@ func (app *App) deletePost(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 }
-
-// maxPostTools caps how many tools one post may reference. It replaced a
-// per-type limit that lived inline in createPost, where the "combo" branch
-// carried a FIXME asking for exactly this.
-const maxPostTools = 10
 
 type UploadImageResponse struct {
 	Success int             `json:"success"`

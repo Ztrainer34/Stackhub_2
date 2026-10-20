@@ -30,96 +30,23 @@ func (app *App) starPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Use transaction for star + notification
-	tx, err := app.db.Begin(r.Context())
+	email, err := postService{db: app.db}.star(r.Context(), userID, id)
 	if err != nil {
-		log.Println(err)
-		http.Error(w, "Failed to start transaction", http.StatusInternalServerError)
-		return
-	}
-	defer tx.Rollback(r.Context())
-
-	qtx := app.queries.WithTx(tx)
-
-	// Looked up before starring, with the caller as viewer: a post they cannot
-	// see — someone else's draft — is a 404, not a star and an email to its
-	// author.
-	post, err := qtx.GetPost(r.Context(), db.GetPostParams{ID: id, ViewerID: userID})
-	if errors.Is(err, pgx.ErrNoRows) {
-		http.Error(w, "Post not found", http.StatusNotFound)
-		return
-	} else if err != nil {
-		log.Println(err)
-		http.Error(w, "Failed to star post", http.StatusInternalServerError)
+		writeServiceError(w, err)
 		return
 	}
 
-	starPostParams := db.StarPostParams{
-		PostID:  id,
-		LikerID: userID,
-	}
-
-	err = qtx.StarPost(r.Context(), starPostParams)
-	if err != nil {
-		log.Println(err)
-		http.Error(w, "Bad request", http.StatusBadRequest)
-		return
-	}
-
-	var (
-		emailNotify   bool
-		recipientID   uuid.UUID
-		actorName     string
-		actorUsername string
-		playbookName  string
-		playbookURL   string
-	)
-	if post.AuthorID != userID { // Don't notify if starring own post
-		actorName, actorUsername = actorNameAndUsername(qtx, r.Context(), userID)
-
-		// Create notification (with spam protection built-in)
-		entityType := "post"
-		notificationParams := db.CreateNotificationParams{
-			RecipientID: post.AuthorID,
-			ActorID:     ToPgUUID(userID),
-			Type:        "post_star",
-			EntityID:    ToPgUUID(id),
-			EntityType:  ToPgText(&entityType),
-			Title:       "New star",
-			Message:     fmt.Sprintf("%s starred “%s”", actorName, post.Name),
-		}
-
-		rows, nerr := qtx.CreateNotification(r.Context(), notificationParams)
-		if nerr != nil {
-			log.Println(nerr)
-			// Don't fail the star if notification fails
-		} else if rows > 0 {
-			// New notification (not deduped) → also send the email.
-			emailNotify = true
-			recipientID = post.AuthorID
-			playbookName = post.Name
-			playbookURL = fmt.Sprintf("%s/%s/%s", siteURL, post.AuthorUsername, post.Slug)
-		}
-	}
-
-	err = tx.Commit(r.Context())
-	if err != nil {
-		log.Println(err)
-		http.Error(w, "Failed to commit transaction", http.StatusInternalServerError)
-		return
-	}
-
-	if emailNotify && app.mailer != nil {
-		go func(rid uuid.UUID, actor, username, playbook, playbookLink string) {
-			email, eerr := app.queries.GetUserEmail(context.Background(), rid)
-			if eerr != nil || email == "" {
+	if email != nil && app.mailer != nil {
+		go func(e starEmail) {
+			address, eerr := app.queries.GetUserEmail(context.Background(), e.recipientID)
+			if eerr != nil || address == "" {
 				log.Println("star email: could not resolve recipient email:", eerr)
 				return
 			}
-			if err := app.mailer.SendPlaybookStarred(context.Background(), email, actor, username, playbook, playbookLink); err != nil {
+			if err := app.mailer.SendPlaybookStarred(context.Background(), address, e.actorName, e.actorUsername, e.postName, e.postURL); err != nil {
 				log.Println("star email:", err)
 			}
-		}(recipientID, actorName, actorUsername, playbookName, playbookURL)
+		}(*email)
 	}
 
 	w.WriteHeader(http.StatusOK)

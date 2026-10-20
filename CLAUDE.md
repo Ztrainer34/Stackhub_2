@@ -48,6 +48,9 @@ stackhub/
 │   │   ├── post_social.go          #   stars, comments
 │   │   ├── users.go tools.go tool_page.go tickets.go stacks.go
 │   │   ├── onboarding.go notifications.go feed.go search.go categories.go
+│   │   ├── post_service.go ticket_service.go    # business rules for the
+│   │   ├── tool_service.go search_service.go    #   five fat handlers
+│   │   ├── service_errors.go       # serviceError → exact status + text
 │   │   ├── auth.go pgconv.go httpcache.go content.go storage.go  # helpers
 │   │   └── testdata/routes.golden  # pinned route table (see routes_test.go)
 │   ├── pkg/
@@ -112,6 +115,28 @@ func (app *App) handlerName(w http.ResponseWriter, r *http.Request) {
     json.NewEncoder(w).Encode(result)
 }
 ```
+
+#### 1b. Services — only where there is real logic
+Most handlers stay parse → query → encode. The few with real rules — creating a
+post, starring, resolving/rejecting tool tickets, editing a tool page, search —
+keep them in a `*_service.go` file instead:
+
+- The handler reads the request (auth, URL params, JSON) and writes the
+  response. The service validates, runs the transaction and decides side
+  effects (e.g. `star` returns the email to send, or nil).
+- A service returns `invalid(...)`, `notFound(...)`, `conflict(...)`,
+  `internal(msg, cause)` etc. from `service_errors.go`; the handler calls
+  `writeServiceError(w, err)`. The message is sent verbatim, the cause only
+  logged.
+- Services take a `txBeginner` (the pool in production, a rollback `pgx.Tx` in
+  tests) and never import `net/http` or chi — `TestServicesDoNotImportHTTP`
+  enforces it.
+- Validation is a pure function (`validateNewPost`, `validateToolPageUpdate`…)
+  called first inside the service, so it is unit-testable and cannot be skipped.
+
+Do not add a service for a handler that is a single query. `characterisation_
+integration_test.go` pins the five endpoints' responses through the real router;
+run it before and after touching any of them.
 
 #### 2. Transaction Pattern
 For operations requiring atomicity (e.g., notifications + actions):

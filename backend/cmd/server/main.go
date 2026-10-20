@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/go-chi/jwtauth/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/resend/resend-go/v2"
 	"golang.org/x/oauth2"
@@ -27,9 +28,17 @@ type App struct {
 	bucket             *s3.Client
 	bucketName         *string
 	supabaseProjectRef *string
-	db                 *pgxpool.Pool
+	db                 txBeginner
 	queries            *db.Queries
 	mailer             *mail.Mailer
+}
+
+// txBeginner is all the handlers and services need from the pool: a way to
+// start a transaction. A pgx.Tx satisfies it too (its Begin opens a
+// savepoint), which is how the integration tests run real handlers inside a
+// transaction they roll back.
+type txBeginner interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
 }
 
 // siteURL is the public site origin, used to build links inside emails.

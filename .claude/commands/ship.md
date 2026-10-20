@@ -105,9 +105,11 @@ see:
   as `interface{}`, `NULLIF` as `bool`, `COALESCE` as non-null, and a `UNION`
   from its first branch only. Each compiles cleanly and fails at runtime as a
   500, so after any query change read the generated `...Row` struct.
-- **Handlers outside the integration tests.** Only feed, trending and popular
-  tools run against a real database. Anything else needs the endpoint hit once
-  after the change.
+- **Handlers outside the integration tests.** Against a real database run:
+  feed, trending and popular tools, and — through the real router — create
+  post, star, the tool-ticket resolutions, tool page edits and search
+  (`characterisation_integration_test.go`). Anything else needs the endpoint
+  hit once after the change.
 - **Security.** A green gate says nothing about who may call an endpoint —
   that is what step 5 is for. `routes_test.go` does pin each route's auth
   group, so a route moved between groups fails the gate.
