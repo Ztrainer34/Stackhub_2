@@ -691,12 +691,17 @@ LEFT JOIN
 LEFT JOIN
   categories c ON ttc.category_id = c.id
 WHERE
-  ($1::text = '' OR tt.status = $1::text)
+  (sqlc.arg(status)::text = '' OR tt.status = sqlc.arg(status)::text)
 GROUP BY
   tt.id, p.name, p.slug, requester.username, resolver.username
 ORDER BY
   tt.created_at DESC
-LIMIT $2 OFFSET $3;
+LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
+
+-- name: ToolExists :one
+-- tool_tickets.resolved_tool_id has no foreign key, so resolving a ticket with
+-- an existing tool checks this first.
+SELECT EXISTS (SELECT 1 FROM tools WHERE id = $1);
 
 -- name: GetToolTicket :one
 SELECT

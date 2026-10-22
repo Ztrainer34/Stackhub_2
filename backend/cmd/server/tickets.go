@@ -126,9 +126,9 @@ func (app *App) listToolTickets(w http.ResponseWriter, r *http.Request) {
 	offset := (page - 1) * limit
 
 	params := db.ListToolTicketsParams{
-		Column1: status,
-		Limit:   int32(limit),
-		Offset:  int32(offset),
+		Status:     status,
+		PageLimit:  int32(limit),
+		PageOffset: int32(offset),
 	}
 
 	tickets, err := app.queries.ListToolTickets(r.Context(), params)

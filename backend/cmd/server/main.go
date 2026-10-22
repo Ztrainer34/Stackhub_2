@@ -15,14 +15,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/resend/resend-go/v2"
-	"golang.org/x/oauth2"
 	"stackhub.com/stackhub/pkg/db"
 	"stackhub.com/stackhub/pkg/mail"
 )
-
-type OAuthConfig struct {
-	Github oauth2.Config
-}
 
 type App struct {
 	bucket             *s3.Client
@@ -43,11 +38,6 @@ type txBeginner interface {
 
 // siteURL is the public site origin, used to build links inside emails.
 const siteURL = "https://stackhub.me"
-
-type GithubUser struct {
-	Login string `json:"login"`
-	Email string `json:"email"`
-}
 
 func getEnvOrPanic(key string) string {
 	env, set := os.LookupEnv(key)

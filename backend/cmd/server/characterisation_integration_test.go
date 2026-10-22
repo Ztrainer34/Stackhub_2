@@ -366,6 +366,17 @@ func TestResolveTicketCharacterisationIntegration(t *testing.T) {
 			t.Errorf("approval notifications after a repeat = %d; want still 1", n)
 		}
 
+		// A tool that does not exist is refused, and the ticket stays as it
+		// was. The ticket checks still come first.
+		ghostTool := `{"tool_id":"` + uuid.NewString() + `"}`
+		api.expect("unknown ticket and unknown tool", "POST", "/admin/tool-tickets/"+uuid.NewString()+"/resolve-existing", resolver, ghostTool, http.StatusNotFound, "Tool ticket not found")
+		api.expect("resolved ticket and unknown tool", "POST", path, resolver, ghostTool, http.StatusConflict, "This ticket has already been resolved")
+		ghost := newTicket("Ghost Tool Ticket", false)
+		api.expect("unknown tool", "POST", "/admin/tool-tickets/"+ghost.String()+"/resolve-existing", resolver, ghostTool, http.StatusNotFound, "Tool not found")
+		if status, _ := ticketState(ghost); status != "pending" {
+			t.Errorf("ticket status %q after an unknown tool; want pending", status)
+		}
+
 		// Resolving your own suggestion does not notify you; a standalone
 		// suggestion has no post to add the tool to.
 		own := newTicket("Self Resolved Tool", false)
@@ -436,6 +447,48 @@ func TestResolveTicketCharacterisationIntegration(t *testing.T) {
 		}
 		if status, _ := ticketState(ticket); status != "rejected" {
 			t.Errorf("ticket status %s; want rejected", status)
+		}
+
+		// The admin list filters by status and pages.
+		listed := func(query string) []string {
+			t.Helper()
+			status, got := api.call("GET", "/admin/tool-tickets"+query, resolver, "")
+			if status != http.StatusOK {
+				t.Fatalf("list %s: %d %q", query, status, got)
+			}
+			var res struct {
+				Tickets []struct {
+					ID     string `json:"id"`
+					Status string `json:"status"`
+				} `json:"tickets"`
+				Limit int `json:"limit"`
+			}
+			if err := json.Unmarshal([]byte(got), &res); err != nil {
+				t.Fatal(err)
+			}
+			var out []string
+			for _, tk := range res.Tickets {
+				if query == "?status=rejected&limit=100" && tk.Status != "rejected" {
+					t.Errorf("status filter let through a %s ticket", tk.Status)
+				}
+				out = append(out, tk.ID)
+			}
+			return out
+		}
+		found := false
+		for _, id := range listed("?status=rejected&limit=100") {
+			found = found || id == ticket.String()
+		}
+		if !found {
+			t.Error("rejected ticket missing from ?status=rejected")
+		}
+		for _, id := range listed("?status=pending&limit=100") {
+			if id == ticket.String() {
+				t.Error("rejected ticket listed under ?status=pending")
+			}
+		}
+		if n := len(listed("?limit=1")); n > 1 {
+			t.Errorf("?limit=1 returned %d tickets", n)
 		}
 		// Rejected is not final; resolved is.
 		if status, _ := api.call("POST", "/admin/tool-tickets/"+ticket.String()+"/resolve-existing", resolver, `{"tool_id":"`+existing.String()+`"}`); status != http.StatusNoContent {

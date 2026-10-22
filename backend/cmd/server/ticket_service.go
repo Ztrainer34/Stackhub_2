@@ -187,7 +187,18 @@ func settled(updated int64, err error) error {
 // resolveWithExisting resolves a ticket with a tool already in the catalog.
 func (s ticketService) resolveWithExisting(ctx context.Context, ticketID, resolverID, toolID uuid.UUID) (*toolApproval, error) {
 	return s.resolve(ctx, ticketID, resolverID, func(q *db.Queries) (uuid.UUID, error) {
-		err := settled(q.ResolveToolTicketWithExisting(ctx, db.ResolveToolTicketWithExistingParams{
+		// resolved_tool_id has no foreign key, and a standalone ticket has no
+		// post link to fail on, so a made-up id used to resolve the ticket
+		// pointing at nothing.
+		exists, err := q.ToolExists(ctx, toolID)
+		if err != nil {
+			return uuid.Nil, internal("Could not resolve ticket", err)
+		}
+		if !exists {
+			return uuid.Nil, notFound("Tool not found")
+		}
+
+		err = settled(q.ResolveToolTicketWithExisting(ctx, db.ResolveToolTicketWithExistingParams{
 			ID:             ticketID,
 			ResolvedToolID: ToPgUUID(toolID),
 			ResolvedBy:     ToPgUUID(resolverID),
