@@ -3,12 +3,15 @@ package main
 import (
 	"context"
 	"errors"
+	"regexp"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"stackhub.com/stackhub/internal/pg"
+	"stackhub.com/stackhub/internal/testdb"
 	"stackhub.com/stackhub/pkg/db"
 )
 
@@ -16,34 +19,12 @@ import (
 // rules as feed_integration_test.go: opt-in via TEST_DB_CONNECTION, local
 // databases only, every write rolled back.
 
-// twoProfiles returns two distinct existing profiles, or skips.
-func twoProfiles(t *testing.T, tx pgx.Tx) (uuid.UUID, uuid.UUID) {
-	t.Helper()
-	rows, err := tx.Query(context.Background(), `SELECT id FROM profiles ORDER BY created_at LIMIT 2`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-	var ids []uuid.UUID
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			t.Fatal(err)
-		}
-		ids = append(ids, id)
-	}
-	if len(ids) < 2 {
-		t.Skip("need two profiles — seed the database first")
-	}
-	return ids[0], ids[1]
-}
-
 // An unpublished post must be invisible by id to everyone but its author —
 // through GetPost, GetPostContent and IsPostVisible alike. Unpublishing leaves
 // `content` in place, so before the fix its text stayed readable.
 func TestUnpublishedPostVisibilityIntegration(t *testing.T) {
-	conn := testDB(t)
-	tx := beginRollback(t, conn)
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
 	ctx := context.Background()
 	q := db.New(tx)
 
@@ -97,15 +78,15 @@ func TestUnpublishedPostVisibilityIntegration(t *testing.T) {
 // old `entity_id = $4` dedup never matched NULL — every repeat inserted again
 // and sent another email.
 func TestNotificationDedupWithNullEntityIntegration(t *testing.T) {
-	conn := testDB(t)
-	tx := beginRollback(t, conn)
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
 	ctx := context.Background()
 	q := db.New(tx)
-	recipient, actor := twoProfiles(t, tx)
+	recipient, actor := testdb.TwoProfiles(t, tx)
 
 	params := db.CreateNotificationParams{
 		RecipientID: recipient,
-		ActorID:     ToPgUUID(actor),
+		ActorID:     pg.UUID(actor),
 		Type:        "follow",
 		EntityID:    pgtype.UUID{Valid: false},
 		EntityType:  pgtype.Text{Valid: false},
@@ -124,7 +105,7 @@ func TestNotificationDedupWithNullEntityIntegration(t *testing.T) {
 
 	// A different entity is a different notification.
 	params.Type = "post_star"
-	params.EntityID = ToPgUUID(uuid.New())
+	params.EntityID = pg.UUID(uuid.New())
 	if rows, _ := q.CreateNotification(ctx, params); rows != 1 {
 		t.Errorf("notification for a different entity inserted %d rows; want 1", rows)
 	}
@@ -133,11 +114,11 @@ func TestNotificationDedupWithNullEntityIntegration(t *testing.T) {
 // FollowUser reports 0 when already following, which is what stops a repeated
 // follow request from notifying (and emailing) the followee again.
 func TestFollowUserCountsOnlyNewFollowsIntegration(t *testing.T) {
-	conn := testDB(t)
-	tx := beginRollback(t, conn)
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
 	ctx := context.Background()
 	q := db.New(tx)
-	followee, follower := twoProfiles(t, tx)
+	followee, follower := testdb.TwoProfiles(t, tx)
 
 	if _, err := tx.Exec(ctx, `DELETE FROM user_follows WHERE follower_id = $1 AND followee_id = $2`, follower, followee); err != nil {
 		t.Fatal(err)
@@ -156,8 +137,8 @@ func TestFollowUserCountsOnlyNewFollowsIntegration(t *testing.T) {
 // A rename attempted by someone who does not own the post must touch nothing,
 // including the post's slug-history rows.
 func TestRenameByNonAuthorChangesNothingIntegration(t *testing.T) {
-	conn := testDB(t)
-	tx := beginRollback(t, conn)
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
 	ctx := context.Background()
 	q := db.New(tx)
 
@@ -199,12 +180,12 @@ func TestRenameByNonAuthorChangesNothingIntegration(t *testing.T) {
 // The migration runs by hand in production, so it is applied here exactly as
 // written — twice, to prove it is safe to re-run.
 func TestSecurityHardeningMigrationIntegration(t *testing.T) {
-	conn := testDB(t)
+	conn := testdb.Open(t)
 	ctx := context.Background()
-	up := migrationUp(t, "20261016130000_security_hardening.sql")
+	up := testdb.MigrationUp(t, "20261016130000_security_hardening.sql")
 
 	t.Run("clean usernames get the constraint", func(t *testing.T) {
-		tx := beginRollback(t, conn)
+		tx := testdb.Begin(t, conn)
 		var bad int
 		if err := tx.QueryRow(ctx, `SELECT count(*) FROM profiles WHERE username !~ '^[a-z0-9_-]{3,30}$'`).Scan(&bad); err != nil {
 			t.Fatal(err)
@@ -236,7 +217,7 @@ func TestSecurityHardeningMigrationIntegration(t *testing.T) {
 	})
 
 	t.Run("a non-conforming username skips the constraint instead of failing", func(t *testing.T) {
-		tx := beginRollback(t, conn)
+		tx := testdb.Begin(t, conn)
 		if _, err := tx.Exec(ctx, `UPDATE profiles SET username = 'has.dot' WHERE id = (SELECT id FROM profiles LIMIT 1)`); err != nil {
 			t.Fatal(err)
 		}
@@ -253,7 +234,7 @@ func TestSecurityHardeningMigrationIntegration(t *testing.T) {
 	})
 
 	t.Run("token hook is callable only by Supabase Auth", func(t *testing.T) {
-		tx := beginRollback(t, conn)
+		tx := testdb.Begin(t, conn)
 		if _, err := tx.Exec(ctx, up); err != nil {
 			t.Fatal(err)
 		}
@@ -279,7 +260,7 @@ func TestSecurityHardeningMigrationIntegration(t *testing.T) {
 	})
 
 	t.Run("account_claims gets claimant_nonce and RLS", func(t *testing.T) {
-		tx := beginRollback(t, conn)
+		tx := testdb.Begin(t, conn)
 		if _, err := tx.Exec(ctx, up); err != nil {
 			t.Fatal(err)
 		}
@@ -300,8 +281,8 @@ func TestSecurityHardeningMigrationIntegration(t *testing.T) {
 // The avatar proxy's lookup returns the hash only for an exact username, and
 // the vendor-sharing count is what decides copy-on-write.
 func TestAvatarAndVendorQueriesIntegration(t *testing.T) {
-	conn := testDB(t)
-	tx := beginRollback(t, conn)
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
 	ctx := context.Background()
 	q := db.New(tx)
 
@@ -310,7 +291,7 @@ func TestAvatarAndVendorQueriesIntegration(t *testing.T) {
 		t.Skipf("no profile with an email hash (%v)", err)
 	}
 	hash, err := q.GetEmailHashByUsername(ctx, username)
-	if err != nil || !hash.Valid || !hexHash.MatchString(hash.String) {
+	if err != nil || !hash.Valid || !regexp.MustCompile(`^[0-9a-f]{32,64}$`).MatchString(hash.String) {
 		t.Errorf("GetEmailHashByUsername(%q) = %v, %v; want a hex hash", username, hash, err)
 	}
 	if _, err := q.GetEmailHashByUsername(ctx, username+"-nobody"); !errors.Is(err, pgx.ErrNoRows) {
@@ -331,13 +312,13 @@ func TestAvatarAndVendorQueriesIntegration(t *testing.T) {
 	if _, err := tx.Exec(ctx, `UPDATE tools SET vendor_id = $1 WHERE id = $2`, vendor, toolA); err != nil {
 		t.Fatal(err)
 	}
-	if n, _ := q.CountToolsUsingVendor(ctx, ToPgUUID(vendor)); n != 1 {
+	if n, _ := q.CountToolsUsingVendor(ctx, pg.UUID(vendor)); n != 1 {
 		t.Errorf("one tool on the vendor: count %d; want 1", n)
 	}
 	if _, err := tx.Exec(ctx, `UPDATE tools SET vendor_id = $1 WHERE id = $2`, vendor, toolB); err != nil {
 		t.Fatal(err)
 	}
-	if n, _ := q.CountToolsUsingVendor(ctx, ToPgUUID(vendor)); n != 2 {
+	if n, _ := q.CountToolsUsingVendor(ctx, pg.UUID(vendor)); n != 2 {
 		t.Errorf("two tools on the vendor: count %d; want 2", n)
 	}
 }
@@ -345,11 +326,11 @@ func TestAvatarAndVendorQueriesIntegration(t *testing.T) {
 // "resolved" is final: no update may touch a resolved ticket. Before, reject
 // then resolve could be repeated, re-sending the "tool approved" email.
 func TestResolvedTicketIsFinalIntegration(t *testing.T) {
-	conn := testDB(t)
-	tx := beginRollback(t, conn)
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
 	ctx := context.Background()
 	q := db.New(tx)
-	requester, resolver := twoProfiles(t, tx)
+	requester, resolver := testdb.TwoProfiles(t, tx)
 
 	var toolID uuid.UUID
 	if err := tx.QueryRow(ctx, `SELECT id FROM tools LIMIT 1`).Scan(&toolID); err != nil {
@@ -365,7 +346,7 @@ func TestResolvedTicketIsFinalIntegration(t *testing.T) {
 
 	resolve := func() int64 {
 		n, err := q.ResolveToolTicketWithExisting(ctx, db.ResolveToolTicketWithExistingParams{
-			ID: ticket, ResolvedToolID: ToPgUUID(toolID), ResolvedBy: ToPgUUID(resolver),
+			ID: ticket, ResolvedToolID: pg.UUID(toolID), ResolvedBy: pg.UUID(resolver),
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -373,7 +354,7 @@ func TestResolvedTicketIsFinalIntegration(t *testing.T) {
 		return n
 	}
 	reject := func() int64 {
-		n, err := q.RejectToolTicket(ctx, db.RejectToolTicketParams{ID: ticket, ResolvedBy: ToPgUUID(resolver)})
+		n, err := q.RejectToolTicket(ctx, db.RejectToolTicketParams{ID: ticket, ResolvedBy: pg.UUID(resolver)})
 		if err != nil {
 			t.Fatal(err)
 		}

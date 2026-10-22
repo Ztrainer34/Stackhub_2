@@ -274,8 +274,8 @@ Starting on http://localhost:8080 ...
 > on the first value it cannot find. The commands above load the file for it.
 >
 > Note the `./cmd/server` — that builds the whole package. Naming a single file
-> (`go run cmd/server/main.go`) compiles only that file, and every handler lives
-> in the other files in that folder, so the build fails.
+> (`go run cmd/server/main.go`) compiles only that file and misses `routes.go`
+> next to it, so the build fails.
 
 Leave this terminal running. It prints every request, which is useful when
 something misbehaves.

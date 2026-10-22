@@ -6,13 +6,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"sort"
 	"strings"
 	"testing"
 
 	"github.com/go-chi/jwtauth/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"stackhub.com/stackhub/internal/pg"
+	"stackhub.com/stackhub/internal/testdb"
 	"stackhub.com/stackhub/pkg/db"
 )
 
@@ -76,63 +77,13 @@ func (a *testAPI) expect(name, method, path string, as uuid.UUID, body string, w
 	}
 }
 
-func scalar[T any](t *testing.T, tx pgx.Tx, sql string, args ...any) T {
-	t.Helper()
-	var v T
-	if err := tx.QueryRow(context.Background(), sql, args...).Scan(&v); err != nil {
-		t.Fatalf("%s: %v", sql, err)
-	}
-	return v
-}
-
-func ids[T any](t *testing.T, tx pgx.Tx, sql string, args ...any) []T {
-	t.Helper()
-	rows, err := tx.Query(context.Background(), sql, args...)
-	if err != nil {
-		t.Fatalf("%s: %v", sql, err)
-	}
-	out, err := pgx.CollectRows(rows, pgx.RowTo[T])
-	if err != nil {
-		t.Fatalf("%s: %v", sql, err)
-	}
-	return out
-}
-
-func sortedInts(v []int32) string {
-	s := append([]int32(nil), v...)
-	sort.Slice(s, func(i, j int) bool { return s[i] < s[j] })
-	return fmt.Sprint(s)
-}
-
-func someTools(t *testing.T, tx pgx.Tx, n int) []uuid.UUID {
-	t.Helper()
-	tools := ids[uuid.UUID](t, tx, `SELECT id FROM tools ORDER BY id LIMIT $1`, n)
-	if len(tools) < n {
-		t.Skipf("need %d tools — seed the database first", n)
-	}
-	return tools
-}
-
-func someCategories(t *testing.T, tx pgx.Tx, n int) []int32 {
-	t.Helper()
-	cats := ids[int32](t, tx, `SELECT id FROM categories ORDER BY id LIMIT $1`, n)
-	if len(cats) < n {
-		t.Skipf("need %d categories — seed the database first", n)
-	}
-	return cats
-}
-
-func actorName(t *testing.T, tx pgx.Tx, id uuid.UUID) string {
-	return scalar[string](t, tx, `SELECT COALESCE(NULLIF(display_name, ''), NULLIF(username, ''), 'Someone') FROM profiles WHERE id = $1`, id)
-}
-
 func TestCreatePostCharacterisationIntegration(t *testing.T) {
-	conn := testDB(t)
-	tx := beginRollback(t, conn)
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
 	api := newTestAPI(t, tx)
-	author, _ := twoProfiles(t, tx)
-	tools := someTools(t, tx, 2)
-	cats := someCategories(t, tx, 2)
+	author, _ := testdb.TwoProfiles(t, tx)
+	tools := testdb.SomeTools(t, tx, 2)
+	cats := testdb.SomeCategories(t, tx, 2)
 	t1, t2 := tools[0].String(), tools[1].String()
 
 	elevenTools := make([]string, 11)
@@ -186,7 +137,7 @@ func TestCreatePostCharacterisationIntegration(t *testing.T) {
 	if name != "Characterisation Post" || typ != "comparison" || desc != "the goal" || level != "advanced" || authorID != author {
 		t.Errorf("stored post = %q %q %q %q %v", name, typ, desc, level, authorID)
 	}
-	if linked := ids[uuid.UUID](t, tx, `SELECT tool_id FROM post_tools WHERE post_id = $1`, created.ID); len(linked) != 1 || linked[0] != tools[0] {
+	if linked := testdb.IDs[uuid.UUID](t, tx, `SELECT tool_id FROM post_tools WHERE post_id = $1`, created.ID); len(linked) != 1 || linked[0] != tools[0] {
 		t.Errorf("post_tools = %v; want [%s]", linked, t1)
 	}
 
@@ -200,8 +151,8 @@ func TestCreatePostCharacterisationIntegration(t *testing.T) {
 	if tName != "Brand New Tool" || tDesc != "what it does" || tSite != "https://example.com" || tStatus != "pending" || requester != author {
 		t.Errorf("ticket = %q %q %q %q %v", tName, tDesc, tSite, tStatus, requester)
 	}
-	if got := sortedInts(ids[int32](t, tx, `SELECT category_id FROM tool_ticket_categories WHERE ticket_id = $1`, ticketID)); got != sortedInts(cats) {
-		t.Errorf("ticket categories = %s; want %s", got, sortedInts(cats))
+	if got := testdb.SortedInts(testdb.IDs[int32](t, tx, `SELECT category_id FROM tool_ticket_categories WHERE ticket_id = $1`, ticketID)); got != testdb.SortedInts(cats) {
+		t.Errorf("ticket categories = %s; want %s", got, testdb.SortedInts(cats))
 	}
 
 	api.expect("same title again", "POST", "/post/create", author,
@@ -212,7 +163,7 @@ func TestCreatePostCharacterisationIntegration(t *testing.T) {
 	api.expect("unknown tool", "POST", "/post/create", author,
 		`{"type":"playbook","name":"Ghost Tools Post","tools":["`+uuid.NewString()+`"]}`,
 		http.StatusBadRequest, "Failed to create post")
-	if n := scalar[int64](t, tx, `SELECT count(*) FROM posts WHERE author_id = $1 AND slug = 'ghost-tools-post'`, author); n != 0 {
+	if n := testdb.Scalar[int64](t, tx, `SELECT count(*) FROM posts WHERE author_id = $1 AND slug = 'ghost-tools-post'`, author); n != 0 {
 		t.Errorf("post with an unknown tool was kept (%d rows); the transaction should roll it back", n)
 	}
 
@@ -220,14 +171,14 @@ func TestCreatePostCharacterisationIntegration(t *testing.T) {
 	api.expect("unknown category", "POST", "/post/create", author,
 		`{"type":"playbook","name":"Ghost Category Post","suggested_tools":[{"name":"T","categories":[2147483000]}]}`,
 		http.StatusBadRequest, "Failed to add suggested tool categories")
-	if n := scalar[int64](t, tx, `SELECT count(*) FROM posts WHERE author_id = $1 AND slug = 'ghost-category-post'`, author); n != 0 {
+	if n := testdb.Scalar[int64](t, tx, `SELECT count(*) FROM posts WHERE author_id = $1 AND slug = 'ghost-category-post'`, author); n != 0 {
 		t.Errorf("post with an unknown suggestion category was kept (%d rows)", n)
 	}
 }
 
 func TestStarPostCharacterisationIntegration(t *testing.T) {
-	conn := testDB(t)
-	tx := beginRollback(t, conn)
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
 	api := newTestAPI(t, tx)
 	ctx := context.Background()
 
@@ -236,7 +187,7 @@ func TestStarPostCharacterisationIntegration(t *testing.T) {
 	if err := tx.QueryRow(ctx, `SELECT id, author_id, name FROM posts WHERE is_published LIMIT 1`).Scan(&postID, &author, &postName); err != nil {
 		t.Skipf("no published posts (%v)", err)
 	}
-	liker := scalar[uuid.UUID](t, tx, `SELECT id FROM profiles WHERE id <> $1 ORDER BY created_at LIMIT 1`, author)
+	liker := testdb.Scalar[uuid.UUID](t, tx, `SELECT id FROM profiles WHERE id <> $1 ORDER BY created_at LIMIT 1`, author)
 	if _, err := tx.Exec(ctx, `DELETE FROM post_stars WHERE post_id = $1`, postID); err != nil {
 		t.Fatal(err)
 	}
@@ -244,7 +195,7 @@ func TestStarPostCharacterisationIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	starNotes := func(actor uuid.UUID) int64 {
-		return scalar[int64](t, tx, `SELECT count(*) FROM notifications
+		return testdb.Scalar[int64](t, tx, `SELECT count(*) FROM notifications
 			WHERE recipient_id = $1 AND actor_id = $2 AND type = 'post_star' AND entity_id = $3`, author, actor, postID)
 	}
 	path := "/post/" + postID.String() + "/star"
@@ -255,14 +206,14 @@ func TestStarPostCharacterisationIntegration(t *testing.T) {
 	if status, body := api.call("PUT", path, liker, ""); status != http.StatusOK || body != "" {
 		t.Fatalf("star: %d %q", status, body)
 	}
-	if n := scalar[int64](t, tx, `SELECT count(*) FROM post_stars WHERE post_id = $1 AND liker_id = $2`, postID, liker); n != 1 {
+	if n := testdb.Scalar[int64](t, tx, `SELECT count(*) FROM post_stars WHERE post_id = $1 AND liker_id = $2`, postID, liker); n != 1 {
 		t.Errorf("star rows = %d; want 1", n)
 	}
 	if n := starNotes(liker); n != 1 {
 		t.Errorf("notifications after first star = %d; want 1", n)
 	}
-	wantMsg := fmt.Sprintf("%s starred “%s”", actorName(t, tx, liker), postName)
-	if msg := scalar[string](t, tx, `SELECT message FROM notifications WHERE actor_id = $1 AND entity_id = $2`, liker, postID); msg != wantMsg {
+	wantMsg := fmt.Sprintf("%s starred “%s”", testdb.ActorName(t, tx, liker), postName)
+	if msg := testdb.Scalar[string](t, tx, `SELECT message FROM notifications WHERE actor_id = $1 AND entity_id = $2`, liker, postID); msg != wantMsg {
 		t.Errorf("notification message %q; want %q", msg, wantMsg)
 	}
 
@@ -293,30 +244,30 @@ func TestStarPostCharacterisationIntegration(t *testing.T) {
 }
 
 func TestResolveTicketCharacterisationIntegration(t *testing.T) {
-	conn := testDB(t)
-	tx := beginRollback(t, conn)
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
 	api := newTestAPI(t, tx)
 	ctx := context.Background()
 	q := db.New(tx)
-	requester, resolver := twoProfiles(t, tx)
-	cats := someCategories(t, tx, 2)
+	requester, resolver := testdb.TwoProfiles(t, tx)
+	cats := testdb.SomeCategories(t, tx, 2)
 
 	// Each subtest gets its own post, so neither depends on the other's
 	// notifications. (Approvals on one post are covered by
 	// TestEveryApprovedToolNotifiesIntegration.)
-	posts := ids[uuid.UUID](t, tx, `SELECT id FROM posts ORDER BY id LIMIT 2`)
+	posts := testdb.IDs[uuid.UUID](t, tx, `SELECT id FROM posts ORDER BY id LIMIT 2`)
 	if len(posts) < 2 {
 		t.Skip("need two posts — seed the database first")
 	}
 	postID := posts[0]
-	existing := scalar[uuid.UUID](t, tx, `SELECT id FROM tools WHERE id NOT IN (SELECT tool_id FROM post_tools WHERE post_id = $1) LIMIT 1`, postID)
+	existing := testdb.Scalar[uuid.UUID](t, tx, `SELECT id FROM tools WHERE id NOT IN (SELECT tool_id FROM post_tools WHERE post_id = $1) LIMIT 1`, postID)
 
 	newTicket := func(name string, onPost bool) uuid.UUID {
 		t.Helper()
 		var id uuid.UUID
 		var err error
 		if onPost {
-			id, err = q.CreateToolTicket(ctx, db.CreateToolTicketParams{PostID: ToPgUUID(postID), RequestedBy: requester, ToolName: name})
+			id, err = q.CreateToolTicket(ctx, db.CreateToolTicketParams{PostID: pg.UUID(postID), RequestedBy: requester, ToolName: name})
 		} else {
 			id, err = q.CreateStandaloneToolTicket(ctx, db.CreateStandaloneToolTicketParams{RequestedBy: requester, ToolName: name})
 		}
@@ -326,7 +277,7 @@ func TestResolveTicketCharacterisationIntegration(t *testing.T) {
 		return id
 	}
 	approvals := func(ticketName string) int64 {
-		return scalar[int64](t, tx, `SELECT count(*) FROM notifications WHERE recipient_id = $1 AND type = 'tool_approved' AND message = $2`,
+		return testdb.Scalar[int64](t, tx, `SELECT count(*) FROM notifications WHERE recipient_id = $1 AND type = 'tool_approved' AND message = $2`,
 			requester, fmt.Sprintf("Your suggested tool “%s” was approved and added to StackHub.", ticketName))
 	}
 	ticketState := func(id uuid.UUID) (string, uuid.UUID) {
@@ -338,7 +289,7 @@ func TestResolveTicketCharacterisationIntegration(t *testing.T) {
 		return status, tool
 	}
 	onPost := func(tool uuid.UUID) bool {
-		return scalar[bool](t, tx, `SELECT EXISTS (SELECT 1 FROM post_tools WHERE post_id = $1 AND tool_id = $2)`, postID, tool)
+		return testdb.Scalar[bool](t, tx, `SELECT EXISTS (SELECT 1 FROM post_tools WHERE post_id = $1 AND tool_id = $2)`, postID, tool)
 	}
 
 	t.Run("with an existing tool", func(t *testing.T) {
@@ -419,8 +370,8 @@ func TestResolveTicketCharacterisationIntegration(t *testing.T) {
 			tool.LogoURL == nil || *tool.LogoURL != "https://logo.example.com/x.png" {
 			t.Errorf("created tool = %q", got)
 		}
-		if got := sortedInts(ids[int32](t, tx, `SELECT category_id FROM tool_categories WHERE tool_id = $1`, tool.ID)); got != sortedInts(cats) {
-			t.Errorf("tool categories = %s; want %s", got, sortedInts(cats))
+		if got := testdb.SortedInts(testdb.IDs[int32](t, tx, `SELECT category_id FROM tool_categories WHERE tool_id = $1`, tool.ID)); got != testdb.SortedInts(cats) {
+			t.Errorf("tool categories = %s; want %s", got, testdb.SortedInts(cats))
 		}
 		if status, resolved := ticketState(ticket); status != "resolved" || resolved != tool.ID {
 			t.Errorf("ticket = %s / %v; want resolved / %v", status, resolved, tool.ID)
@@ -431,9 +382,9 @@ func TestResolveTicketCharacterisationIntegration(t *testing.T) {
 		if n := approvals("New Characterisation Tool"); n != 1 {
 			t.Errorf("approval notifications = %d; want 1", n)
 		}
-		before := scalar[int64](t, tx, `SELECT count(*) FROM tools`)
+		before := testdb.Scalar[int64](t, tx, `SELECT count(*) FROM tools`)
 		api.expect("resolve twice", "POST", path, resolver, good, http.StatusConflict, "This ticket has already been resolved")
-		if after := scalar[int64](t, tx, `SELECT count(*) FROM tools`); after != before {
+		if after := testdb.Scalar[int64](t, tx, `SELECT count(*) FROM tools`); after != before {
 			t.Errorf("a refused second resolve still created a tool (%d -> %d)", before, after)
 		}
 	})
@@ -499,14 +450,14 @@ func TestResolveTicketCharacterisationIntegration(t *testing.T) {
 }
 
 func TestUpdateToolPageCharacterisationIntegration(t *testing.T) {
-	conn := testDB(t)
-	tx := beginRollback(t, conn)
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
 	api := newTestAPI(t, tx)
 	ctx := context.Background()
-	owner, other := twoProfiles(t, tx)
-	tools := someTools(t, tx, 2)
+	owner, other := testdb.TwoProfiles(t, tx)
+	tools := testdb.SomeTools(t, tx, 2)
 	toolA, toolB := tools[0], tools[1]
-	cats := someCategories(t, tx, 2)
+	cats := testdb.SomeCategories(t, tx, 2)
 
 	if _, err := tx.Exec(ctx, `INSERT INTO tool_owners (tool_id, profile_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, toolA, owner); err != nil {
 		t.Fatal(err)
@@ -562,19 +513,19 @@ func TestUpdateToolPageCharacterisationIntegration(t *testing.T) {
 	}
 
 	// A vendor row shared with another tool is copied, not edited.
-	shared := scalar[uuid.UUID](t, tx, `INSERT INTO vendors (name, website) VALUES ('Shared Characterisation Vendor', 'https://shared.example') RETURNING id`)
+	shared := testdb.Scalar[uuid.UUID](t, tx, `INSERT INTO vendors (name, website) VALUES ('Shared Characterisation Vendor', 'https://shared.example') RETURNING id`)
 	if _, err := tx.Exec(ctx, `UPDATE tools SET vendor_id = $1 WHERE id = ANY($2)`, shared, []uuid.UUID{toolA, toolB}); err != nil {
 		t.Fatal(err)
 	}
 	put("vendor on a shared row", `{"vendor":{"website":"acme.example","x_profile":" acme ","linkedin_profile":"","head_office":"Paris","year_of_foundation":2020}}`)
-	vendorA := scalar[uuid.UUID](t, tx, `SELECT vendor_id FROM tools WHERE id = $1`, toolA)
+	vendorA := testdb.Scalar[uuid.UUID](t, tx, `SELECT vendor_id FROM tools WHERE id = $1`, toolA)
 	if vendorA == shared {
 		t.Fatal("shared vendor row edited in place — another tool's vendor card would change")
 	}
-	if vb := scalar[uuid.UUID](t, tx, `SELECT vendor_id FROM tools WHERE id = $1`, toolB); vb != shared {
+	if vb := testdb.Scalar[uuid.UUID](t, tx, `SELECT vendor_id FROM tools WHERE id = $1`, toolB); vb != shared {
 		t.Errorf("the other tool's vendor moved to %v", vb)
 	}
-	if site := scalar[string](t, tx, `SELECT website FROM vendors WHERE id = $1`, shared); site != "https://shared.example" {
+	if site := testdb.Scalar[string](t, tx, `SELECT website FROM vendors WHERE id = $1`, shared); site != "https://shared.example" {
 		t.Errorf("shared vendor's website changed to %q", site)
 	}
 	var site, xp, office string
@@ -590,32 +541,32 @@ func TestUpdateToolPageCharacterisationIntegration(t *testing.T) {
 
 	// Now the row is this tool's alone, so it is edited in place.
 	put("vendor on an own row", `{"vendor":{"website":"https://acme2.example"}}`)
-	if again := scalar[uuid.UUID](t, tx, `SELECT vendor_id FROM tools WHERE id = $1`, toolA); again != vendorA {
+	if again := testdb.Scalar[uuid.UUID](t, tx, `SELECT vendor_id FROM tools WHERE id = $1`, toolA); again != vendorA {
 		t.Errorf("unshared vendor row replaced (%v -> %v); want edited in place", vendorA, again)
 	}
-	if site := scalar[string](t, tx, `SELECT website FROM vendors WHERE id = $1`, vendorA); site != "https://acme2.example" {
+	if site := testdb.Scalar[string](t, tx, `SELECT website FROM vendors WHERE id = $1`, vendorA); site != "https://acme2.example" {
 		t.Errorf("vendor website = %q", site)
 	}
-	if n := scalar[int64](t, tx, `SELECT count(*) FROM vendors WHERE id = $1 AND x_profile IS NULL AND year_of_foundation IS NULL`, vendorA); n != 1 {
+	if n := testdb.Scalar[int64](t, tx, `SELECT count(*) FROM vendors WHERE id = $1 AND x_profile IS NULL AND year_of_foundation IS NULL`, vendorA); n != 1 {
 		t.Error("vendor card is sent whole: fields left out should be cleared")
 	}
 
 	// Categories are replaced as a set.
 	put("categories", fmt.Sprintf(`{"category_ids":[%d,%d]}`, cats[0], cats[1]))
-	if got := sortedInts(ids[int32](t, tx, `SELECT category_id FROM tool_categories WHERE tool_id = $1`, toolA)); got != sortedInts(cats) {
-		t.Errorf("categories = %s; want %s", got, sortedInts(cats))
+	if got := testdb.SortedInts(testdb.IDs[int32](t, tx, `SELECT category_id FROM tool_categories WHERE tool_id = $1`, toolA)); got != testdb.SortedInts(cats) {
+		t.Errorf("categories = %s; want %s", got, testdb.SortedInts(cats))
 	}
 	put("no categories", `{"category_ids":[]}`)
-	if n := scalar[int64](t, tx, `SELECT count(*) FROM tool_categories WHERE tool_id = $1`, toolA); n != 0 {
+	if n := testdb.Scalar[int64](t, tx, `SELECT count(*) FROM tool_categories WHERE tool_id = $1`, toolA); n != 0 {
 		t.Errorf("categories left after clearing: %d", n)
 	}
 }
 
 func TestSearchCharacterisationIntegration(t *testing.T) {
-	conn := testDB(t)
-	tx := beginRollback(t, conn)
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
 	api := newTestAPI(t, tx)
-	viewer, _ := twoProfiles(t, tx)
+	viewer, _ := testdb.TwoProfiles(t, tx)
 
 	api.expect("bad page", "GET", "/search?t=tool&q=x&p=abc", uuid.Nil, "", http.StatusBadRequest, "Invalid page number")
 	api.expect("page zero", "GET", "/search?t=tool&q=x&p=0", uuid.Nil, "", http.StatusBadRequest, "Page number must be >= 1")
@@ -639,7 +590,7 @@ func TestSearchCharacterisationIntegration(t *testing.T) {
 	}
 
 	// A real hit: counts and page arithmetic.
-	name := scalar[string](t, tx, `SELECT name FROM tools ORDER BY id LIMIT 1`)
+	name := testdb.Scalar[string](t, tx, `SELECT name FROM tools ORDER BY id LIMIT 1`)
 	status, got := api.call("GET", "/search?t=tool&q="+strings.ReplaceAll(name, " ", "+"), uuid.Nil, "")
 	if status != http.StatusOK {
 		t.Fatalf("tool search: %d %q", status, got)

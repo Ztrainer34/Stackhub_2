@@ -71,21 +71,21 @@ slug" is.
 
 Read these as *places to look*, not as known bugs. Verify each against the code.
 
-### Authentication and authorisation (Go backend, `backend/cmd/server/`)
+### Authentication and authorisation (Go backend: routes in `backend/cmd/server/routes.go`, handlers in `backend/internal/<module>/`)
 
 - Every route sits in one of three groups in `routes.go`: **required** auth
   (`Authenticator`), **optional** (`OptionalAuthenticator`), **public** (none).
   `testdata/routes.golden` pins each route's group and whether an anonymous
   request gets a 401. A new route in the wrong group compiles and works — with
   the wrong auth. This has shipped to production here before.
-- Handlers read the caller with `extractUserIDFromRequest` (required group) or
-  `extractUserIDFromRequestIfPresent` (optional) — `auth.go`. Check which one a
+- Handlers read the caller with `httpx.UserID` (required group) or
+  `httpx.UserIDIfPresent` (optional) — `internal/httpx/httpx.go`. Check which one a
   handler uses matches its group: the first one in an optional route on an
   anonymous request yields a zero UUID — what does the handler then do with it?
 - JWTs are HS256, verified with `JWT_SECRET` via `jwtauth.Verifier`, which reads
   the `Authorization` header **and** a `jwt` cookie by default.
 - **Ownership is checked inline, handler by handler.** There is one helper —
-  `requireToolOwner` in `tool_page.go` — and nothing equivalent for posts,
+  `requireToolOwner` in `internal/tool/page.go` — and nothing equivalent for posts,
   comments, notifications or stacks. So IDOR is the most likely class of bug:
   for every `{id}`, `{slug}` or `{user_id}` path parameter, find the line that
   proves the caller may act on that object. If you cannot find it, that is your
@@ -114,10 +114,11 @@ Read these as *places to look*, not as known bugs. Verify each against the code.
 
 ### Uploads
 
-- Avatars (`users.go`), post images (`post_editing.go`) and tool logos
-  (`tool_page.go`) are capped by `ParseMultipartForm`, sniffed by `isImage`
-  (`storage.go`), and stored under a UUID name **with the client's file
-  extension** (`filepath.Ext(fileHeader.Filename)`). Work out what Content-Type
+- Avatars (`internal/user/handler.go`), post images (`internal/post/editing.go`)
+  and tool logos (`internal/tool/page.go`) go through `storage.ReceiveImage`
+  (`internal/storage/storage.go`): size-capped, sniffed from the bytes, and
+  stored under a UUID name with the extension of the *sniffed* type. Check any
+  new upload path uses it. Work out what Content-Type
   the stored object is served with, and whether an image/HTML or image/SVG
   polyglot with a `.html` or `.svg` extension becomes stored XSS on the storage
   origin.

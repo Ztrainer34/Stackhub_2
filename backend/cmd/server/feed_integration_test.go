@@ -2,12 +2,11 @@ package main
 
 import (
 	"context"
-	"os"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"stackhub.com/stackhub/internal/testdb"
 	"stackhub.com/stackhub/pkg/db"
 )
 
@@ -28,44 +27,6 @@ import (
 //
 // Every test runs inside a transaction that is always rolled back, so the local
 // database is left exactly as it was found.
-
-// testDB opens a connection, or skips. It refuses to run against anything that
-// looks hosted — a service-role connection string pasted in by mistake would
-// otherwise let a test write to production.
-func testDB(t *testing.T) *pgx.Conn {
-	t.Helper()
-
-	dsn := os.Getenv("TEST_DB_CONNECTION")
-	if dsn == "" {
-		t.Skip("TEST_DB_CONNECTION not set — skipping integration test")
-	}
-	if strings.Contains(dsn, "supabase.co") || strings.Contains(dsn, "supabase.com") {
-		t.Fatal("TEST_DB_CONNECTION points at a hosted Supabase project. " +
-			"Integration tests mutate data and must only run against a local database.")
-	}
-
-	conn, err := pgx.Connect(context.Background(), dsn)
-	if err != nil {
-		t.Fatalf("connect: %v", err)
-	}
-	t.Cleanup(func() { conn.Close(context.Background()) })
-
-	return conn
-}
-
-// beginRollback starts a transaction that is rolled back when the test ends,
-// whatever happens. Nothing a test writes survives it.
-func beginRollback(t *testing.T, conn *pgx.Conn) pgx.Tx {
-	t.Helper()
-
-	tx, err := conn.Begin(context.Background())
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
-
-	return tx
-}
 
 // oneProfileAndTools grabs an existing profile and three tools from the seeded
 // local database. Creating profiles would mean inserting into auth.users, which
@@ -134,8 +95,8 @@ func oneProfileAndTools(t *testing.T, tx pgx.Tx) (uuid.UUID, []uuid.UUID) {
 // stack tool's post above the watchlist tool's. That ordering is the whole
 // feature, and it is expressible only in SQL.
 func TestFeedTiersIntegration(t *testing.T) {
-	conn := testDB(t)
-	tx := beginRollback(t, conn)
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
 	ctx := context.Background()
 
 	viewer, tools := oneProfileAndTools(t, tx)
@@ -217,8 +178,8 @@ func TestFeedTiersIntegration(t *testing.T) {
 // TestFeedExcludesArchivedIntegration covers the other half of the rule:
 // archiving unfollows, so posts about archived tools leave the feed.
 func TestFeedExcludesArchivedIntegration(t *testing.T) {
-	conn := testDB(t)
-	tx := beginRollback(t, conn)
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
 	ctx := context.Background()
 
 	viewer, tools := oneProfileAndTools(t, tx)
@@ -268,8 +229,8 @@ func TestFeedExcludesArchivedIntegration(t *testing.T) {
 // people did. It also exercises the viewer filter on every branch — the shape
 // of bug that once put strangers' posts in everyone's feed.
 func TestFeedExcludesOwnPostsIntegration(t *testing.T) {
-	conn := testDB(t)
-	tx := beginRollback(t, conn)
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
 	ctx := context.Background()
 
 	var author uuid.UUID
@@ -332,8 +293,8 @@ func postCarrying(t *testing.T, tx pgx.Tx, viewer, tool uuid.UUID) uuid.UUID {
 // Under the old ordering tier decided absolutely and the stale post came first,
 // which is what made the feed read as weeks out of date.
 func TestFeedRecencyBandIntegration(t *testing.T) {
-	conn := testDB(t)
-	tx := beginRollback(t, conn)
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
 	ctx := context.Background()
 
 	viewer, tools := oneProfileAndTools(t, tx)
@@ -441,8 +402,8 @@ func TestFeedRecencyBandIntegration(t *testing.T) {
 // tier 4 because someone the viewer follows also uses that tool would push the
 // most relevant results to the bottom of the section.
 func TestTrendingTiersIntegration(t *testing.T) {
-	conn := testDB(t)
-	tx := beginRollback(t, conn)
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
 	ctx := context.Background()
 
 	viewer, tools := oneProfileAndTools(t, tx)
@@ -546,8 +507,8 @@ func TestTrendingTiersIntegration(t *testing.T) {
 // the shape where a missing GROUP BY column or a join that multiplies rows
 // compiles perfectly and returns quietly wrong numbers.
 func TestPopularToolsIntegration(t *testing.T) {
-	conn := testDB(t)
-	tx := beginRollback(t, conn)
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
 	ctx := context.Background()
 
 	qtx := db.New(tx)

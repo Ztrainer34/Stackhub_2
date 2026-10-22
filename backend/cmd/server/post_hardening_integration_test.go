@@ -2,12 +2,12 @@ package main
 
 import (
 	"context"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"stackhub.com/stackhub/internal/testdb"
 	"stackhub.com/stackhub/pkg/db"
 )
 
@@ -18,8 +18,8 @@ import (
 // IsPostAuthor is the whole of the ownership check in uploadImage. If it ever
 // answered true for a stranger, any signed-in user could upload to any post.
 func TestIsPostAuthorIntegration(t *testing.T) {
-	conn := testDB(t)
-	tx := beginRollback(t, conn)
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
 	ctx := context.Background()
 	q := db.New(tx)
 
@@ -48,30 +48,13 @@ func TestIsPostAuthorIntegration(t *testing.T) {
 	}
 }
 
-// migrationUp returns the Up section of a migration file, the way it is pasted
-// into the Supabase SQL editor.
-func migrationUp(t *testing.T, name string) string {
-	t.Helper()
-	raw, err := os.ReadFile("../../db/migrations/" + name)
-	if err != nil {
-		t.Fatalf("read migration: %v", err)
-	}
-	sql := strings.ReplaceAll(string(raw), "\r\n", "\n")
-	start := strings.Index(sql, "-- +goose Up")
-	end := strings.Index(sql, "-- +goose Down")
-	if start < 0 || end < start {
-		t.Fatalf("%s has no goose Up/Down sections", name)
-	}
-	return sql[start:end]
-}
-
 // The backfill has to be right the first time: it runs once, by hand, against
 // production. This applies the real migration file to a Tiptap post and checks
 // the three things it promises — every word lands in content_text exactly once,
 // the search vector picks it up, and nothing else about the post moves.
 func TestBackfillPostContentTextIntegration(t *testing.T) {
-	conn := testDB(t)
-	tx := beginRollback(t, conn)
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
 	ctx := context.Background()
 
 	rows, err := tx.Query(ctx, `SELECT id FROM posts ORDER BY created_at LIMIT 2`)
@@ -119,7 +102,7 @@ func TestBackfillPostContentTextIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := tx.Exec(ctx, migrationUp(t, "20261016120000_backfill_post_content_text.sql")); err != nil {
+	if _, err := tx.Exec(ctx, testdb.MigrationUp(t, "20261016120000_backfill_post_content_text.sql")); err != nil {
 		t.Fatalf("migration failed: %v", err)
 	}
 

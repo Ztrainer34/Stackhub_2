@@ -12,32 +12,23 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/go-chi/jwtauth/v5"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/resend/resend-go/v2"
+	"stackhub.com/stackhub/internal/pg"
+	"stackhub.com/stackhub/internal/storage"
 	"stackhub.com/stackhub/pkg/db"
 	"stackhub.com/stackhub/pkg/mail"
 )
 
+// App is everything the modules depend on, built once at startup. routes()
+// hands each module only the parts it uses. Tests build one around a
+// rollback transaction (db is a pg.TxBeginner) and no mailer or bucket.
 type App struct {
-	bucket             *s3.Client
-	bucketName         *string
-	supabaseProjectRef *string
-	db                 txBeginner
-	queries            *db.Queries
-	mailer             *mail.Mailer
+	bucket  *storage.Bucket
+	db      pg.TxBeginner
+	queries *db.Queries
+	mailer  *mail.Mailer
 }
-
-// txBeginner is all the handlers and services need from the pool: a way to
-// start a transaction. A pgx.Tx satisfies it too (its Begin opens a
-// savepoint), which is how the integration tests run real handlers inside a
-// transaction they roll back.
-type txBeginner interface {
-	Begin(ctx context.Context) (pgx.Tx, error)
-}
-
-// siteURL is the public site origin, used to build links inside emails.
-const siteURL = "https://stackhub.me"
 
 func getEnvOrPanic(key string) string {
 	env, set := os.LookupEnv(key)
@@ -110,12 +101,14 @@ func main() {
 	supabaseProjectRef := getEnvOrPanic("SUPABASE_PROJECT_REF")
 
 	app := App{
-		db:                 pool,
-		queries:            queries,
-		bucket:             bucket,
-		supabaseProjectRef: &supabaseProjectRef,
-		bucketName:         aws.String(getEnvOrPanic("S3_BUCKET_NAME")),
-		mailer:             mailer,
+		db:      pool,
+		queries: queries,
+		bucket: &storage.Bucket{
+			Client:     bucket,
+			Name:       getEnvOrPanic("S3_BUCKET_NAME"),
+			ProjectRef: supabaseProjectRef,
+		},
+		mailer: mailer,
 	}
 
 	err = http.ListenAndServe("localhost:8080", app.routes(tokenAuth))
