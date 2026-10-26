@@ -40,7 +40,6 @@ import NotificationBell from "./notification-bell";
 interface User {
   id: string;
   username: string;
-  email_hash?: string;
 }
 
 interface NavBarContentProps {

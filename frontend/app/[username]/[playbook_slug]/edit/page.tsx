@@ -1,5 +1,3 @@
-"use server";
-
 import { getPost, getPostDraftContent } from "@/lib/post";
 import { notFound, redirect } from "next/navigation";
 import { getServerAuthState } from "@/lib/auth-server";

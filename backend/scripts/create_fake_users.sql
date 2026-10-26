@@ -1,4 +1,12 @@
 -- Script to create fake users and add random likes
+--
+-- LOCAL DATABASES ONLY. Never run this in the production SQL editor: it
+-- creates 100 real, sign-in-able accounts.
+--
+-- Each account gets a random password nobody knows. It used to be the same
+-- committed 'password123' for all of them, which in a public repo made every
+-- one of these accounts loggable-into by anyone through Supabase's password
+-- grant.
 -- This creates 100 fake users, random posts, and random likes
 
 BEGIN;
@@ -18,7 +26,7 @@ BEGIN
         created_at, updated_at, confirmation_token, recovery_token,
         email_change_token_new, email_change
     ) VALUES (
-        new_user_id, user_email, crypt('password123', gen_salt('bf')), NOW(),
+        new_user_id, user_email, crypt(encode(gen_random_bytes(18), 'base64'), gen_salt('bf')), NOW(),
         NOW(), NOW(), '', '', '', ''
     );
     

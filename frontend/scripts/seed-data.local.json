@@ -15,7 +15,6 @@
   "users": [
     {
       "email": "alice@local.test",
-      "password": "Password123!",
       "username": "alice",
       "display_name": "Alice Martin",
       "bio": "Growth marketer. Owns the Clay page for ownership testing.",
@@ -27,7 +26,6 @@
     },
     {
       "email": "bob@local.test",
-      "password": "Password123!",
       "username": "bob",
       "display_name": "Bob Chen",
       "bio": "Second account — follow this one to test the feed and follow button.",

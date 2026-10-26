@@ -9,7 +9,6 @@ SELECT
   location,
   linkedin,
   twitter,
-  email_hash,
   avatar_url,
   created_at,
   updated_at
@@ -30,7 +29,6 @@ SELECT
   location,
   linkedin,
   twitter,
-  email_hash,
   avatar_url,
   created_at,
   updated_at
@@ -53,18 +51,17 @@ SELECT
   location,
   linkedin,
   twitter,
-  email_hash,
   avatar_url,
   created_at,
   updated_at,
   EXISTS(
     SELECT 1 FROM user_follows uf
-    WHERE uf.follower_id = $2 AND uf.followee_id = profiles.id
+    WHERE uf.follower_id = sqlc.arg(viewer_id) AND uf.followee_id = profiles.id
   ) AS is_following
 FROM
   profiles
 WHERE
-  username = $1;
+  username = sqlc.arg(username);
 
 -- name: CreateProfile :one
 INSERT INTO profiles (
@@ -94,17 +91,35 @@ SET
 WHERE id = $1;
 
 -- name: GetPost :one
+-- Visible to everyone once published; otherwise only to its author. viewer_id
+-- is the zero UUID for anonymous callers, which matches no author.
 SELECT *
 FROM posts_with_tools_and_tickets
-WHERE id = $1;
+WHERE id = sqlc.arg(id) AND (is_published OR author_id = sqlc.arg(viewer_id));
 
 -- name: GetPostContent :one
+-- Same rule as GetPost. Unpublishing leaves `content` in place, so without the
+-- check an unpublished post's text stayed readable by id.
 SELECT id, content FROM posts
-WHERE id = $1 LIMIT 1;
+WHERE id = sqlc.arg(id) AND (is_published OR author_id = sqlc.arg(viewer_id))
+LIMIT 1;
+
+-- name: IsPostVisible :one
+-- Whether a viewer may see — and so star or comment on — a post.
+SELECT EXISTS (
+  SELECT 1 FROM posts
+  WHERE id = sqlc.arg(post_id) AND (is_published OR author_id = sqlc.arg(viewer_id))
+);
 
 -- name: GetPostDraftContent :one
 SELECT id, draft_content FROM posts
 WHERE id = $1 AND author_id = sqlc.arg(authenticated_id) LIMIT 1;
+
+-- name: IsPostAuthor :one
+SELECT EXISTS (
+  SELECT 1 FROM posts
+  WHERE id = sqlc.arg(post_id) AND author_id = sqlc.arg(author_id)
+);
 
 -- name: ListPosts :many
 SELECT id, name, description FROM posts
@@ -238,9 +253,12 @@ history_insert AS (
   WHERE old_post.slug != post_update.slug
   RETURNING post_id
 )
+-- Scoped to the rename having happened: without the EXISTS, a caller who does
+-- not own the post still rewrote its history rows.
 UPDATE post_slug_history AS h
 SET current_slug = $4
-WHERE h.post_id = $1 AND h.current_slug != $4;
+WHERE h.post_id = $1 AND h.current_slug != $4
+  AND EXISTS (SELECT 1 FROM post_update);
 
 -- name: DeletePost :execrows
 DELETE FROM posts
@@ -407,7 +425,6 @@ SELECT
   p.id,
   p.username,
   p.display_name,
-  p.email_hash,
   p.avatar_url,
   p.created_at,
   p.updated_at,
@@ -674,12 +691,17 @@ LEFT JOIN
 LEFT JOIN
   categories c ON ttc.category_id = c.id
 WHERE
-  ($1::text = '' OR tt.status = $1::text)
+  (sqlc.arg(status)::text = '' OR tt.status = sqlc.arg(status)::text)
 GROUP BY
   tt.id, p.name, p.slug, requester.username, resolver.username
 ORDER BY
   tt.created_at DESC
-LIMIT $2 OFFSET $3;
+LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
+
+-- name: ToolExists :one
+-- tool_tickets.resolved_tool_id has no foreign key, so resolving a ticket with
+-- an existing tool checks this first.
+SELECT EXISTS (SELECT 1 FROM tools WHERE id = $1);
 
 -- name: GetToolTicket :one
 SELECT
@@ -725,7 +747,7 @@ WHERE
 GROUP BY
   tt.id, p.name, p.slug, requester.username, resolver.username;
 
--- name: ResolveToolTicketWithExisting :exec
+-- name: ResolveToolTicketWithExisting :execrows
 UPDATE tool_tickets
 SET
   status = 'resolved',
@@ -733,9 +755,12 @@ SET
   resolved_by = $3,
   resolved_at = now(),
   updated_at = now()
-WHERE id = $1;
+-- "resolved" is final. Without this, rejecting a resolved ticket and resolving
+-- it again re-sent the requester's "tool approved" email each cycle, and two
+-- concurrent resolves both succeeded. Zero rows means the caller answers 409.
+WHERE id = $1 AND status <> 'resolved';
 
--- name: ResolveToolTicketWithNew :exec
+-- name: ResolveToolTicketWithNew :execrows
 UPDATE tool_tickets
 SET
   status = 'resolved',
@@ -743,16 +768,22 @@ SET
   resolved_by = $3,
   resolved_at = now(),
   updated_at = now()
-WHERE id = $1;
+-- "resolved" is final. Without this, rejecting a resolved ticket and resolving
+-- it again re-sent the requester's "tool approved" email each cycle, and two
+-- concurrent resolves both succeeded. Zero rows means the caller answers 409.
+WHERE id = $1 AND status <> 'resolved';
 
--- name: RejectToolTicket :exec
+-- name: RejectToolTicket :execrows
 UPDATE tool_tickets
 SET
   status = 'rejected',
   resolved_by = $2,
   resolved_at = now(),
   updated_at = now()
-WHERE id = $1;
+-- "resolved" is final. Without this, rejecting a resolved ticket and resolving
+-- it again re-sent the requester's "tool approved" email each cycle, and two
+-- concurrent resolves both succeeded. Zero rows means the caller answers 409.
+WHERE id = $1 AND status <> 'resolved';
 
 -- name: AddPostToolSafe :exec
 INSERT INTO post_tools (post_id, tool_id)
@@ -964,7 +995,8 @@ ORDER BY
   cosine_similarity DESC
 LIMIT $2;
 
--- name: FollowUser :exec
+-- name: FollowUser :execrows
+-- Returns 0 when already following, so the caller only notifies on a new follow.
 INSERT INTO user_follows (follower_id, followee_id)
 VALUES ($1, $2)
 ON CONFLICT (follower_id, followee_id) DO NOTHING;
@@ -992,7 +1024,6 @@ SELECT
   p.username,
   p.display_name,
   p.bio,
-  p.email_hash,
   p.avatar_url,
   (sqlc.arg(is_authenticated)::bool AND EXISTS(
     SELECT 1 FROM user_follows uf2
@@ -1011,7 +1042,6 @@ SELECT
   p.username,
   p.display_name,
   p.bio,
-  p.email_hash,
   p.avatar_url,
   (sqlc.arg(is_authenticated)::bool AND EXISTS(
     SELECT 1 FROM user_follows uf2
@@ -1025,16 +1055,25 @@ ORDER BY p.username
 LIMIT sqlc.arg(lim) OFFSET sqlc.arg(off);
 
 -- name: CreateNotification :execrows
+-- At most one notification per (recipient, actor, type, entity) per hour; the
+-- caller emails only when a row was inserted. entity_id is NULL for follows
+-- and standalone tool suggestions, and `entity_id = $4` is never true for
+-- NULL, so the dedup used to pass every time — one email per request.
 INSERT INTO notifications (recipient_id, actor_id, type, entity_id, entity_type, title, message)
 SELECT $1, $2, $3, $4, $5, $6, $7
 WHERE NOT EXISTS (
   SELECT 1 FROM notifications
   WHERE recipient_id = $1
-  AND actor_id = $2
+  AND actor_id IS NOT DISTINCT FROM $2
   AND type = $3
-  AND entity_id = $4
+  AND entity_id IS NOT DISTINCT FROM $4
   AND created_at > NOW() - INTERVAL '1 hour'
 );
+
+-- name: GetEmailHashByUsername :one
+-- Only for the server-side Gravatar proxy. The hash is an unsalted SHA-256 of
+-- the email, so it must never be sent to a client.
+SELECT email_hash FROM profiles WHERE username = $1;
 
 -- name: GetUserEmail :one
 SELECT email::text FROM auth.users WHERE id = $1;
@@ -1183,9 +1222,21 @@ WITH followed_users AS (
 SELECT
   r.kind, r.reason, r.tier, r.occurred_at,
   r.actor_id, actor.username AS actor_username,
-  r.post_id, p.name AS post_name, p.slug AS post_slug, p.type AS post_type, p.description AS post_description,
+  -- sqlc infers a UNION column's type and nullability from the FIRST branch
+  -- only. Read straight from `r`, post_id came out as interface{} (a UUID then
+  -- serialises as a byte array) and notification_message as a non-null string
+  -- (every post row is NULL there, so the scan fails and /feed 500s).
+  --   post_id: taken from the LEFT JOIN, which sqlc knows is nullable. Same
+  --     value, except a notification about a since-deleted post now gives
+  --     NULL rather than a dangling id; the frontend only uses it in a key.
+  --   notification_message: sqlc v1.21 cannot be talked out of `string` here
+  --     (NULLIF comes out as bool, COALESCE as string). A CASE is typed
+  --     interface{}, which pgx fills with a string or nil, so the JSON is
+  --     still a string or null. Values unchanged: post rows were NULL already.
+  p.id AS post_id,
+  p.name AS post_name, p.slug AS post_slug, p.type AS post_type, p.description AS post_description,
   r.tool_id, t.name AS tool_name, t.logo_url AS tool_logo_url,
-  r.notification_message,
+  CASE WHEN r.kind = 'notification' THEN r.notification_message END AS notification_message,
   COUNT(*) OVER() AS total_count
 FROM ranked r
 JOIN profiles actor ON actor.id = r.actor_id
@@ -1193,7 +1244,7 @@ LEFT JOIN posts p ON p.id = r.post_id
 LEFT JOIN tools t ON t.id = r.tool_id
 WHERE r.rn = 1
   -- A feed is what other people did; your own activity is not news to you.
-  AND r.actor_id <> sqlc.arg(viewer_id)
+  AND r.actor_id <> sqlc.arg(viewer_id)::uuid
 -- 0 for the last 3 days, 1 for everything older: the outermost sort key, so a
 -- fresh event of any tier outranks a stale one of every tier.
 ORDER BY (r.occurred_at < now() - interval '3 days')::int, r.tier, r.occurred_at DESC
@@ -1269,12 +1320,17 @@ WHERE id = $1;
 -- name: GetToolVendorID :one
 SELECT vendor_id FROM tools WHERE id = $1;
 
+-- name: CountToolsUsingVendor :one
+-- A vendors row can be shared between tools. A page owner may only edit a row
+-- no other tool uses; otherwise they would rewrite another tool's vendor card.
+SELECT COUNT(*) FROM tools WHERE vendor_id = $1;
+
 -- name: CreateVendorForTool :one
 -- Tools imported without vendor details have no vendors row at all; the owner
 -- filling in the vendor card is what creates one.
 INSERT INTO vendors (name)
-SELECT name FROM tools WHERE id = $1
-RETURNING id;
+SELECT t.name FROM tools t WHERE t.id = $1
+RETURNING vendors.id;
 
 -- name: SetToolVendor :exec
 UPDATE tools SET vendor_id = $2, updated_at = now() WHERE id = $1;
@@ -1295,7 +1351,7 @@ DELETE FROM tool_categories WHERE tool_id = $1;
 
 -- name: AddToolCategories :exec
 INSERT INTO tool_categories (tool_id, category_id)
-SELECT $1, unnest($2::int[])
+SELECT sqlc.arg(tool_id)::uuid, unnest(sqlc.arg(category_ids)::int[])
 ON CONFLICT DO NOTHING;
 
 -- name: GetTrendingPlaybooksForUser :many

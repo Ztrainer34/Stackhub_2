@@ -29,14 +29,21 @@ const APPLY = process.env.APPLY === "1";
 const IN = process.env.IN || "scripts/creators.json";
 const COUNT = parseInt(process.env.COUNT || "5", 10);
 const OFFSET = parseInt(process.env.OFFSET || "0", 10);
-const BASE_EMAIL = process.env.BASE_EMAIL || "123automax123@gmail.com";
+// The inbox every unclaimed creator account is aliased to, so whoever holds it
+// can sign in as any of them. Required, with no default: a real address in a
+// public repo tells an attacker exactly which mailbox to go after.
+const BASE_EMAIL = process.env.BASE_EMAIL;
+if (!BASE_EMAIL || !BASE_EMAIL.includes("@")) {
+  console.error("Set BASE_EMAIL to the inbox the creator accounts are aliased to.");
+  process.exit(1);
+}
 const MISSING_FILE = "scripts/creators-missing-tools.txt";
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
-/** 123automax123@gmail.com + "alexvacca" -> 123automax123+alexvacca@gmail.com */
+/** owner@example.com + "alexvacca" -> owner+alexvacca@example.com */
 function aliasFor(username) {
   const [local, domain] = BASE_EMAIL.split("@");
   return `${local.split("+")[0]}+${username}@${domain}`;

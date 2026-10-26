@@ -19,6 +19,8 @@ import { Label } from "@/components/ui/label";
 import { AvatarEditor } from "./avatar-editor";
 import { useAuth } from "@/lib/queries/use-auth";
 import { useUpdateProfile } from "@/lib/queries/use-profile-actions";
+import { usernameProblem } from "@/lib/username";
+import { toast } from "sonner";
 import { createClient } from "@/utils/supabase/client";
 
 export function ProfileTab() {
@@ -67,6 +69,12 @@ export function ProfileTab() {
     } = {};
 
     if (username && username !== user.username) {
+      // Checked here so the reason is shown; the server enforces the same rule.
+      const problem = usernameProblem(username);
+      if (problem) {
+        toast.error(problem);
+        return;
+      }
       updates.username = username;
     }
 
