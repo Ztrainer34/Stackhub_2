@@ -31,7 +31,7 @@ async function LandingPage() {
             </h1>
 
             <p className="text-xl text-muted-foreground max-w-2xl leading-relaxed">
-              Explore how GTMs, marketers and sales make the most of modern tools.
+              Show and tell for GTMs
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md">
