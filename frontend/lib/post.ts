@@ -13,6 +13,21 @@ export interface PostTool {
 // playbook now simply is. Existing combos were reclassified by migration.
 export type PostType = "playbook" | "comparison"
 
+// The post's `description` is called its "goal" everywhere it is edited: the
+// creation form and the rename dialog share this wording and limit.
+export const MAX_GOAL_LENGTH = 500;
+
+export const goalPlaceholders = {
+  playbook:
+    "e.g. Know from which company your website visitors come from thanks to Hubspot",
+  comparison:
+    "e.g. Decide whether HubSpot or Pipedrive is the better CRM for a small sales team",
+} as const satisfies Record<PostType, string>;
+
+export function goalLabel(type: PostType): string {
+  return `Goal of this ${type.charAt(0).toUpperCase() + type.slice(1)}`;
+}
+
 export interface Post {
   id: string;
   type: PostType;

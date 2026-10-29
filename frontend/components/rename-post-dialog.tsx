@@ -7,8 +7,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { GoalCounter } from "@/components/goal-counter";
 import { Edit, Loader2, AlertTriangle } from "lucide-react";
-import { renamePost } from "@/lib/post";
+import { renamePost, MAX_GOAL_LENGTH, goalLabel, goalPlaceholders } from "@/lib/post";
 import { createClient } from "@/utils/supabase/client";
 import type { Post } from "@/lib/post";
 
@@ -54,6 +55,11 @@ export function RenamePostDialog({ post }: RenamePostDialogProps) {
       return;
     }
 
+    if (description.trim().length > MAX_GOAL_LENGTH) {
+      setError(`Goal must be at most ${MAX_GOAL_LENGTH} characters long.`);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
@@ -96,16 +102,16 @@ export function RenamePostDialog({ post }: RenamePostDialogProps) {
           variant="ghost" 
           size="sm"
           className="h-8 w-8 p-0 text-muted-foreground/40 hover:text-muted-foreground transition-colors"
-          title="Rename post"
+          title="Edit Title and Goal"
         >
           <Edit className="h-4 w-4" />
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Rename post</DialogTitle>
+          <DialogTitle>Edit Title and Goal</DialogTitle>
           <DialogDescription>
-            Update the title and description of your post. The URL will automatically update if you change the title.
+            Update the title and goal of your post. The URL will automatically update if you change the title.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -120,15 +126,19 @@ export function RenamePostDialog({ post }: RenamePostDialogProps) {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
+            <Label htmlFor="description">{goalLabel(post.type)}</Label>
+            <p className="text-sm text-muted-foreground">
+              Great goals are short and self-explanatory
+            </p>
             <Textarea
               id="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Enter post description"
+              placeholder={goalPlaceholders[post.type]}
               rows={3}
               disabled={isLoading}
             />
+            <GoalCounter length={description.trim().length} />
           </div>
 
           {/* URL Change Warning */}
