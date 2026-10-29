@@ -74,6 +74,7 @@ import "@/components/tiptap-templates/simple/simple-editor.scss"
 import { Post, renamePost } from "@/lib/post"
 import { createClient } from "@/utils/supabase/client"
 import { useRouter } from "next/navigation"
+import { PostTools } from "@/components/post-tools"
 import { toast } from "sonner"
 
 const MainToolbarContent = ({
@@ -428,6 +429,11 @@ export default function Editor({
             spellCheck={false}
             aria-label="Playbook title"
           />
+        </div>
+
+        {/* Same column as the title and content: 648px wide, 3rem gutters. */}
+        <div className="mx-auto w-full max-w-[648px] px-12 pt-6 max-[480px]:px-6">
+          <PostTools tools={post.tools} type={post.type} />
         </div>
 
         <EditorContent
