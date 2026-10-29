@@ -61,7 +61,7 @@ export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
     if (isInStack) {
       removeFromStackMutation.mutate(tool.id, {
         onError: () => {
-          toast.error("Error", {
+          toast.error("Something went wrong", {
             description: "Failed to remove from stack. Please try again.",
           });
         },
@@ -69,7 +69,7 @@ export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
     } else {
       addToStackMutation.mutate(tool.id, {
         onError: () => {
-          toast.error("Error", {
+          toast.error("Something went wrong", {
             description: "Failed to add to stack. Please try again.",
           });
         },
@@ -91,7 +91,7 @@ export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
     if (isInWatchlist) {
       removeFromWatchlistMutation.mutate(tool.id, {
         onError: () => {
-          toast.error("Error", {
+          toast.error("Something went wrong", {
             description: "Failed to remove from watchlist. Please try again.",
           });
         },
@@ -99,7 +99,7 @@ export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
     } else {
       addToWatchlistMutation.mutate(tool.id, {
         onError: () => {
-          toast.error("Error", {
+          toast.error("Something went wrong", {
             description: "Failed to add to watchlist. Please try again.",
           });
         },
@@ -121,7 +121,7 @@ export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
     if (isInOldStack) {
       removeFromOldStackMutation.mutate(tool.id, {
         onError: () => {
-          toast.error("Error", {
+          toast.error("Something went wrong", {
             description: "Failed to remove from old stack. Please try again.",
           });
         },
@@ -129,7 +129,7 @@ export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
     } else {
       addToOldStackMutation.mutate(tool.id, {
         onError: () => {
-          toast.error("Error", {
+          toast.error("Something went wrong", {
             description: "Failed to add to old stack. Please try again.",
           });
         },
@@ -151,7 +151,7 @@ export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
     if (isFollowed) {
       unfollowToolMutation.mutate(tool.id, {
         onError: () => {
-          toast.error("Error", {
+          toast.error("Something went wrong", {
             description: "Failed to unfollow. Please try again.",
           });
         },
@@ -159,7 +159,7 @@ export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
     } else {
       followToolMutation.mutate(tool.id, {
         onError: () => {
-          toast.error("Error", {
+          toast.error("Something went wrong", {
             description: "Failed to follow. Please try again.",
           });
         },
@@ -202,7 +202,7 @@ export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
           disabled={isOldStackPending}
           variant={isInOldStack ? "default" : "ghost"}
           className="h-7 w-7 p-0"
-          title={isInOldStack ? "Remove from Old Stack" : "Move to Old Stack"}
+          title={isInOldStack ? "Remove from old stack" : "Move to old stack"}
         >
           <Archive className="w-3 h-3" />
         </Button>
@@ -212,7 +212,7 @@ export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
           disabled={isWatchlistPending}
           variant={isInWatchlist ? "default" : "ghost"}
           className="h-7 w-7 p-0"
-          title={isInWatchlist ? "Remove from Saved for later" : "Save for later"}
+          title={isInWatchlist ? "Remove from saved for later" : "Save for later"}
         >
           <Bookmark className="w-3 h-3" />
         </Button>
@@ -232,7 +232,7 @@ export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
         <div className="flex items-center gap-2 w-full">
           {isInStack ? <Check className="w-4 h-4" /> : <Layers className="w-4 h-4" />}
           <span>
-            {isInStack ? "In Stack" : "Add to Stack"}
+            {isInStack ? "In stack" : "Add to stack"}
           </span>
         </div>
       </Button>
@@ -245,7 +245,7 @@ export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
       >
         <div className="flex items-center gap-2 w-full">
           {isInOldStack ? <Check className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
-          <span>{isInOldStack ? "In Old Stack" : "Move to Old Stack"}</span>
+          <span>{isInOldStack ? "In old stack" : "Move to old stack"}</span>
         </div>
       </Button>
       <Button

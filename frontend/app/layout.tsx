@@ -19,7 +19,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Stackhub",
+  title: "StackHub",
   description: "Show and Tell for Marketeers",
 };
 

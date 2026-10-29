@@ -81,7 +81,7 @@ export function OnboardingModal() {
           setStep("focus");
         },
         onError: (error) =>
-          toast.error("Error", {
+          toast.error("Something went wrong", {
             description:
               error instanceof Error ? error.message : "Failed to complete onboarding",
           }),
@@ -103,7 +103,7 @@ export function OnboardingModal() {
       router.push(destination);
       router.refresh();
     } catch (error) {
-      toast.error("Error", {
+      toast.error("Something went wrong", {
         description:
           error instanceof Error ? error.message : "Could not save your choices",
       });

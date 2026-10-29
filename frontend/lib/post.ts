@@ -1,5 +1,6 @@
 import { fetchApi, fetchApiAuthenticated } from "./api";
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { apiPath } from "@/lib/api-path";
 
 export interface PostTool {
   id: string;
@@ -8,7 +9,24 @@ export interface PostTool {
   is_ticket: boolean;
 }
 
-export type PostType = "playbook" | "combo" | "comparison"
+// "combo" was removed: it meant a playbook about several tools, which a
+// playbook now simply is. Existing combos were reclassified by migration.
+export type PostType = "playbook" | "comparison"
+
+// The post's `description` is called its "goal" everywhere it is edited: the
+// creation form and the rename dialog share this wording and limit.
+export const MAX_GOAL_LENGTH = 500;
+
+export const goalPlaceholders = {
+  playbook:
+    "e.g. Know from which company your website visitors come from thanks to Hubspot",
+  comparison:
+    "e.g. Decide whether HubSpot or Pipedrive is the better CRM for a small sales team",
+} as const satisfies Record<PostType, string>;
+
+export function goalLabel(type: PostType): string {
+  return `Goal of this ${type.charAt(0).toUpperCase() + type.slice(1)}`;
+}
 
 export interface Post {
   id: string;
@@ -39,7 +57,6 @@ export interface PaginatedPostsResponse {
 export interface PostTypeCounts {
   all_count: number;
   playbook_count: number;
-  combo_count: number;
   comparison_count: number;
 }
 
@@ -105,8 +122,8 @@ export async function getPost(
   supabaseClient?: SupabaseClient
 ): Promise<Post> {
   const resp = supabaseClient 
-    ? await fetchApiAuthenticated(supabaseClient, `/user/${username}/posts/${postSlug}`)
-    : await fetchApi(`/user/${username}/posts/${postSlug}`);
+    ? await fetchApiAuthenticated(supabaseClient, apiPath`/user/${username}/posts/${postSlug}`)
+    : await fetchApi(apiPath`/user/${username}/posts/${postSlug}`);
 
   if (!resp.ok) throw new Error("Could not get post");
 
@@ -120,8 +137,8 @@ export async function getPostWithRedirectInfo(
   supabaseClient?: SupabaseClient
 ): Promise<PostResponse> {
   const resp = supabaseClient 
-    ? await fetchApiAuthenticated(supabaseClient, `/user/${username}/posts/${postSlug}`)
-    : await fetchApi(`/user/${username}/posts/${postSlug}`);
+    ? await fetchApiAuthenticated(supabaseClient, apiPath`/user/${username}/posts/${postSlug}`)
+    : await fetchApi(apiPath`/user/${username}/posts/${postSlug}`);
 
   if (!resp.ok) throw new Error("Could not get post");
 
@@ -129,7 +146,7 @@ export async function getPostWithRedirectInfo(
 }
 
 export async function getPostContent(postId: string): Promise<string | null> {
-  const resp = await fetchApi(`/post/${postId}/content`);
+  const resp = await fetchApi(apiPath`/post/${postId}/content`);
 
   // Special no-content status
   if (resp.status === 204) return null;
@@ -140,7 +157,7 @@ export async function getPostContent(postId: string): Promise<string | null> {
 }
 
 export async function getPostDraftContent(postId: string, supabaseClient: SupabaseClient): Promise<string> {
-  const resp = await fetchApiAuthenticated(supabaseClient, `/post/${postId}/draft`);
+  const resp = await fetchApiAuthenticated(supabaseClient, apiPath`/post/${postId}/draft`);
 
   if (!resp.ok) throw new Error("Could not get draft content");
 
@@ -148,7 +165,7 @@ export async function getPostDraftContent(postId: string, supabaseClient: Supaba
 }
 
 export async function listUserPosts(username: string, page: number = 1, limit: number = 20, postType: PostType | "" = "", supabaseClient: SupabaseClient): Promise<PaginatedPostsResponse> {
-  const resp = await fetchApiAuthenticated(supabaseClient, `/user/${username}/posts?page=${page}&limit=${limit}&type=${postType}`);
+  const resp = await fetchApiAuthenticated(supabaseClient, apiPath`/user/${username}/posts?page=${page}&limit=${limit}&type=${postType}`);
 
   if (!resp.ok) throw new Error("Failed to get user posts");
 
@@ -163,7 +180,7 @@ export interface PostCounts {
 }
 
 export async function getUserPostCounts(username: string, postType: PostType | "" = "", supabaseClient: SupabaseClient): Promise<PostCounts> {
-  const resp = await fetchApiAuthenticated(supabaseClient, `/user/${username}/post-counts?type=${postType}`);
+  const resp = await fetchApiAuthenticated(supabaseClient, apiPath`/user/${username}/post-counts?type=${postType}`);
 
   if (!resp.ok) throw new Error("Failed to get post counts");
 
@@ -171,7 +188,7 @@ export async function getUserPostCounts(username: string, postType: PostType | "
 }
 
 export async function listUserPostsByStatus(username: string, status: "waiting" | "rejected" | "all", postType: PostType | "" = "", page: number = 1, limit: number = 20, supabaseClient: SupabaseClient): Promise<PaginatedPostsResponse> {
-  const resp = await fetchApiAuthenticated(supabaseClient, `/user/${username}/approval-posts?status=${status}&type=${postType}&page=${page}&limit=${limit}`);
+  const resp = await fetchApiAuthenticated(supabaseClient, apiPath`/user/${username}/approval-posts?status=${status}&type=${postType}&page=${page}&limit=${limit}`);
 
   if (!resp.ok) throw new Error("Failed to get posts");
 
@@ -179,7 +196,7 @@ export async function listUserPostsByStatus(username: string, status: "waiting" 
 }
 
 export async function listUserStarredPosts(username: string, page: number = 1, limit: number = 20, supabaseClient: SupabaseClient): Promise<PaginatedPostsResponse> {
-  const resp = await fetchApiAuthenticated(supabaseClient, `/user/${username}/starred?page=${page}&limit=${limit}`);
+  const resp = await fetchApiAuthenticated(supabaseClient, apiPath`/user/${username}/starred?page=${page}&limit=${limit}`);
 
   if (!resp.ok) throw new Error("Failed to list user stared posts");
 
@@ -222,7 +239,7 @@ export async function listPosts(): Promise<Post[] | null> {
 export async function listPostComments(
   postId: string
 ): Promise<PostComment[] | null> {
-  const resp = await fetchApi(`/post/${postId}/comment`);
+  const resp = await fetchApi(apiPath`/post/${postId}/comment`);
 
   if (!resp.ok) throw new Error("Failed to retrieve comments");
 
@@ -234,7 +251,7 @@ export async function createPostComment(
   content: string,
   supabaseClient: SupabaseClient,
 ): Promise<void> {
-  const resp = await fetchApiAuthenticated(supabaseClient, `/post/${postId}/comment`);
+  const resp = await fetchApiAuthenticated(supabaseClient, apiPath`/post/${postId}/comment`);
   if (!resp.ok) throw new Error("Failed to create comment")
 }
 
@@ -270,7 +287,7 @@ export async function uploadPostmedia(postId: string, file: File, supabaseClient
   const formData = new FormData();
   formData.append('image', file);
 
-  const resp = await fetchApiAuthenticated(supabaseClient, `/post/${postId}/upload`, {
+  const resp = await fetchApiAuthenticated(supabaseClient, apiPath`/post/${postId}/upload`, {
     method: "POST",
     body: formData,
   });
@@ -281,7 +298,7 @@ export async function uploadPostmedia(postId: string, file: File, supabaseClient
 }
 
 export async function starPost(supabaseClient: SupabaseClient, postId: string): Promise<void> {
-  const response = await fetchApiAuthenticated(supabaseClient, `/post/${postId}/star`, {
+  const response = await fetchApiAuthenticated(supabaseClient, apiPath`/post/${postId}/star`, {
     method: "PUT",
   });
 
@@ -289,7 +306,7 @@ export async function starPost(supabaseClient: SupabaseClient, postId: string): 
 }
 
 export async function unstarPost(supabaseClient: SupabaseClient, postId: string): Promise<void> {
-  const response = await fetchApiAuthenticated(supabaseClient, `/post/${postId}/star`, {
+  const response = await fetchApiAuthenticated(supabaseClient, apiPath`/post/${postId}/star`, {
     method: "DELETE",
   });
 
@@ -310,7 +327,7 @@ export async function renamePost(
   postId: string, 
   data: RenamePostData
 ): Promise<RenamePostResponse> {
-  const response = await fetchApiAuthenticated(supabaseClient, `/post/${postId}/rename`, {
+  const response = await fetchApiAuthenticated(supabaseClient, apiPath`/post/${postId}/rename`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
@@ -330,7 +347,7 @@ export async function publishPost(
   supabaseClient: SupabaseClient, 
   postId: string, 
 ) {
-  const response = await fetchApiAuthenticated(supabaseClient, `/post/${postId}/publish`, {
+  const response = await fetchApiAuthenticated(supabaseClient, apiPath`/post/${postId}/publish`, {
     method: "POST",
   });
   if (!response.ok) {
@@ -342,7 +359,10 @@ export async function unpublishPost(
   supabaseClient: SupabaseClient, 
   postId: string, 
 ) {
-  const response = await fetchApiAuthenticated(supabaseClient, `/post/${postId}/unpublish`)
+  // POST: the backend no longer accepts a GET for a state change.
+  const response = await fetchApiAuthenticated(supabaseClient, apiPath`/post/${postId}/unpublish`, {
+    method: "POST",
+  })
 
   if (!response.ok) {
     throw new Error("Failed to unpublish post");
@@ -353,7 +373,7 @@ export async function deletePost(
   supabaseClient: SupabaseClient, 
   postId: string, 
 ) {
-  const response = await fetchApiAuthenticated(supabaseClient, `/post/${postId}`, {
+  const response = await fetchApiAuthenticated(supabaseClient, apiPath`/post/${postId}`, {
     method: "DELETE",
   })
 

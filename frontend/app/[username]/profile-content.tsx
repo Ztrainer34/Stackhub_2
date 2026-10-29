@@ -111,7 +111,6 @@ const SearchBar = ({
 function tabNameToPostType(tab: string): PostType | "" {
   switch (tab) {
     case "playbooks": return "playbook";
-    case "combos": return "combo";
     case "comparisons": return "comparison";
     default: return "";
   }
@@ -133,7 +132,7 @@ export default function ProfileContent({
   >([]);
   const limit = 12;
 
-  // Content tabs (playbooks / combos / comparisons) share the post list +
+  // Content tabs (playbooks / comparisons) share the post list +
   // secondary status filters. Overview / stack / starred have their own layout.
   const isContentTab =
     activeTab !== "starred" &&

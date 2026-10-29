@@ -1,5 +1,3 @@
-"use server";
-
 import VisitorActions from "./VisitorActions";
 import Link from "next/link";
 import { getPostWithRedirectInfo, getPostContent, getPostDraftContent } from "@/lib/post";
@@ -16,6 +14,7 @@ import ContentViewer from "./ContentViewer";
 import { to } from "@/lib/error-handling";
 import { RenamePostDialog } from "@/components/rename-post-dialog";
 import PostActionsMenu from "@/components/post-actions-menu";
+import { PostTools } from "@/components/post-tools";
 import type { Metadata } from "next";
 
 export async function generateMetadata({
@@ -163,6 +162,8 @@ export default async function PlaybookPage({
           <div className="flex">
             <Badge variant="outline" className="p-2">{post.type}</Badge>
           </div>
+
+          <PostTools tools={post.tools} type={post.type} />
 
           <Separator />
 
