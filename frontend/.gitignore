@@ -46,3 +46,10 @@ scripts/import-skipped.txt
 scripts/import-new.txt
 scripts/g2-done.json
 scripts/g2-done.json.bak
+
+# Tool lists (source CSVs and export-catalog.mjs output) stay local
+scripts/*.csv
+scripts/catalog-export.json
+scripts/stackhub-tools-categories.json
+# tool-enricher / tool-enrichment-verifier working files
+scripts/enrichment/

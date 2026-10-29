@@ -2,6 +2,9 @@
  * Seed script: creates predefined users (email; random, never-shown password), tools and playbooks
  * from a JSON file. See scripts/seed-data.example.json for the format.
  *
+ * A tool name that several catalog tools share is refused unless the file pins
+ * it: "tool_ids": { "Gemini": "<tool uuid>" } (top level, next to "users").
+ *
  * Users are created through the Supabase Admin API (they need a real auth.users
  * row for login), then their profile / tools / posts are inserted directly.
  * The service-role key bypasses RLS.
@@ -233,19 +236,47 @@ async function main() {
   // Tools are LOOKUP-ONLY: we never create them, so seeded content always links
   // to the real catalog tools (with vendor info). If a name isn't found it's
   // reported and skipped. Cache lookups to avoid repeat queries.
-  const toolCache = {};
+  //
+  // Some names exist more than once as different products ("Gemini" is both
+  // Google's model and a crypto exchange). Picking one would silently link the
+  // wrong tool, so an ambiguous name is refused unless the data file's
+  // `tool_ids` map ({ "Gemini": "<tool id>" }) says which row is meant.
+  // Maps, not plain objects: a tool called "Constructor" must not hit
+  // Object.prototype.constructor.
+  const toolCache = new Map();
+  const ambiguous = new Set();
+  const pinned = new Map(
+    Object.entries(data.tool_ids ?? {}).map(([name, id]) => [name.toLowerCase(), id])
+  );
+  // ilike treats % and _ as wildcards, and PostgREST also turns * into %, with
+  // no escape for it. So the pattern only narrows the candidates (\ % _ escaped,
+  // * as a one-character wildcard), and the exact match is decided here.
+  const pattern = (s) => String(s).replace(/[\\%_]/g, "\\$&").replace(/\*/g, "_");
   const resolveToolId = async (name) => {
     const key = String(name).toLowerCase();
-    if (key in toolCache) return toolCache[key];
-    const { data } = await supabase
-      .from("tools")
-      .select("id")
-      .ilike("name", name)
-      .limit(1)
-      .maybeSingle();
-    toolCache[key] = data?.id ?? null;
-    return toolCache[key];
+    if (toolCache.has(key)) return toolCache.get(key);
+    if (pinned.has(key)) {
+      const { data: row, error } = await supabase.from("tools").select("id,name").eq("id", pinned.get(key)).maybeSingle();
+      if (error && !/uuid/i.test(error.message)) throw new Error(`looking up tool_ids["${name}"]: ${error.message}`);
+      if (!row) console.error(`    ✗ tool_ids["${name}"] = ${pinned.get(key)} is not a tool`);
+      else if (row.name.toLowerCase() !== key) console.log(`    • tool_ids["${name}"] links "${row.name}"`);
+      toolCache.set(key, row?.id ?? null);
+      return toolCache.get(key);
+    }
+    const { data: rows, error } = await supabase.from("tools").select("id,name").ilike("name", pattern(name)).limit(50);
+    // A failed request is not "no such tool": stop rather than cache a miss.
+    if (error) throw new Error(`looking up tool "${name}": ${error.message}`);
+    const exact = (rows ?? []).filter((r) => r.name.toLowerCase() === key);
+    if (exact.length > 1) {
+      ambiguous.add(key);
+      console.error(`    ✗ "${name}" is the name of several tools — add it to tool_ids in the data file to pick one`);
+      toolCache.set(key, null);
+      return null;
+    }
+    toolCache.set(key, exact[0]?.id ?? null);
+    return toolCache.get(key);
   };
+  const notFound = (name) => (ambiguous.has(String(name).toLowerCase()) ? "ambiguous tool" : "unknown tool");
 
   for (const u of users) {
     const userId = usernameToId[String(u.username).toLowerCase()];
@@ -276,7 +307,7 @@ async function main() {
       for (const name of names ?? []) {
         const toolId = await resolveToolId(name);
         if (!toolId) {
-          console.error(`    ✗ ${table} for ${u.username}: unknown tool ${name}`);
+          console.error(`    ✗ ${table} for ${u.username}: ${notFound(name)} ${name}`);
           continue;
         }
         const row = { profile_id: userId, tool_id: toolId };
@@ -300,7 +331,7 @@ async function main() {
     for (const name of u.followed_tools ?? []) {
       const toolId = await resolveToolId(name);
       if (!toolId) {
-        console.error(`    ✗ tool_follows for ${u.username}: unknown tool ${name}`);
+        console.error(`    ✗ tool_follows for ${u.username}: ${notFound(name)} ${name}`);
         continue;
       }
       const { error } = await supabase
@@ -373,7 +404,7 @@ async function main() {
     for (const tn of p.tools ?? []) {
       const toolId = await resolveToolId(tn);
       if (!toolId) {
-        console.error(`    ✗ playbook "${p.title}" references unknown tool ${tn}`);
+        console.error(`    ✗ playbook "${p.title}" references ${notFound(tn)} ${tn}`);
         continue;
       }
       await supabase
@@ -389,6 +420,11 @@ async function main() {
 // Tool names are listed but not looked up — that needs the database.
 function check() {
   let failures = 0;
+  for (const [name, id] of Object.entries(data.tool_ids ?? {})) {
+    const ok = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id));
+    if (!ok) failures++;
+    console.log(`${ok ? "ok " : "✗  "} tool_ids["${name}"] = ${id}${ok ? "" : " — must be a tool's uuid"}`);
+  }
   for (const u of users) {
     const username = String(u.username ?? "").toLowerCase();
     const ok = /^[a-z0-9_-]{3,30}$/.test(username);
