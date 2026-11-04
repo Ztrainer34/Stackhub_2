@@ -71,10 +71,19 @@ import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils"
 // --- Styles ---
 import "@/components/tiptap-templates/simple/simple-editor.scss"
 
-import { Post, renamePost } from "@/lib/post"
+import { Post, PostTool, renamePost, updatePostTools } from "@/lib/post"
+import {
+  buildToolsUpdate,
+  MAX_POST_TOOLS,
+  realTools,
+  toolsChanged,
+  validatePostDetails,
+} from "@/lib/post-details"
 import { createClient } from "@/utils/supabase/client"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import type { AutocompletedTool, SuggestedTool } from "@/app/new/tool-search"
+import { DetailLabel, PostDetails } from "./PostDetails"
 
 const MainToolbarContent = ({
   onHighlighterClick,
@@ -213,19 +222,49 @@ export default function Editor({
     autoGrowTitle();
   }, [autoGrowTitle]);
 
-  // Rename the post (and update its slug) when the title changed. Returns the
-  // new slug, or null when unchanged. Old URLs 301-redirect to the new slug
+  const [goal, setGoal] = React.useState(post.description);
+  const [tools, setTools] = React.useState<PostTool[]>(() => realTools(post.tools));
+  const [suggested, setSuggested] = React.useState<SuggestedTool[]>([]);
+  const [saving, setSaving] = React.useState(false);
+  // What the server has, which moves on if a save fails partway: resending a
+  // suggestion that already went through would file it twice.
+  const savedTools = React.useRef(realTools(post.tools));
+
+  const addTool = (tool: AutocompletedTool) => {
+    if (tools.length + suggested.length >= MAX_POST_TOOLS) return;
+    if (tools.some((t) => t.id === tool.id)) return;
+    setTools((prev) => [
+      ...prev,
+      { id: tool.id, name: tool.name, logo_url: tool.logo_url ?? "", is_ticket: false },
+    ]);
+  };
+
+  // Save the title and goal. The title sets the slug, so this returns the new
+  // slug, or null when neither changed. Old URLs 301-redirect to the new slug
   // server-side via the slug-history lookup.
-  const renameIfTitleChanged = async (
+  const saveTitleAndGoal = async (
     supabaseClient: ReturnType<typeof createClient>
   ): Promise<string | null> => {
-    const trimmed = title.trim();
-    if (!trimmed || trimmed === post.name) return null;
+    const name = title.trim();
+    if (name === post.name && goal === post.description) return null;
     const { new_slug } = await renamePost(supabaseClient, post.id, {
-      name: trimmed,
-      description: post.description,
+      name,
+      description: goal,
     });
     return new_slug;
+  };
+
+  const saveTools = async (supabaseClient: ReturnType<typeof createClient>) => {
+    if (!toolsChanged(savedTools.current, tools, suggested)) return;
+    const updated = await updatePostTools(
+      supabaseClient,
+      post.id,
+      buildToolsUpdate(tools, suggested)
+    );
+    const next = realTools(updated.tools);
+    savedTools.current = next;
+    setTools(next);
+    setSuggested([]);
   };
 
   let content = undefined;
@@ -279,92 +318,61 @@ export default function Editor({
     content,
   })
 
-  const savePost = async () => {
-    const supabaseClient = createClient();
-
-    const {
-      data: { session },
-    } = await supabaseClient.auth.getSession();
-
-    const data = editor?.getJSON();
-
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${session!.access_token}`,
-    };
-
-    const resp = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL!}/post/${post.id}/save`,
-      {
-        method: "POST",
-        headers: headers,
-        body: JSON.stringify({
-          content: JSON.stringify(data),
-        }),
-      }
-    );
-
-    if (!resp.ok) {
-      // FIXME
-      toast("Something went wrong", {});
+  // Saving a draft and publishing differ only in the endpoint. The details go
+  // first: they are what can be refused (a slug already taken), and a refusal
+  // should stop before the post is published under the old ones.
+  const persist = async (action: "save" | "publish") => {
+    const problems = validatePostDetails({
+      type: post.type,
+      title,
+      goal,
+      originalGoal: post.description,
+      toolCount: tools.length + suggested.length,
+    });
+    if (problems.length > 0) {
+      toast.error(problems.join(" "));
       return;
     }
 
-    let newSlug: string | null = null;
+    setSaving(true);
     try {
-      newSlug = await renameIfTitleChanged(supabaseClient);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to update title");
-      return;
-    }
+      const supabaseClient = createClient();
 
-    router.push(
-      newSlug ? `/${post.author_username}/${newSlug}` : redirectUrl
-    );
-  };
+      const newSlug = await saveTitleAndGoal(supabaseClient);
+      await saveTools(supabaseClient);
 
-  const publishPost = async () => {
-    const supabaseClient = createClient();
+      const {
+        data: { session },
+      } = await supabaseClient.auth.getSession();
 
-    const {
-      data: { session },
-    } = await supabaseClient.auth.getSession();
+      const resp = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL!}/post/${post.id}/${action}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session!.access_token}`,
+          },
+          body: JSON.stringify({
+            content: JSON.stringify(editor?.getJSON()),
+          }),
+        }
+      );
 
-    const data = editor?.getJSON();
-
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${session!.access_token}`,
-    };
-
-    const resp = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL!}/post/${post.id}/publish`,
-      {
-        method: "POST",
-        headers: headers,
-        body: JSON.stringify({
-          content: JSON.stringify(data),
-        }),
+      if (!resp.ok) {
+        // FIXME
+        toast("Something went wrong", {});
+        return;
       }
-    );
 
-    if (!resp.ok) {
-      // FIXME
-      toast("Something went wrong", {});
-      return;
-    }
-
-    let newSlug: string | null = null;
-    try {
-      newSlug = await renameIfTitleChanged(supabaseClient);
+      router.push(
+        newSlug ? `/${post.author_username}/${newSlug}` : redirectUrl
+      );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to update title");
-      return;
+      toast.error(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setSaving(false);
     }
-
-    router.push(
-      newSlug ? `/${post.author_username}/${newSlug}` : redirectUrl
-    );
   };
 
 
@@ -404,12 +412,14 @@ export default function Editor({
               onBack={() => setMobileView("main")}
             />
           )}
-          <Button onClick={savePost}>Save draft</Button>
-          <Button onClick={publishPost}>{post.is_published ? "Publish changes" : "Publish"}</Button>
+          <Button disabled={saving} onClick={() => persist("save")}>Save draft</Button>
+          <Button disabled={saving} onClick={() => persist("publish")}>{post.is_published ? "Publish changes" : "Publish"}</Button>
         </Toolbar>
 
         <div className="simple-editor-title">
+          <DetailLabel htmlFor="post-title">Title</DetailLabel>
           <textarea
+            id="post-title"
             ref={titleRef}
             value={title}
             onChange={(e) => {
@@ -417,23 +427,41 @@ export default function Editor({
               autoGrowTitle()
             }}
             onKeyDown={(e) => {
-              // Enter should not add a line break — jump into the content.
+              // Enter should not add a line break — move on to the goal.
               if (e.key === "Enter") {
                 e.preventDefault()
-                editor?.chain().focus().run()
+                document.getElementById("post-goal")?.focus()
               }
             }}
             rows={1}
             placeholder="Untitled"
             spellCheck={false}
-            aria-label="Playbook title"
           />
+        </div>
+
+        <PostDetails
+          type={post.type}
+          goal={goal}
+          onGoalChange={setGoal}
+          onGoalDone={() => editor?.chain().focus().run()}
+          tools={tools}
+          suggested={suggested}
+          onAddTool={addTool}
+          onRemoveTool={(id) => setTools((prev) => prev.filter((t) => t.id !== id))}
+          onSuggestTool={(tool) => setSuggested((prev) => [...prev, tool])}
+          onRemoveSuggested={(id) => setSuggested((prev) => prev.filter((t) => t.id !== id))}
+        />
+
+        <div className="mx-auto mt-6 w-full max-w-[648px] px-12 max-[480px]:px-6">
+          <div className="border-t pt-4">
+            <DetailLabel>Post</DetailLabel>
+          </div>
         </div>
 
         <EditorContent
           editor={editor}
           role="presentation"
-          className="simple-editor-content"
+          className="simple-editor-content simple-editor-content--post"
         />
       </EditorContext.Provider>
     </div>

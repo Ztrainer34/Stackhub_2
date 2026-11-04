@@ -129,3 +129,8 @@ body,
     padding: 1rem 1.5rem 30vh;
   }
 }
+
+// On the post edit screen a "Post" caption sits right above the body.
+.simple-editor-content.simple-editor-content--post .tiptap.ProseMirror.simple-editor {
+  padding-top: 0.5rem;
+}

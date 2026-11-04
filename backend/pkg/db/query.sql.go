@@ -879,6 +879,26 @@ func (q *Queries) GetPostMetadataForUser(ctx context.Context, arg GetPostMetadat
 	return is_starred, err
 }
 
+const getPostTypeForToolEdit = `-- name: GetPostTypeForToolEdit :one
+SELECT type AS post_type FROM posts
+WHERE id = $1 AND author_id = $2
+FOR UPDATE
+`
+
+type GetPostTypeForToolEditParams struct {
+	PostID   uuid.UUID `json:"post_id"`
+	AuthorID uuid.UUID `json:"author_id"`
+}
+
+// FOR UPDATE so two concurrent tool edits cannot each remove a tool and leave
+// the post under its minimum. No row means it is not the caller's post.
+func (q *Queries) GetPostTypeForToolEdit(ctx context.Context, arg GetPostTypeForToolEditParams) (string, error) {
+	row := q.db.QueryRow(ctx, getPostTypeForToolEdit, arg.PostID, arg.AuthorID)
+	var post_type string
+	err := row.Scan(&post_type)
+	return post_type, err
+}
+
 const getProfile = `-- name: GetProfile :one
 SELECT
   id,
@@ -2868,6 +2888,45 @@ func (q *Queries) ListPostComments(ctx context.Context, arg ListPostCommentsPara
 	return items, nil
 }
 
+const listPostTicketsByID = `-- name: ListPostTicketsByID :many
+SELECT id, status, resolved_tool_id FROM tool_tickets
+WHERE post_id = $1 AND id = ANY($2::uuid[])
+`
+
+type ListPostTicketsByIDParams struct {
+	PostID    pgtype.UUID `json:"post_id"`
+	TicketIds []uuid.UUID `json:"ticket_ids"`
+}
+
+type ListPostTicketsByIDRow struct {
+	ID             uuid.UUID   `json:"id"`
+	Status         string      `json:"status"`
+	ResolvedToolID pgtype.UUID `json:"resolved_tool_id"`
+}
+
+// The state of the suggestions an edit wants to keep, which may have changed
+// since the page loaded. Scoped to the post, so another post's ticket id is
+// simply not found.
+func (q *Queries) ListPostTicketsByID(ctx context.Context, arg ListPostTicketsByIDParams) ([]ListPostTicketsByIDRow, error) {
+	rows, err := q.db.Query(ctx, listPostTicketsByID, arg.PostID, arg.TicketIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPostTicketsByIDRow
+	for rows.Next() {
+		var i ListPostTicketsByIDRow
+		if err := rows.Scan(&i.ID, &i.Status, &i.ResolvedToolID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPosts = `-- name: ListPosts :many
 SELECT id, name, description FROM posts
 ORDER BY name
@@ -3960,6 +4019,21 @@ func (q *Queries) RemovePostComment(ctx context.Context, arg RemovePostCommentPa
 	return err
 }
 
+const removePostToolsExcept = `-- name: RemovePostToolsExcept :exec
+DELETE FROM post_tools
+WHERE post_id = $1 AND NOT (tool_id = ANY($2::uuid[]))
+`
+
+type RemovePostToolsExceptParams struct {
+	PostID uuid.UUID   `json:"post_id"`
+	Keep   []uuid.UUID `json:"keep"`
+}
+
+func (q *Queries) RemovePostToolsExcept(ctx context.Context, arg RemovePostToolsExceptParams) error {
+	_, err := q.db.Exec(ctx, removePostToolsExcept, arg.PostID, arg.Keep)
+	return err
+}
+
 const renamePostWithSlugHistory = `-- name: RenamePostWithSlugHistory :exec
 WITH old_post AS (
   SELECT p.id, p.slug, p.author_id
@@ -4609,5 +4683,24 @@ func (q *Queries) UpdateVendorDetails(ctx context.Context, arg UpdateVendorDetai
 		arg.HeadOffice,
 		arg.YearOfFoundation,
 	)
+	return err
+}
+
+const withdrawPostTicketsExcept = `-- name: WithdrawPostTicketsExcept :exec
+DELETE FROM tool_tickets
+WHERE post_id = $1 AND status = 'pending'
+  AND NOT (id = ANY($2::uuid[]))
+`
+
+type WithdrawPostTicketsExceptParams struct {
+	PostID pgtype.UUID `json:"post_id"`
+	Keep   []uuid.UUID `json:"keep"`
+}
+
+// A removed suggestion is deleted, not rejected: nobody reviewed it, and a
+// rejected ticket would file the post under the author's Rejected tab. Only
+// pending ones, so a decision already made stays on record.
+func (q *Queries) WithdrawPostTicketsExcept(ctx context.Context, arg WithdrawPostTicketsExceptParams) error {
+	_, err := q.db.Exec(ctx, withdrawPostTicketsExcept, arg.PostID, arg.Keep)
 	return err
 }

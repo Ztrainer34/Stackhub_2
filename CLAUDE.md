@@ -323,6 +323,7 @@ function onSubmit(data: z.infer<typeof formSchema>) {
 - `POST /post/{id}/publish` - Publish post
 - `GET /post/{id}/unpublish` - Unpublish post
 - `PUT /post/{id}/rename` - Rename post (updates slug with history)
+- `PUT /post/{id}/tools` - Replace a post's tools and suggestions (live on save, like the title and goal)
 - `DELETE /post/{id}` - Delete post
 - `PUT /post/{id}/star` - Star a post
 - `DELETE /post/{id}/star` - Unstar a post
@@ -552,6 +553,12 @@ const user = authState.user; // Type-safe
 - `CASE` comes out as `interface{}`, `NULLIF` as `bool`, `COALESCE` as the
   non-null type. A UUID in an `interface{}` field serialises as a **byte array**,
   so check generated row types after any change to a complex query.
+
+- When the Go it generates doesn't parse, `sqlc generate` **still exits 0**: it
+  prints the code to stdout, the reason to stderr, and writes nothing. Check that
+  `pkg/db` actually changed. The usual cause is a query selecting one column
+  named after a Go keyword (`SELECT type ...`, which becomes `var type string`);
+  alias it.
 
 `SELECT *` is expanded into an explicit column list **at generate time**. After a
 migration adds a column, regenerate, or queries keep returning the old columns.

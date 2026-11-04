@@ -62,14 +62,9 @@ func validateNewPost(form CreatePostWithSuggestedToolsForm) (newPost, error) {
 		return newPost{}, apperr.Invalid(fmt.Sprintf("Goal must be at most %d characters", maxPostDescriptionLen))
 	}
 
-	suggestions := make([]ticket.Suggestion, len(form.SuggestedTools))
-	for i, s := range form.SuggestedTools {
-		name, website, err := ticket.CleanSuggestedTool(s.Name, s.Description, s.Website)
-		if err != nil {
-			return newPost{}, apperr.Invalid(err.Error())
-		}
-		s.Name, s.Website = name, website
-		suggestions[i] = s
+	suggestions, err := cleanSuggestions(form.SuggestedTools)
+	if err != nil {
+		return newPost{}, err
 	}
 	form.SuggestedTools = suggestions
 
@@ -77,22 +72,8 @@ func validateNewPost(form CreatePostWithSuggestedToolsForm) (newPost, error) {
 		return newPost{}, apperr.Invalid("Missing tools")
 	}
 
-	totalTools := len(form.Tools) + len(form.SuggestedTools)
-	switch form.Type {
-	case "playbook":
-		// One or more. A playbook used to mean exactly one tool and a "combo"
-		// meant several; combos were folded into playbooks because the split
-		// made authors categorise their writing before they had written it.
-	case "comparison":
-		// A comparison of one thing is not a comparison.
-		if totalTools < 2 {
-			return newPost{}, apperr.Invalid("Comparisons require at least two tools or tool suggestions")
-		}
-	default:
-		return newPost{}, apperr.Invalid("Unknown post type")
-	}
-	if totalTools > maxPostTools {
-		return newPost{}, apperr.Invalid(fmt.Sprintf("Too many tools (maximum %d)", maxPostTools))
+	if err := checkToolCount(form.Type, len(form.Tools)+len(form.SuggestedTools)); err != nil {
+		return newPost{}, err
 	}
 
 	// Optional, so an empty string is "not answered" and stores NULL. Anything
@@ -107,6 +88,137 @@ func validateNewPost(form CreatePostWithSuggestedToolsForm) (newPost, error) {
 	}
 
 	return newPost{form: form, experienceLevel: level}, nil
+}
+
+// cleanSuggestions normalises tool suggestions, refusing the first bad one.
+func cleanSuggestions(in []ticket.Suggestion) ([]ticket.Suggestion, error) {
+	out := make([]ticket.Suggestion, len(in))
+	for i, s := range in {
+		name, website, err := ticket.CleanSuggestedTool(s.Name, s.Description, s.Website)
+		if err != nil {
+			return nil, apperr.Invalid(err.Error())
+		}
+		s.Name, s.Website = name, website
+		out[i] = s
+	}
+	return out, nil
+}
+
+// checkToolCount applies the rule shared by creating a post and editing its
+// tools. total counts confirmed tools and tool suggestions alike.
+func checkToolCount(postType string, total int) error {
+	switch postType {
+	case "playbook":
+		// One or more. A playbook used to mean exactly one tool and a "combo"
+		// meant several; combos were folded into playbooks because the split
+		// made authors categorise their writing before they had written it.
+		if total < 1 {
+			return apperr.Invalid("Playbooks require at least one tool or tool suggestion")
+		}
+	case "comparison":
+		// A comparison of one thing is not a comparison.
+		if total < 2 {
+			return apperr.Invalid("Comparisons require at least two tools or tool suggestions")
+		}
+	default:
+		return apperr.Invalid("Unknown post type")
+	}
+	if total > maxPostTools {
+		return apperr.Invalid(fmt.Sprintf("Too many tools (maximum %d)", maxPostTools))
+	}
+	return nil
+}
+
+// uniqueIDs drops repeats, keeping the first of each. Never nil: the result
+// feeds `= ANY($1)`, where a nil slice is NULL and NOT (x = ANY(NULL)) matches
+// nothing, so an edit that removes every tool would silently remove none.
+func uniqueIDs(ids []uuid.UUID) []uuid.UUID {
+	out := make([]uuid.UUID, 0, len(ids))
+	seen := make(map[uuid.UUID]bool, len(ids))
+	for _, id := range ids {
+		if !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// setTools makes a post's tools what the author's edit says: form.Tools are
+// linked, the pending suggestions in form.TicketIDs stay, every other pending
+// suggestion is withdrawn, and form.SuggestedTools become new suggestions. It
+// returns the post's tools as they now stand.
+//
+// The edit was made against a page that may be stale, so a kept suggestion is
+// looked up rather than trusted: one approved meanwhile keeps its tool, and one
+// rejected meanwhile is gone (it may leave the post short, which is refused).
+func (s postService) setTools(ctx context.Context, authorID, postID uuid.UUID, form UpdatePostToolsForm) (interface{}, error) {
+	suggestions, err := cleanSuggestions(form.SuggestedTools)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, apperr.Internal("Failed to start transaction", err)
+	}
+	defer tx.Rollback(ctx)
+	q := db.New(tx)
+
+	postType, err := q.GetPostTypeForToolEdit(ctx, db.GetPostTypeForToolEditParams{PostID: postID, AuthorID: authorID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, apperr.NotFound("Post not found")
+	} else if err != nil {
+		return nil, apperr.Internal("Failed to update tools", err)
+	}
+
+	tickets, err := q.ListPostTicketsByID(ctx, db.ListPostTicketsByIDParams{PostID: pg.UUID(postID), TicketIds: uniqueIDs(form.TicketIDs)})
+	if err != nil {
+		return nil, apperr.Internal("Failed to update tools", err)
+	}
+	tools := form.Tools
+	keptTickets := make([]uuid.UUID, 0, len(tickets))
+	for _, t := range tickets {
+		switch {
+		case t.Status == "pending":
+			keptTickets = append(keptTickets, t.ID)
+		case t.Status == "resolved" && t.ResolvedToolID.Valid:
+			tools = append(tools, uuid.UUID(t.ResolvedToolID.Bytes))
+		}
+	}
+	tools = uniqueIDs(tools)
+
+	if err := checkToolCount(postType, len(tools)+len(keptTickets)+len(suggestions)); err != nil {
+		return nil, err
+	}
+
+	if err := q.RemovePostToolsExcept(ctx, db.RemovePostToolsExceptParams{PostID: postID, Keep: tools}); err != nil {
+		return nil, apperr.Internal("Failed to update tools", err)
+	}
+	for _, toolID := range tools {
+		err := q.AddPostToolSafe(ctx, db.AddPostToolSafeParams{PostID: postID, ToolID: toolID})
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			return nil, apperr.InvalidFrom("One of those tools no longer exists", err)
+		} else if err != nil {
+			return nil, apperr.Internal("Failed to update tools", err)
+		}
+	}
+	if err := q.WithdrawPostTicketsExcept(ctx, db.WithdrawPostTicketsExceptParams{PostID: pg.UUID(postID), Keep: keptTickets}); err != nil {
+		return nil, apperr.Internal("Failed to update tools", err)
+	}
+	if err := ticket.CreatePostTickets(ctx, q, postID, authorID, suggestions); err != nil {
+		return nil, err
+	}
+
+	updated, err := q.GetPost(ctx, db.GetPostParams{ID: postID, ViewerID: authorID})
+	if err != nil {
+		return nil, apperr.Internal("Failed to update tools", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, apperr.Internal("Failed to update tools", err)
+	}
+	return updated.Tools, nil
 }
 
 // create validates a new post and stores it with its tools and its tool

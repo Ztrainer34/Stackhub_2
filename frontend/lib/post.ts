@@ -328,8 +328,33 @@ export async function renamePost(
   return (await response.json()) as RenamePostResponse;
 }
 
+export async function updatePostTools(
+  supabaseClient: SupabaseClient,
+  postId: string,
+  data: {
+    tools: string[];
+    ticket_ids: string[];
+    suggested_tools: { name: string; description: string; website: string; categories: number[] }[];
+  }
+): Promise<{ tools: PostTool[] }> {
+  const response = await fetchApiAuthenticated(supabaseClient, apiPath`/post/${postId}/tools`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Failed to update tools");
+  }
+
+  return (await response.json()) as { tools: PostTool[] };
+}
+
 export async function publishPost(
-  supabaseClient: SupabaseClient, 
+  supabaseClient: SupabaseClient,
   postId: string, 
 ) {
   const response = await fetchApiAuthenticated(supabaseClient, apiPath`/post/${postId}/publish`, {

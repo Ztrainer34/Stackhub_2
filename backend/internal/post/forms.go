@@ -59,6 +59,15 @@ type RenamePostForm struct {
 	Description string `json:"description"`
 }
 
+// UpdatePostToolsForm is the body of PUT /post/{id}/tools: the post's tools as
+// the author left them. TicketIDs are the pending suggestions to keep; any
+// other pending suggestion on the post is withdrawn.
+type UpdatePostToolsForm struct {
+	Tools          []uuid.UUID         `json:"tools"`
+	TicketIDs      []uuid.UUID         `json:"ticket_ids"`
+	SuggestedTools []ticket.Suggestion `json:"suggested_tools"`
+}
+
 // UploadImageFile is the uploaded image in an UploadImageResponse.
 type UploadImageFile struct {
 	URL string `json:"url"`

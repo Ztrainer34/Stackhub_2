@@ -790,6 +790,32 @@ INSERT INTO post_tools (post_id, tool_id)
 VALUES ($1, $2)
 ON CONFLICT (post_id, tool_id) DO NOTHING;
 
+-- name: GetPostTypeForToolEdit :one
+-- FOR UPDATE so two concurrent tool edits cannot each remove a tool and leave
+-- the post under its minimum. No row means it is not the caller's post.
+SELECT type AS post_type FROM posts
+WHERE id = sqlc.arg(post_id) AND author_id = sqlc.arg(author_id)
+FOR UPDATE;
+
+-- name: ListPostTicketsByID :many
+-- The state of the suggestions an edit wants to keep, which may have changed
+-- since the page loaded. Scoped to the post, so another post's ticket id is
+-- simply not found.
+SELECT id, status, resolved_tool_id FROM tool_tickets
+WHERE post_id = sqlc.arg(post_id) AND id = ANY(sqlc.arg(ticket_ids)::uuid[]);
+
+-- name: RemovePostToolsExcept :exec
+DELETE FROM post_tools
+WHERE post_id = sqlc.arg(post_id) AND NOT (tool_id = ANY(sqlc.arg(keep)::uuid[]));
+
+-- name: WithdrawPostTicketsExcept :exec
+-- A removed suggestion is deleted, not rejected: nobody reviewed it, and a
+-- rejected ticket would file the post under the author's Rejected tab. Only
+-- pending ones, so a decision already made stays on record.
+DELETE FROM tool_tickets
+WHERE post_id = sqlc.arg(post_id) AND status = 'pending'
+  AND NOT (id = ANY(sqlc.arg(keep)::uuid[]));
+
 -- name: AddToWatchlist :exec
 INSERT INTO watchlist_items (profile_id, tool_id)
 VALUES ($1, $2)

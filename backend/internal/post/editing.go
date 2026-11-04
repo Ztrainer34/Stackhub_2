@@ -246,6 +246,37 @@ func (h *Handler) RenamePost(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// UpdatePostTools replaces a post's tools from the edit screen. Like the title
+// and goal, tools are not part of the draft: the change is live on save.
+func (h *Handler) UpdatePostTools(w http.ResponseWriter, r *http.Request) {
+	userID := httpx.UserID(r)
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Malformed id", http.StatusBadRequest)
+		return
+	}
+
+	defer r.Body.Close()
+
+	var form UpdatePostToolsForm
+	if err := json.NewDecoder(r.Body).Decode(&form); err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		return
+	}
+
+	tools, err := postService{db: h.DB}.setTools(r.Context(), userID, id, form)
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"tools": tools})
+}
+
 func (h *Handler) UnpublishPost(w http.ResponseWriter, r *http.Request) {
 	userID := httpx.UserID(r)
 

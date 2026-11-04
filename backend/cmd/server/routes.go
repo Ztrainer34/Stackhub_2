@@ -130,6 +130,7 @@ func (app *App) routes(tokenAuth *jwtauth.JWTAuth) http.Handler {
 		// path, a link preview, a prefetch.
 		r.Post("/post/{id}/unpublish", postAPI.UnpublishPost)
 		r.Put("/post/{id}/rename", postAPI.RenamePost)
+		r.Put("/post/{id}/tools", postAPI.UpdatePostTools)
 		r.Put("/post/{id}/star", postAPI.StarPost)
 		r.Delete("/post/{id}/star", postAPI.UnstarPost)
 		r.Post("/post/{id}/comment", postAPI.CreatePostComment)
