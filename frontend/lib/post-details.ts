@@ -1,9 +1,10 @@
-import type { PostTool, PostType } from "@/lib/post";
+import { MAX_GOAL_LENGTH, type PostTool, type PostType } from "@/lib/post";
+
+export { MAX_GOAL_LENGTH };
 
 // Mirror the rules in the new-post form and the backend's checkToolCount, so an
 // author hears about a problem before saving rather than from a failed request.
 export const MAX_POST_TOOLS = 10;
-export const MAX_GOAL_LENGTH = 500;
 export const MIN_TITLE_LENGTH = 2;
 
 /** A tool the author just suggested on the edit screen, not saved yet. */

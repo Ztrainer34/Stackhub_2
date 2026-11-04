@@ -3,10 +3,11 @@
 import * as React from "react";
 import { X } from "lucide-react";
 
+import { GoalCounter } from "@/components/goal-counter";
 import { ToolLogo } from "@/components/tool-logo";
 import { ToolSearch, type AutocompletedTool, type SuggestedTool } from "@/app/new/tool-search";
-import type { PostTool, PostType } from "@/lib/post";
-import { MAX_GOAL_LENGTH, MAX_POST_TOOLS, minToolsFor, toolCountHint } from "@/lib/post-details";
+import { goalLabel, goalPlaceholders, type PostTool, type PostType } from "@/lib/post";
+import { MAX_POST_TOOLS, minToolsFor, toolCountHint } from "@/lib/post-details";
 
 /** The italic caption above each field, which sets them apart from the post. */
 export function DetailLabel({
@@ -102,12 +103,11 @@ export function PostDetails({
 
   const total = tools.length + suggested.length;
   const canRemove = total > minToolsFor(type);
-  const label = type === "comparison" ? "Comparison goal" : "Playbook goal";
 
   return (
     <div className="mx-auto w-full max-w-[648px] space-y-6 px-12 pt-6 max-[480px]:px-6">
       <div>
-        <DetailLabel htmlFor="post-goal">{label}</DetailLabel>
+        <DetailLabel htmlFor="post-goal">{goalLabel(type)}</DetailLabel>
         <textarea
           id="post-goal"
           ref={goalRef}
@@ -121,18 +121,10 @@ export function PostDetails({
             }
           }}
           rows={1}
-          placeholder="What will the reader get out of this?"
+          placeholder={goalPlaceholders[type]}
           className="block w-full resize-none overflow-hidden border-none bg-transparent p-0 font-serif text-lg italic outline-none placeholder:text-muted-foreground/60"
         />
-        {goal.length > MAX_GOAL_LENGTH - 50 && (
-          <p
-            className={`mt-1 text-xs ${
-              goal.length > MAX_GOAL_LENGTH ? "text-destructive" : "text-muted-foreground"
-            }`}
-          >
-            {goal.length} / {MAX_GOAL_LENGTH}
-          </p>
-        )}
+        <GoalCounter length={goal.length} />
       </div>
 
       <div>

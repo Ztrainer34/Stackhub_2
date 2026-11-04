@@ -27,6 +27,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ToolLogo } from "@/components/tool-logo";
 import { toast } from "sonner";
 import { useCreatePost } from "@/lib/queries/use-post-actions";
+import { MAX_GOAL_LENGTH, goalLabel, goalPlaceholders } from "@/lib/post";
+import { GoalCounter } from "@/components/goal-counter";
 import {
   Select,
   SelectContent,
@@ -68,10 +70,10 @@ export const formSchema = z.object({
   // same way the field is introduced.
   const typeLabel = data.type.charAt(0).toUpperCase() + data.type.slice(1);
 
-  if (data.description.length > 500) {
+  if (data.description.length > MAX_GOAL_LENGTH) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "Goal must be at most 500 characters long.",
+      message: `Goal must be at most ${MAX_GOAL_LENGTH} characters long.`,
       path: ["description"],
     });
   }
@@ -112,13 +114,6 @@ const postTypeMetadata = {
   comparison: {
     max_tools: 10,
   },
-} as const;
-
-const goalPlaceholders = {
-  playbook:
-    "e.g. Know from which company your website visitors come from thanks to Hubspot",
-  comparison:
-    "e.g. Decide whether HubSpot or Pipedrive is the better CRM for a small sales team",
 } as const;
 
 export function PostCreationForm({
@@ -377,7 +372,7 @@ export function PostCreationForm({
           name="description"
           render={({ field }) => (
             <FormItem className="flex flex-col">
-              <FormLabel>Goal of this {postType.charAt(0).toUpperCase() + postType.slice(1)}</FormLabel>
+              <FormLabel>{goalLabel(postType)}</FormLabel>
               <FormDescription>
                 Great goals are short and self-explanatory
               </FormDescription>
@@ -388,6 +383,7 @@ export function PostCreationForm({
                   {...field}
                 />
               </FormControl>
+              <GoalCounter length={field.value.length} />
               <FormMessage />
             </FormItem>
           )}
