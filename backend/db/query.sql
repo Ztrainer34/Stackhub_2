@@ -366,23 +366,43 @@ INSERT INTO tool_categories (
 -- Resolves a URL slug back to a tool id. The slug is the tool name lowercased
 -- with every run of non-alphanumeric characters collapsed to '-'. Must stay in
 -- sync with toolSlug() on the frontend.
+--
+-- Hidden tools still resolve (old links keep working). When names collide, a
+-- visible tool wins over a hidden one, then the oldest wins — so a later copy
+-- can never take over an established tool's URL.
 SELECT id FROM tools
 WHERE btrim(lower(regexp_replace(name, '[^a-zA-Z0-9]+', '-', 'g')), '-') = $1
+ORDER BY (hidden_at IS NOT NULL), created_at, id
 LIMIT 1;
 
+-- name: ToolSlugTaken :one
+-- A new tool whose name gives the same slug as an existing one would share its
+-- URL. Resolving a suggestion must link the existing tool instead.
+SELECT EXISTS (
+  SELECT 1 FROM tools
+  WHERE btrim(lower(regexp_replace(name, '[^a-zA-Z0-9]+', '-', 'g')), '-')
+      = btrim(lower(regexp_replace(sqlc.arg(name)::text, '[^a-zA-Z0-9]+', '-', 'g')), '-')
+);
+
 -- name: AutocompleteTool :many
-SELECT id, name, description, logo_url, similarity(name, $1) AS sml
+-- Typeahead for the post form and the admin ticket queue. Hidden tools are left
+-- out unless include_hidden is set: the admin queue sets it so a suggestion for
+-- a hidden tool is linked to that tool rather than duplicated. Linking does not
+-- un-hide it.
+SELECT id, name, description, logo_url, similarity(name, sqlc.arg(query)) AS sml,
+  (hidden_at IS NOT NULL)::boolean AS is_hidden
 FROM tools
-WHERE name % $1 OR name ILIKE $1 || '%'
+WHERE (name % sqlc.arg(query) OR name ILIKE sqlc.arg(query) || '%')
+  AND (sqlc.arg(include_hidden)::boolean OR hidden_at IS NULL)
 ORDER BY
   CASE
-    WHEN LOWER(name) = LOWER($1) THEN 0           -- exact match first
-    WHEN LOWER(name) LIKE LOWER($1) || '%' THEN 1 -- prefix match second
+    WHEN LOWER(name) = LOWER(sqlc.arg(query)) THEN 0           -- exact match first
+    WHEN LOWER(name) LIKE LOWER(sqlc.arg(query)) || '%' THEN 1 -- prefix match second
     ELSE 2
   END,
   sml DESC,
   name
-LIMIT $2;
+LIMIT sqlc.arg(page_limit);
 
 -- name: GetFacetCounts :one
 WITH
@@ -391,7 +411,7 @@ WITH
   )
 SELECT
   (SELECT COUNT(*) FROM posts, query WHERE posts.content_vector @@ query.q AND posts.is_published = true) AS post_count,
-  (SELECT COUNT(*) FROM tools, query WHERE tools.vector @@ query.q) AS tool_count,
+  (SELECT COUNT(*) FROM tools, query WHERE tools.vector @@ query.q AND tools.hidden_at IS NULL) AS tool_count,
   (SELECT COUNT(*) FROM profiles, query WHERE profiles.vector @@ query.q) AS profile_count;
 
 -- name: SearchPost :many
@@ -417,6 +437,7 @@ SELECT
   COUNT(*) OVER() AS total_count
 FROM tools_with_details twd
 WHERE websearch_to_tsquery('english', $1) @@ (SELECT vector FROM tools WHERE id = twd.id)
+  AND NOT EXISTS (SELECT 1 FROM tools th WHERE th.id = twd.id AND th.hidden_at IS NOT NULL)
 ORDER BY rank DESC
 LIMIT $2 OFFSET $3;
 
@@ -439,11 +460,14 @@ ORDER BY
 LIMIT $2 OFFSET $3;
 
 -- name: GetTool :one
+-- A hidden tool's page still loads; is_hidden tells the page to ask search
+-- engines not to index it.
 SELECT
   twd.*,
-  EXISTS(SELECT 1 FROM tool_owners tow WHERE tow.tool_id = twd.id) AS is_claimed
+  EXISTS(SELECT 1 FROM tool_owners tow WHERE tow.tool_id = twd.id) AS is_claimed,
+  EXISTS(SELECT 1 FROM tools th WHERE th.id = twd.id AND th.hidden_at IS NOT NULL) AS is_hidden
 FROM tools_with_details twd
-WHERE id = $1;
+WHERE twd.id = $1;
 
 -- name: GetToolAuthenticated :one
 SELECT
@@ -456,9 +480,10 @@ SELECT
   -- Page ownership: is_owner unlocks the inline editors, is_claimed hides the
   -- "Claim this page" call to action once somebody has taken the page over.
   EXISTS(SELECT 1 FROM tool_owners tow WHERE tow.profile_id = $2 AND tow.tool_id = twd.id) AS is_owner,
-  EXISTS(SELECT 1 FROM tool_owners tow2 WHERE tow2.tool_id = twd.id) AS is_claimed
+  EXISTS(SELECT 1 FROM tool_owners tow2 WHERE tow2.tool_id = twd.id) AS is_claimed,
+  EXISTS(SELECT 1 FROM tools th WHERE th.id = twd.id AND th.hidden_at IS NOT NULL) AS is_hidden
 FROM tools_with_details twd
-WHERE id = $1;
+WHERE twd.id = $1;
 
 -- name: GetTopPosts :many
 SELECT *
@@ -537,16 +562,18 @@ WHERE p.is_published
   );
 
 -- name: GetTopCategories :many
-SELECT 
+-- Counts visible tools only, so a category whose tools are all hidden drops out.
+SELECT
   c.id,
   c.name,
   c.slug,
   COUNT(tc.tool_id) AS tool_count
-FROM 
+FROM
   categories c
-LEFT JOIN 
+LEFT JOIN
   tool_categories tc ON c.id = tc.category_id
-GROUP BY 
+    AND EXISTS (SELECT 1 FROM tools t WHERE t.id = tc.tool_id AND t.hidden_at IS NULL)
+GROUP BY
   c.id, c.name, c.slug
 HAVING 
   COUNT(tc.tool_id) > 0
@@ -555,13 +582,14 @@ ORDER BY
 LIMIT $1;
 
 -- name: ListTools :many
--- Public browse listing for /tools: all tools, optional name/description search
--- and category (slug) filter, with a selectable sort.
+-- Public browse listing for /tools: all visible tools, optional name/description
+-- search and category (slug) filter, with a selectable sort.
 SELECT
   twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor,
   COUNT(*) OVER() AS total_count
 FROM tools_with_details twd
-WHERE (
+WHERE NOT EXISTS (SELECT 1 FROM tools th WHERE th.id = twd.id AND th.hidden_at IS NOT NULL)
+  AND (
     sqlc.arg(search)::text = ''
     OR twd.name ILIKE '%' || sqlc.arg(search)::text || '%'
     OR twd.description ILIKE '%' || sqlc.arg(search)::text || '%'
@@ -591,6 +619,7 @@ WHERE EXISTS (
   JOIN categories c2 ON tc2.category_id = c2.id 
   WHERE tc2.tool_id = twd.id AND c2.slug = $1
 )
+  AND NOT EXISTS (SELECT 1 FROM tools th WHERE th.id = twd.id AND th.hidden_at IS NOT NULL)
 ORDER BY name
 LIMIT $2 OFFSET $3;
 
@@ -702,7 +731,6 @@ LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 -- tool_tickets.resolved_tool_id has no foreign key, so resolving a ticket with
 -- an existing tool checks this first.
 SELECT EXISTS (SELECT 1 FROM tools WHERE id = $1);
-
 -- name: GetToolTicket :one
 SELECT
   tt.id,
@@ -982,7 +1010,8 @@ FROM
   JOIN tools t ON twd.id = t.id,
   user_embedding
 WHERE
-  t.embedding IS NOT NULL 
+  t.embedding IS NOT NULL
+  AND t.hidden_at IS NULL
   AND user_embedding.embedding IS NOT NULL
   AND NOT EXISTS (
     SELECT 1 FROM stack_items si
@@ -1297,6 +1326,7 @@ WHERE id = sqlc.arg(profile_id);
 SELECT id, name, logo_url
 FROM tools
 WHERE lower(name) = ANY(sqlc.arg(names)::text[])
+  AND hidden_at IS NULL
 ORDER BY name;
 
 -- name: GetToolsByCategoryKeywords :many
@@ -1307,6 +1337,7 @@ FROM tools t
 JOIN tool_categories tc ON tc.tool_id = t.id
 JOIN categories c ON c.id = tc.category_id
 WHERE c.name ILIKE ANY(sqlc.arg(patterns)::text[])
+  AND t.hidden_at IS NULL
   AND t.logo_url IS NOT NULL
   AND t.logo_url <> ''
 ORDER BY t.name
@@ -1484,6 +1515,7 @@ LEFT JOIN (
     AND p.last_publish IS NOT NULL
     AND p.last_publish >= now() - interval '7 days'
 ) recent ON recent.tool_id = twd.id
+WHERE NOT EXISTS (SELECT 1 FROM tools th WHERE th.id = twd.id AND th.hidden_at IS NOT NULL)
 GROUP BY twd.id, twd.name, twd.description, twd.logo_url,
          twd.created_at, twd.updated_at, twd.categories, twd.vendor
 ORDER BY recent_mentions DESC, stack_count DESC, twd.name ASC

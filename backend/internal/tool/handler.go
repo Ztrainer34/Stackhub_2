@@ -60,9 +60,13 @@ func (h *Handler) AutocompleteTool(w http.ResponseWriter, r *http.Request) {
 		limit = 50
 	}
 
+	// The admin ticket queue asks for hidden tools too, so a suggestion for one
+	// is linked to it rather than duplicated. Hidden tools are not secret (their
+	// pages still load), they are only kept out of browsing.
 	autocompleteToolParams := db.AutocompleteToolParams{
-		Similarity: query,
-		Limit:      int32(limit),
+		Query:         query,
+		IncludeHidden: r.URL.Query().Get("include_hidden") == "1",
+		PageLimit:     int32(limit),
 	}
 
 	results, err := h.Queries.AutocompleteTool(r.Context(), autocompleteToolParams)

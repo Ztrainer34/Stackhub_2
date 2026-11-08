@@ -189,6 +189,8 @@ type Tool struct {
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 	DescriptionRich pgtype.Text        `json:"description_rich"`
+	HiddenAt        pgtype.Timestamptz `json:"hidden_at"`
+	HiddenBatch     pgtype.Text        `json:"hidden_batch"`
 }
 
 type ToolCategory struct {

@@ -375,6 +375,25 @@ function onSubmit(data: z.infer<typeof formSchema>) {
   - Reject ticket
 - Posts display pending tools with special UI indicator
 
+### Hidden Tools
+- `tools.hidden_at` (NULL = visible) and `tools.hidden_batch` (a label such as
+  `2026-11-client-curation`), from `20261108120000_hide_tools.sql`. Nothing is
+  deleted: posts, stacks, follows and owners keep pointing at a hidden tool.
+- Hidden tools are left out of search (and its facet count), autocomplete,
+  `/tools`, category pages and counts, popular and recommended tools, and
+  onboarding. **Any new query that lists tools publicly must filter
+  `hidden_at IS NULL`.** A hidden tool's page still loads (old links keep
+  working) with `is_hidden: true`, and the page asks search engines not to index it.
+- User stacks, watchlists and follows still show hidden tools.
+- `frontend/scripts/hide-tools.mjs` hides everything outside a keep-list
+  (plus every tool used in a post) and is the **only** way to un-hide:
+  `UNHIDE_BATCH=<label>` restores a batch, `UNHIDE_NAMES="A,B"` named tools.
+- **Nothing reachable over HTTP un-hides a tool.** `/admin` has no role check,
+  so approving a tool ticket with a hidden tool links it but leaves it hidden.
+  The admin queue's search passes `include_hidden=1` (shows a "Hidden" badge)
+  so suggestions link the existing tool instead of duplicating it, and
+  resolve-new refuses a name whose URL slug is already taken.
+
 ### Notification System
 - Automatic notifications for:
   - Post stars

@@ -220,6 +220,9 @@ func (s ticketService) resolveWithExisting(ctx context.Context, ticketID, resolv
 			ResolvedToolID: pg.UUID(toolID),
 			ResolvedBy:     pg.UUID(resolverID),
 		}))
+		// A hidden tool stays hidden: /admin has no role check, so an approval
+		// here is not a trusted act, and un-hiding would let any signed-in user
+		// undo the curation. Un-hiding is done by hand (scripts/hide-tools.mjs).
 		return toolID, err
 	})
 }
@@ -259,7 +262,17 @@ func (s ticketService) resolveWithNew(ctx context.Context, ticketID, resolverID 
 
 	var tool db.CreateToolRow
 	approval, err := s.resolve(ctx, ticketID, resolverID, func(q *db.Queries) (uuid.UUID, error) {
-		var err error
+		// Tool URLs are built from the name, so a second tool with the same
+		// one would share (or take over) the first one's page — including a
+		// hidden tool's. Link the existing tool instead.
+		taken, err := q.ToolSlugTaken(ctx, req.Name)
+		if err != nil {
+			return uuid.Nil, apperr.Internal("Could not create tool", err)
+		}
+		if taken {
+			return uuid.Nil, apperr.Conflict("A tool with this name already exists. Resolve the suggestion with the existing tool instead.")
+		}
+
 		tool, err = q.CreateTool(ctx, db.CreateToolParams{
 			Name:        req.Name,
 			Description: pg.Text(&req.Description),

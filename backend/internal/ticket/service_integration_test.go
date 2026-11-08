@@ -130,3 +130,61 @@ func TestResolveWithNewIsAtomicIntegration(t *testing.T) {
 		t.Errorf("ticket status %q after a failed resolution; want pending", status)
 	}
 }
+
+// Approving a suggestion with a hidden tool links the tool but leaves it hidden,
+// batch label and all: /admin has no role check, so an approval must not undo
+// the curation. Un-hiding is done by hand with scripts/hide-tools.mjs.
+func TestResolveWithHiddenToolKeepsItHiddenIntegration(t *testing.T) {
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
+	ctx := context.Background()
+	q := db.New(tx)
+	tickets := ticketService{db: tx, q: q}
+	requester, resolver := testdb.TwoProfiles(t, tx)
+	tool := testdb.SomeTools(t, tx, 1)[0]
+	if _, err := tx.Exec(ctx,
+		`UPDATE tools SET hidden_at = now(), hidden_batch = 'test-batch' WHERE id = $1`, tool); err != nil {
+		t.Fatal(err)
+	}
+	ticket, err := q.CreateStandaloneToolTicket(ctx, db.CreateStandaloneToolTicketParams{RequestedBy: requester, ToolName: "Hidden Tool Request"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := tickets.resolveWithExisting(ctx, ticket, resolver, tool); err != nil {
+		t.Fatal(err)
+	}
+
+	if resolved := testdb.Scalar[string](t, tx, `SELECT status FROM tool_tickets WHERE id = $1`, ticket); resolved != "resolved" {
+		t.Errorf("ticket status %q; want resolved", resolved)
+	}
+	if batch := testdb.Scalar[string](t, tx, `SELECT COALESCE(hidden_batch, '') FROM tools WHERE id = $1 AND hidden_at IS NOT NULL`, tool); batch != "test-batch" {
+		t.Errorf("after approval the tool has hidden_batch %q; want it still hidden in test-batch", batch)
+	}
+}
+
+// A suggestion cannot be resolved by creating a second tool whose name gives the
+// same URL slug as an existing one: the copy would take over or shadow the
+// original page, hidden or not.
+func TestResolveWithNewRefusesTakenNameIntegration(t *testing.T) {
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
+	ctx := context.Background()
+	q := db.New(tx)
+	tickets := ticketService{db: tx, q: q}
+	requester, resolver := testdb.TwoProfiles(t, tx)
+	if _, err := tx.Exec(ctx, `INSERT INTO tools (name, hidden_at) VALUES ('Zqx Dup!', now())`); err != nil {
+		t.Fatal(err)
+	}
+	ticket, err := q.CreateStandaloneToolTicket(ctx, db.CreateStandaloneToolTicketParams{RequestedBy: requester, ToolName: "zqx dup"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := testdb.Scalar[int64](t, tx, `SELECT count(*) FROM tools`)
+
+	_, _, err = tickets.resolveWithNew(ctx, ticket, resolver, ResolveTicketWithNewRequest{Name: "zqx dup", Description: "A copy"})
+	apperrtest.Want(t, "name already taken", err, apperr.KindConflict, "A tool with this name already exists. Resolve the suggestion with the existing tool instead.")
+	if after := testdb.Scalar[int64](t, tx, `SELECT count(*) FROM tools`); after != before {
+		t.Errorf("tools %d -> %d; a refused resolution must not create a tool", before, after)
+	}
+}
