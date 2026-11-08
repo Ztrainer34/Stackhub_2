@@ -32,6 +32,11 @@ export type Tool = {
   is_owner?: boolean;
   /** Somebody already owns the page, so the claim call to action is hidden. */
   is_claimed?: boolean;
+  /**
+   * Hidden from browsing (search, listings, categories). The page still loads
+   * for old links but asks search engines not to index it.
+   */
+  is_hidden?: boolean;
   added_at?: string;
 };
 

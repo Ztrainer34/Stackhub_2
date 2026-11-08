@@ -43,6 +43,8 @@ export interface Tool {
   description: string;
   logo_url: string;
   categories: Array<{ id: number; name: string }>;
+  /** Hidden from browsing. Resolving a ticket with it links it; it stays hidden. */
+  is_hidden?: boolean;
 }
 
 // Fetch tool tickets with pagination and filtering
@@ -153,11 +155,14 @@ export async function rejectTicket(ticketId: string): Promise<void> {
 export async function searchTools(query: string, limit: number = 10): Promise<Tool[]> {
   const supabase = createClient();
   
+  // Hidden tools are included, so a suggestion for one is linked to it rather
+  // than duplicated (a new tool with a taken name is refused anyway).
   const searchParams = new URLSearchParams({
     q: query,
     limit: limit.toString(),
+    include_hidden: "1",
   });
-  
+
   const response = await fetchApiAuthenticated(supabase, `/tool/autocomplete?${searchParams.toString()}`);
   
   if (!response.ok) {
@@ -167,11 +172,12 @@ export async function searchTools(query: string, limit: number = 10): Promise<To
   const results = await response.json();
   
   // Transform the autocomplete results to match our Tool interface
-  return results.map((result: { id: string; name: string; description?: string; logo_url?: string }) => ({
+  return results.map((result: { id: string; name: string; description?: string; logo_url?: string; is_hidden?: boolean }) => ({
     id: result.id,
     name: result.name,
     description: result.description || '',
     logo_url: result.logo_url || '',
+    is_hidden: result.is_hidden === true,
     categories: [], // Autocomplete doesn't include categories, would need separate API call
   }));
 }
