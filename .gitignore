@@ -17,3 +17,6 @@
 .DS_Store
 .idea/
 *.swp
+
+# graphify knowledge graph (rebuilt locally with /graphify)
+graphify-out/

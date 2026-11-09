@@ -83,9 +83,11 @@ expectation, say so in plain text and leave it alone.
 
 ## What is out of scope
 
-The **Go backend cannot be tested here** — there is no toolchain on this machine
-and `go test` is denied. Backend behaviour is verified by compiling on the VPS
-and by exercising the running app.
+**You do not write Go tests** — that is not because the backend cannot be tested
+(Go 1.27 is installed, `go test ./...` runs, and integration tests run against
+the local Supabase with `TEST_DB_CONNECTION`), but because this agent writes
+frontend unit tests only. Backend tests are written in the module beside the
+code they cover, by whoever changes it.
 
 Say so plainly when asked to test something backend-shaped, rather than writing a
 frontend test that gestures at it.
