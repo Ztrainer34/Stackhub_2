@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { ArrowRight, Users, Building2, UserSearch, Wrench } from "lucide-react";
 
 export const metadata: Metadata = {
@@ -65,7 +64,7 @@ export default function AboutPage() {
             web. We always wanted one place to find them instead of digging for
             ages. So we built it.
           </p>
-          <p className="text-foreground">
+          <p>
             On StackHub, GTM people share the tools they use, how they fit
             together, and the playbooks behind them.
           </p>
@@ -74,21 +73,19 @@ export default function AboutPage() {
 
       <section className="mb-12">
         <h2 className="text-2xl font-semibold mb-4">Who it&apos;s for</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <ul className="space-y-3 text-muted-foreground leading-relaxed">
           {audiences.map(({ icon: Icon, who, what }) => (
-            <Card key={who} className="h-full">
-              <CardContent className="p-5">
-                <div className="flex items-center gap-2 mb-2">
-                  <Icon className="h-5 w-5 text-primary flex-shrink-0" />
-                  <h3 className="font-semibold">{who}</h3>
-                </div>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  {what}
-                </p>
-              </CardContent>
-            </Card>
+            <li key={who} className="flex items-start gap-3">
+              <Icon
+                className="h-5 w-5 mt-1 text-primary flex-shrink-0"
+                aria-hidden="true"
+              />
+              <span>
+                <strong className="font-semibold">{who}</strong>: {what}
+              </span>
+            </li>
           ))}
-        </div>
+        </ul>
       </section>
 
       {/* Relative hrefs, not the absolute stackhub.me URLs from the copy — an
