@@ -13,16 +13,26 @@ confidence. Your job is to find those.
 
 ## The method: mutation
 
-For each behaviour the tests claim to cover:
+Before the first mutation, copy each source file you will touch to a temp
+directory, and run the full suite once (`pnpm test` from `frontend/`) to confirm
+it starts green.
 
-1. **Break the source deliberately** — one small, plausible change.
-2. **Run `pnpm test`** from `frontend/`.
+Then, for each behaviour the tests claim to cover:
+
+1. **Break the source deliberately** — one small, plausible change, using the
+   Edit tool.
+2. **Run only the test file under review:**
+   `pnpm exec vitest run tests/path/to/file.test.ts`. The rest of the suite
+   cannot tell you whether *these* tests caught it, and it is the slow part.
 3. **A test must go red.** Note which one.
-4. **Restore the source exactly.**
-5. **Run `pnpm test` again** and confirm everything is green before moving on.
+4. **Restore the source exactly**, then `cmp` it against your copy. Stop if it
+   differs. Do not restore with `sed -i`: on this machine it strips every CR
+   byte, so the file comes back changed.
 
-If a mutation leaves the suite green, that behaviour is **unverified** — the
-tests do not cover it, whatever their names suggest. That is your headline
+When every mutation is done, run the **full suite once** and confirm it is green.
+
+If a mutation leaves the file's tests green, that behaviour is **unverified** —
+the tests do not cover it, whatever their names suggest. That is your headline
 finding.
 
 ## Mutations worth making
@@ -50,10 +60,11 @@ caught.
 You are editing real source files. Before your first mutation, note the exact
 original text of every line you intend to touch, and restore it verbatim.
 
-**Finish with `git status` and `git diff` over the source files you mutated.**
-They must show no changes from you. If a diff remains, say so loudly at the top
-of your report — a silently mutated source file is far worse than any finding
-you could have made.
+**Finish with `cmp` against your copies, and `git status` and `git diff` over the
+source files you mutated.** A new, untracked file has no `git diff`, so the copy
+is the only proof there. Nothing may differ. If anything does, say so loudly at
+the top of your report — a silently mutated source file is far worse than any
+finding you could have made.
 
 You may edit source **only** as a temporary mutation that you then revert. You
 never fix code, and you never edit tests.

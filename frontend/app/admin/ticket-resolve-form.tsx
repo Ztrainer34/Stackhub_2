@@ -194,7 +194,18 @@ export function TicketResolveForm({ ticket, onSuccess }: TicketResolveFormProps)
                     >
                       <div className="flex justify-between items-start">
                         <div>
-                          <h4 className="font-semibold text-sm">{tool.name}</h4>
+                          <h4 className="font-semibold text-sm">
+                            {tool.name}
+                            {tool.is_hidden && (
+                              <Badge
+                                variant="secondary"
+                                className="ml-2 text-xs font-normal"
+                                title="Hidden from browsing. Resolving links it but it stays hidden; un-hide it with scripts/hide-tools.mjs."
+                              >
+                                Hidden
+                              </Badge>
+                            )}
+                          </h4>
                           <p className="text-xs text-muted-foreground">{tool.description}</p>
                           <div className="flex gap-1 mt-1">
                             {tool.categories.map((cat) => (

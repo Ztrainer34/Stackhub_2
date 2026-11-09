@@ -50,7 +50,7 @@ StackHub follows a modern full-stack architecture with clear separation of conce
 - **Styling**: Tailwind CSS + shadcn/ui components
 - **State Management**: TanStack Query (React Query) for server state
 - **Forms**: React Hook Form with Zod validation
-- **Rich Text**: Lexical editor for content creation
+- **Rich Text**: Tiptap editor for content creation
 - **Authentication**: Supabase Auth integration
 - **Type Safety**: TypeScript throughout
 
@@ -58,7 +58,7 @@ StackHub follows a modern full-stack architecture with clear separation of conce
 - **App Router**: Next.js 13+ routing with dynamic routes for users and content
 - **Components**: Reusable UI components built with shadcn/ui and Tailwind CSS
 - **Data Layer**: React Query hooks for server state management
-- **Editor**: Lexical-based rich text editor with custom plugins
+- **Editor**: Tiptap-based rich text editor with custom extensions
 - **Authentication**: Supabase integration with secure session management
 
 ### Key Features
@@ -66,7 +66,7 @@ StackHub follows a modern full-stack architecture with clear separation of conce
 - **Client-Side Hydration**: Interactive components with React Query caching
 - **Type-Safe API**: Full TypeScript integration with backend contracts
 - **Responsive Design**: Mobile-first approach with Tailwind CSS
-- **Rich Content Creation**: Lexical editor with image uploads and formatting
+- **Rich Content Creation**: Tiptap editor with image uploads and formatting
 - **Real-time Search**: Full-text search with pagination and filtering
 - **User Authentication**: Secure session management with Supabase
 
@@ -139,7 +139,7 @@ The project uses a monorepo structure with separate frontend and backend applica
 ## 🎯 Key Features
 
 ### Content Creation
-- **Rich Text Editor**: Lexical-based editor with plugins
+- **Rich Text Editor**: Tiptap-based editor with extensions
 - **Image Uploads**: AWS S3 integration for media storage
 - **Tool Integration**: Link posts to marketing tools
 - **Content Types**: Playbooks and comparisons
@@ -190,7 +190,11 @@ The project uses a monorepo structure with separate frontend and backend applica
 ## 🔒 Security
 
 - **Authentication**: JWT tokens with secure HTTP-only cookies
-- **Authorization**: Role-based access control
+- **Authorization**: Ownership checks per resource (only an author may edit
+  their post; only a tool's owner may edit its page). There is **no admin
+  role**: the `/admin` tool-ticket pages are a UI convention open to any
+  signed-in user, so no privileged action belongs behind them. Anything
+  privileged runs out of band via a service-role script in `frontend/scripts/`.
 - **Input Validation**: Zod schemas for type safety
 - **SQL Injection Prevention**: SQLC parameterized queries
 - **CORS Configuration**: Restricted cross-origin access

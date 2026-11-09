@@ -1,6 +1,6 @@
 ---
-description: Run the code → verify → fix loop on the current change, bounded at 3 attempts.
-argument-hint: [what you changed, or leave blank to infer from the diff]
+description: Run the code → verify → fix loop on the current change, sized to the change and bounded at 3 attempts.
+argument-hint: [what you changed, or leave blank to infer from the diff; add "full" to force the whole loop]
 allowed-tools: Read, Glob, Grep, Edit, Write, Bash, Agent
 ---
 
@@ -9,6 +9,36 @@ Run the StackHub development loop for: $ARGUMENTS
 Current state:
 !`git --no-pager diff --stat HEAD`
 !`git status --porcelain`
+
+## Size the change first
+
+Checks cost minutes each, so match them to the risk. Pick the tier from what the
+change touches, and say which one you picked before starting. If the arguments
+say "full", use **Feature**.
+
+| Tier | The change is | What runs |
+|---|---|---|
+| **Small** | Docs, copy, styling, comments, or a script that only reads or runs locally | The direct checks below, no subagents |
+| **Normal** | Any other code change, including a script that writes to production | Steps 3 and 5 |
+| **Feature** | New behaviour with testable logic, or a new endpoint | The whole loop |
+
+**Never Small, whatever the size of the diff:** auth, routes, `db/query.sql`,
+migrations, uploads, emails, redirects, how user content is rendered, CORS,
+environment variables, `.gitignore`, and any script that uses the service-role
+key to write. A one-line change there is at least **Normal**.
+
+When in doubt between two tiers, take the higher one.
+
+**Direct checks for Small**, run yourself rather than through `test-runner`:
+
+- Docs and comments: nothing.
+- `frontend/app`, `components` or `lib`: `npx tsc --noEmit` and `npx next lint`
+  (ESLint failures break the Vercel build and `tsc` misses them). Add step 6 if
+  the change is visual.
+- A script: `node --check`, then exercise the changed behaviour offline. None of
+  `tsc`, lint or the build covers `scripts/`, so running them says nothing about it.
+
+If a Small change turns out to reach further than it looked, move it up a tier.
 
 ## The loop
 
@@ -39,25 +69,31 @@ backend-only work.
 
 **3. Verify.** Call the `test-runner` subagent. It runs Go build, vet and tests
 in `backend/`, then typecheck, tests, lint and the production build in
-`frontend/`, and reports failures with `file:line`.
+`frontend/`, and reports failures with `file:line`. Tell it which half changed:
+it skips the other.
 
-**4. Fix and repeat.** Go back to step 3 after each fix.
+**Start `security-reviewer` (step 5) at the same time, if the change needs it.**
+Neither depends on the other, so call both in one message rather than waiting.
+
+**4. Fix and repeat.** Go back to step 3 after each fix. If the fix changes
+security-relevant logic, the review that ran alongside is stale: run it again.
 
 **Stop after 3 failed attempts.** Do not keep going. Report what is still red,
 what you tried, and hand back. An unbounded loop on a problem the model cannot
 solve burns an hour and a lot of tokens to arrive at the same place.
 
-**5. Security review.** Once `test-runner` is green, call the
-`security-reviewer` subagent on any change that touches:
+**5. Security review.** Alongside step 3, call the `security-reviewer` subagent
+on any change that touches:
 
 - `backend/` — handlers, `routes.go`, `db/query.sql`, migrations, middleware
 - Next.js route handlers (`app/**/route.ts`), `"use server"` files, or
   `frontend/utils/supabase/`
 - authentication, uploads, emails, redirects, or how user content is rendered
-- config, environment variables, `.gitignore`, or anything under `scripts/`
+- config, environment variables, `.gitignore`, or a script that writes to
+  production
 
-Tell it what changed and why. Skip it for pure styling, copy, docs and
-test-only changes.
+Tell it what changed and why. Skip it for pure styling, copy, docs, test-only
+changes, and scripts that only read or run locally.
 
 On **BLOCK**, fix the Critical/High findings that belong to this change, then
 go back to step 3 — `test-runner` first, then `security-reviewer` again. Those
@@ -66,6 +102,11 @@ rounds count toward the same 3-attempt cap. If a fix needs a product decision
 
 **PASS WITH FINDINGS** does not block. Pass the Medium/Low and pre-existing
 findings on to the user in your hand-back, verbatim enough to act on.
+
+**A second review is only for Critical/High fixes.** If you fix a Medium or Low
+yourself, test that fix directly, re-run `test-runner` only if it changed code
+the gate covers, and do not call `security-reviewer` again. List what you fixed
+in the hand-back so the user can ask for another look.
 
 **6. Look at it — but only when the change is visual.** Call the `ui-reviewer`
 subagent when **both** hold:
@@ -89,6 +130,9 @@ noise is read by nobody.
 **8. Hand back.** Do not commit, push or deploy. Deployment order here is strictly
 migration (Supabase SQL editor) → backend (VPS) → frontend (Vercel push), and it
 is the user's call when to start it.
+
+Name the tier you used and every check you skipped, so a smaller run is never
+mistaken for the full one.
 
 **If the change touches a migration or `backend/`, say so in bold in your final
 message**, and name the migration file. Shipping the backend before its migration

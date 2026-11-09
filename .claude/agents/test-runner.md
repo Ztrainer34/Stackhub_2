@@ -23,10 +23,11 @@ that to PATH for your shell rather than giving up — a process started before G
 was installed keeps the old environment, and every terminal VS Code spawns
 inherits VS Code's.
 
-`go build` is the single most valuable check in this repo. `backend/db/query.sql`
-and `backend/pkg/db/query.sql.go` are hand-maintained in parallel with no
-`sqlc generate`, so a mismatch between them is easy to introduce and invisible
-until runtime.
+`go build` is the single most valuable check in this repo. `backend/pkg/db/` is
+generated from `backend/db/query.sql` by sqlc (through WSL — see CLAUDE.md) and
+must never be hand-edited; `go build` is what catches a handler still using a
+field the regenerated code no longer has. Note that `sqlc generate` exits 0 even
+when the Go it produced does not parse, so a stale `pkg/db` reaches the build.
 
 **What `go build` still cannot catch:** SQL lives inside Go string constants, so
 a malformed query, a column that does not exist, or a `rows.Scan` order that
