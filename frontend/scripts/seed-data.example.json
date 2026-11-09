@@ -81,6 +81,44 @@
         "Push contacts into a Lemlist campaign.",
         "Personalise with company data and send."
       ]
+    },
+    {
+      "author": "alice",
+      "type": "playbook",
+      "title": "Rich content example",
+      "description": "Shows a Tiptap node body: headings, lists, images, embeds and links. A body is all strings or all nodes, never a mix.",
+      "tools": ["HubSpot"],
+      "published": false,
+      "body": [
+        { "type": "paragraph", "content": [{ "type": "text", "text": "A body of Tiptap nodes is stored exactly as the editor would save it." }] },
+        { "type": "heading", "attrs": { "level": 2 }, "content": [{ "type": "text", "text": "Step by step" }] },
+        {
+          "type": "orderedList",
+          "attrs": { "start": 1 },
+          "content": [
+            { "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "First step" }] }] },
+            { "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Second step" }] }] }
+          ]
+        },
+        { "type": "image", "attrs": { "src": "https://example.com/screenshot.png", "alt": "Screenshot" } },
+        { "type": "youtube", "attrs": { "src": "https://www.youtube.com/watch?v=dQw4w9WgXcQ" } },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Watch the walkthrough on LinkedIn",
+              "marks": [{ "type": "link", "attrs": { "href": "https://www.linkedin.com/posts/example" } }]
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            { "type": "text", "text": "This article was originally posted on https://example.com/post", "marks": [{ "type": "italic" }] }
+          ]
+        }
+      ]
     }
   ]
 }
