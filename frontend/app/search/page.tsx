@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
-import { FileText, User, Wrench, ChevronLeft, ChevronRight } from "lucide-react";
+import { FileText, User, Wrench, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import PostCard from "@/components/post-card";
 import { useFacetCounts, useSearch } from "@/lib/queries/use-search";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -29,7 +29,10 @@ type SearchCategory = {
 };
 
 import { AddToolDialog } from "@/components/add-tool-dialog";
-import { shouldOfferToolSuggestion } from "@/lib/search-empty-state";
+import {
+  shouldOfferPostCreation,
+  shouldOfferToolSuggestion,
+} from "@/lib/search-empty-state";
 
 const categories: SearchCategory[] = [
   {
@@ -367,6 +370,25 @@ export default function SearchPage() {
                 find it. Our team reviews every suggestion.
               </p>
               <AddToolDialog />
+            </div>
+          )}
+
+          {/* Same idea for posts: anyone can write one, so an empty search is
+              the best prompt to cover the missing topic. */}
+          {shouldOfferPostCreation(category, results.length) && (
+            <div className="rounded-lg border border-dashed p-6 max-w-2xl">
+              <p className="font-medium mb-1">
+                Can&apos;t find &ldquo;{query}&rdquo;?
+              </p>
+              <p className="text-sm text-muted-foreground mb-4">
+                Add a playbook or comparison covering it.
+              </p>
+              <Link href="/new">
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create a new post
+                </Button>
+              </Link>
             </div>
           )}
         </div>
