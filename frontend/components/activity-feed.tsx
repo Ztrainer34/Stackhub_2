@@ -15,7 +15,8 @@ import {
   UserPlus,
 } from "lucide-react";
 import { useFeed } from "@/lib/queries/use-feed";
-import { FeedItem } from "@/lib/feed";
+import { FeedItem, hasMoreFeed } from "@/lib/feed";
+import { Button } from "@/components/ui/button";
 import { timeAgo } from "@/lib/time-ago";
 
 /** "3 hours ago" / "2 days ago" — compact relative time for feed entries. */
@@ -82,7 +83,7 @@ function NotificationRow({ item }: { item: FeedItem }) {
   );
 }
 
-function FeedRow({ item }: { item: FeedItem }) {
+export function FeedRow({ item }: { item: FeedItem }) {
   if (item.kind === "notification") return <NotificationRow item={item} />;
 
   return (
@@ -156,7 +157,22 @@ function FeedRow({ item }: { item: FeedItem }) {
   );
 }
 
-export default function ActivityFeed({ limit = 20 }: { limit?: number }) {
+export function FeedEmptyState() {
+  return (
+    <div className="rounded-lg border border-dashed py-10 text-center">
+      <p className="text-muted-foreground mb-1">Your feed is empty.</p>
+      <p className="text-sm text-muted-foreground">
+        Follow{" "}
+        <Link href="/tools" className="text-primary hover:underline">
+          tools
+        </Link>{" "}
+        and people to see their latest playbooks here.
+      </p>
+    </div>
+  );
+}
+
+export default function ActivityFeed({ limit = 5 }: { limit?: number }) {
   const { data, isLoading, error } = useFeed(limit);
   const items = data?.items ?? [];
 
@@ -180,25 +196,22 @@ export default function ActivityFeed({ limit = 20 }: { limit?: number }) {
           <p className="text-muted-foreground">Failed to load your feed.</p>
         </div>
       ) : items.length === 0 ? (
-        <div className="rounded-lg border border-dashed py-10 text-center">
-          <p className="text-muted-foreground mb-1">Your feed is empty.</p>
-          <p className="text-sm text-muted-foreground">
-            Follow{" "}
-            <Link href="/tools" className="text-primary hover:underline">
-              tools
-            </Link>{" "}
-            and people to see their latest playbooks here.
-          </p>
-        </div>
+        <FeedEmptyState />
       ) : (
-        <div className="divide-y rounded-lg border px-4">
-          {items.map((item, i) => (
-            <FeedRow
-              key={`${item.kind}-${item.reason}-${item.post_id ?? item.tool_id}-${item.actor_id}-${i}`}
-              item={item}
-            />
-          ))}
-        </div>
+        <>
+          <div className="divide-y rounded-lg border px-4">
+            {items.map((item) => (
+              <FeedRow key={item.event_key} item={item} />
+            ))}
+          </div>
+          {data && hasMoreFeed(data) && (
+            <div className="mt-4 flex justify-center">
+              <Link href="/home/feed">
+                <Button size="sm">See more</Button>
+              </Link>
+            </div>
+          )}
+        </>
       )}
     </section>
   );

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -278,6 +279,149 @@ func postCarrying(t *testing.T, tx pgx.Tx, viewer, tool uuid.UUID) uuid.UUID {
 		t.Skipf("no published post by another author uses this tool (%v)", err)
 	}
 	return post
+}
+
+// followAllPostTools resets the viewer's follows and makes them follow every
+// tool used by a published post from another author, so the feed has many rows.
+func followAllPostTools(t *testing.T, tx pgx.Tx, viewer uuid.UUID) {
+	t.Helper()
+	ctx := context.Background()
+	for _, q := range []string{
+		`DELETE FROM stack_items WHERE profile_id = $1`,
+		`DELETE FROM watchlist_items WHERE profile_id = $1`,
+		`DELETE FROM old_stack_items WHERE profile_id = $1`,
+		`DELETE FROM tool_follows WHERE profile_id = $1`,
+		`DELETE FROM user_follows WHERE follower_id = $1`,
+	} {
+		if _, err := tx.Exec(ctx, q, viewer); err != nil {
+			t.Fatalf("reset (%s): %v", q, err)
+		}
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO tool_follows (profile_id, tool_id)
+		SELECT DISTINCT $1::uuid, pt.tool_id
+		FROM post_tools pt
+		JOIN posts p ON p.id = pt.post_id
+		WHERE p.is_published AND p.last_publish IS NOT NULL AND p.author_id <> $1`, viewer); err != nil {
+		t.Fatalf("follow insert: %v", err)
+	}
+}
+
+// TestFeedEventKeyIntegration: every feed row carries a unique, well-formed key.
+func TestFeedEventKeyIntegration(t *testing.T) {
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
+	ctx := context.Background()
+
+	viewer, _ := oneProfileAndTools(t, tx)
+	followAllPostTools(t, tx, viewer)
+
+	feed, err := db.New(tx).GetUserFeed(ctx, db.GetUserFeedParams{
+		ViewerID: viewer, PageLimit: 50, PageOffset: 0,
+	})
+	if err != nil {
+		t.Fatalf("GetUserFeed: %v", err)
+	}
+	if len(feed) == 0 {
+		t.Skip("empty feed")
+	}
+
+	seen := map[string]bool{}
+	for _, item := range feed {
+		if item.EventKey == "" {
+			t.Fatal("empty event_key")
+		}
+		if !strings.HasPrefix(item.EventKey, "post:") && !strings.HasPrefix(item.EventKey, "notification:") {
+			t.Errorf("unexpected event_key %q", item.EventKey)
+		}
+		if seen[item.EventKey] {
+			t.Errorf("duplicate event_key %q", item.EventKey)
+		}
+		seen[item.EventKey] = true
+		if strings.HasPrefix(item.EventKey, "post:") && item.PostID.Valid {
+			if want := "post:" + uuid.UUID(item.PostID.Bytes).String(); item.EventKey != want {
+				t.Errorf("event_key %q, want %q", item.EventKey, want)
+			}
+		}
+	}
+}
+
+// TestFeedPaginationStableIntegration: with every post tied on last_publish,
+// small pages joined together must equal one big page.
+func TestFeedPaginationStableIntegration(t *testing.T) {
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
+	ctx := context.Background()
+
+	viewer, _ := oneProfileAndTools(t, tx)
+	followAllPostTools(t, tx, viewer)
+	q := db.New(tx)
+
+	initial, err := q.GetUserFeed(ctx, db.GetUserFeedParams{ViewerID: viewer, PageLimit: 50, PageOffset: 0})
+	if err != nil {
+		t.Fatalf("GetUserFeed: %v", err)
+	}
+	var postIDs []uuid.UUID
+	for _, item := range initial {
+		if item.Kind == "post" && item.PostID.Valid {
+			postIDs = append(postIDs, uuid.UUID(item.PostID.Bytes))
+		}
+	}
+	if len(postIDs) < 3 {
+		t.Skip("need at least 3 feed posts")
+	}
+	// now() is constant inside a transaction, so these all tie exactly.
+	if _, err := tx.Exec(ctx, `UPDATE posts SET last_publish = now() WHERE id = ANY($1)`, postIDs); err != nil {
+		t.Fatalf("tie posts: %v", err)
+	}
+
+	single, err := q.GetUserFeed(ctx, db.GetUserFeedParams{ViewerID: viewer, PageLimit: 50, PageOffset: 0})
+	if err != nil {
+		t.Fatalf("single: %v", err)
+	}
+	var want []string
+	for _, item := range single {
+		want = append(want, item.EventKey)
+	}
+
+	var got []string
+	seen := map[string]bool{}
+	for offset := int32(0); ; offset += 2 {
+		page, err := q.GetUserFeed(ctx, db.GetUserFeedParams{ViewerID: viewer, PageLimit: 2, PageOffset: offset})
+		if err != nil {
+			t.Fatalf("page at %d: %v", offset, err)
+		}
+		if len(page) == 0 {
+			break
+		}
+		for _, item := range page {
+			if seen[item.EventKey] {
+				t.Errorf("repeated key %q across pages", item.EventKey)
+			}
+			seen[item.EventKey] = true
+			got = append(got, item.EventKey)
+			if item.TotalCount != int64(len(want)) {
+				t.Errorf("total_count %d at offset %d, want %d", item.TotalCount, offset, len(want))
+			}
+		}
+	}
+
+	if len(got) != len(want) {
+		t.Fatalf("paged %d rows, single call %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("position %d: paged %q, single %q", i, got[i], want[i])
+		}
+	}
+
+	past, err := q.GetUserFeed(ctx, db.GetUserFeedParams{ViewerID: viewer, PageLimit: 2, PageOffset: int32(len(want)) + 10})
+	if err != nil {
+		t.Fatalf("past end: %v", err)
+	}
+	if len(past) != 0 {
+		t.Errorf("page past the end returned %d rows", len(past))
+	}
 }
 
 // TestFeedRecencyBandIntegration is the test for the ordering rule itself:

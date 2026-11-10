@@ -1276,6 +1276,7 @@ WITH followed_users AS (
 )
 SELECT
   r.kind, r.reason, r.tier, r.occurred_at,
+  r.event_key::text AS event_key,
   r.actor_id, actor.username AS actor_username,
   -- sqlc infers a UNION column's type and nullability from the FIRST branch
   -- only. Read straight from `r`, post_id came out as interface{} (a UUID then
@@ -1302,7 +1303,8 @@ WHERE r.rn = 1
   AND r.actor_id <> sqlc.arg(viewer_id)::uuid
 -- 0 for the last 3 days, 1 for everything older: the outermost sort key, so a
 -- fresh event of any tier outranks a stale one of every tier.
-ORDER BY (r.occurred_at < now() - interval '3 days')::int, r.tier, r.occurred_at DESC
+-- event_key breaks ties so LIMIT/OFFSET pages are stable; it is unique per row (deduped by rn = 1).
+ORDER BY (r.occurred_at < now() - interval '3 days')::int, r.tier, r.occurred_at DESC, r.event_key
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
 -- name: SetProfileAvatar :exec

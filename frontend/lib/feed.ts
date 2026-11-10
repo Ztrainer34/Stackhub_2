@@ -19,6 +19,8 @@ export type FeedKind = "notification" | "post";
 
 export interface FeedItem {
   kind: FeedKind;
+  /** Stable per-row id ("post:<uuid>" or "notification:<uuid>"); unique within a response. */
+  event_key: string;
   reason: FeedReason;
   /**
    * How closely the event concerns the viewer: 0 things about you, 1 people you
@@ -72,4 +74,33 @@ export async function getFeed(
 
   if (!response.ok) throw new Error("Failed to fetch feed");
   return response.json();
+}
+
+/** True when the server holds more feed items than this response carries. */
+export function hasMoreFeed(resp: FeedResponse): boolean {
+  return resp.total_count > resp.items.length;
+}
+
+/** Next page number for an infinite feed, or undefined when there is none. */
+export function nextFeedPage(last: FeedResponse): number | undefined {
+  if (last.items.length === 0) return undefined;
+  return last.page * last.limit < last.total_count ? last.page + 1 : undefined;
+}
+
+/**
+ * Concatenates pages in order, dropping any item whose event_key was already
+ * seen. Offset paging can repeat a row when new events arrive or one ages
+ * out of the 3-day band between page loads; the first occurrence wins.
+ */
+export function flattenFeedPages(pages: FeedResponse[]): FeedItem[] {
+  const seen = new Set<string>();
+  const out: FeedItem[] = [];
+  for (const page of pages) {
+    for (const item of page.items) {
+      if (seen.has(item.event_key)) continue;
+      seen.add(item.event_key);
+      out.push(item);
+    }
+  }
+  return out;
 }

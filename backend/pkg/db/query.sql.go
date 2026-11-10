@@ -2166,6 +2166,7 @@ WITH followed_users AS (
 )
 SELECT
   r.kind, r.reason, r.tier, r.occurred_at,
+  r.event_key::text AS event_key,
   r.actor_id, actor.username AS actor_username,
   -- sqlc infers a UNION column's type and nullability from the FIRST branch
   -- only. Read straight from ` + "`" + `r` + "`" + `, post_id came out as interface{} (a UUID then
@@ -2190,7 +2191,7 @@ LEFT JOIN tools t ON t.id = r.tool_id
 WHERE r.rn = 1
   -- A feed is what other people did; your own activity is not news to you.
   AND r.actor_id <> $1::uuid
-ORDER BY (r.occurred_at < now() - interval '3 days')::int, r.tier, r.occurred_at DESC
+ORDER BY (r.occurred_at < now() - interval '3 days')::int, r.tier, r.occurred_at DESC, r.event_key
 LIMIT $3 OFFSET $2
 `
 
@@ -2205,6 +2206,7 @@ type GetUserFeedRow struct {
 	Reason              string             `json:"reason"`
 	Tier                int32              `json:"tier"`
 	OccurredAt          pgtype.Timestamptz `json:"occurred_at"`
+	EventKey            string             `json:"event_key"`
 	ActorID             pgtype.UUID        `json:"actor_id"`
 	ActorUsername       string             `json:"actor_username"`
 	PostID              pgtype.UUID        `json:"post_id"`
@@ -2256,6 +2258,7 @@ type GetUserFeedRow struct {
 // relationship with.
 // 0 for the last 3 days, 1 for everything older: the outermost sort key, so a
 // fresh event of any tier outranks a stale one of every tier.
+// event_key breaks ties so LIMIT/OFFSET pages are stable; it is unique per row (deduped by rn = 1).
 func (q *Queries) GetUserFeed(ctx context.Context, arg GetUserFeedParams) ([]GetUserFeedRow, error) {
 	rows, err := q.db.Query(ctx, getUserFeed, arg.ViewerID, arg.PageOffset, arg.PageLimit)
 	if err != nil {
@@ -2270,6 +2273,7 @@ func (q *Queries) GetUserFeed(ctx context.Context, arg GetUserFeedParams) ([]Get
 			&i.Reason,
 			&i.Tier,
 			&i.OccurredAt,
+			&i.EventKey,
 			&i.ActorID,
 			&i.ActorUsername,
 			&i.PostID,
