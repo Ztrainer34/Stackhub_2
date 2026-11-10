@@ -1,9 +1,12 @@
-import { Card, CardContent } from "@/components/ui/card";
+import Link from "next/link";
 import { ToolLogo } from "@/components/tool-logo";
+import { toolHref } from "@/lib/tool";
 import type { PostTool, PostType } from "@/lib/post";
 
 // The tools picked in the "Tools featured" step of the creation form, shown
-// on the post page (draft and published) with the same cards.
+// on the post page (draft and published). The chips match the ones on the
+// edit screen; each links to its tool's page. A tool still waiting for review
+// has no page yet, so its chip is not a link.
 export function PostTools({
   tools,
   type,
@@ -17,48 +20,35 @@ export function PostTools({
     <div className="flex flex-col gap-2">
       <h2 className="text-sm font-medium">Tools featured in this {type}</h2>
 
-      {/* Tiles sit side by side and wrap. Each is as wide as its content, up
-          to the logo plus 20 characters of name; longer names are truncated. */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {tools.map((tool) =>
           tool.is_ticket ? (
-            <Card
-              className="min-h-16 border-orange-200 bg-orange-50"
+            <span
               key={tool.id}
               title={tool.name}
+              className="inline-flex max-w-full items-center gap-2 rounded-md border border-orange-200 bg-orange-50 py-1 pl-1.5 pr-2 text-sm dark:border-orange-900 dark:bg-orange-950"
             >
-              <CardContent className="p-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 shrink-0 bg-orange-200 rounded flex items-center justify-center text-orange-600 text-sm font-bold">
-                    {tool.name.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="max-w-[20ch] truncate font-medium">
-                      {tool.name}
-                    </div>
-                    <div className="text-sm text-orange-600">
-                      ⏳ Pending approval
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+              <ToolLogo name={tool.name} logoUrl="" size="sm" className="shrink-0" />
+              <span className="max-w-[20ch] truncate">{tool.name}</span>
+              <span className="shrink-0 text-xs italic text-muted-foreground">
+                pending review
+              </span>
+            </span>
           ) : (
-            <Card className="min-h-16" key={tool.id} title={tool.name}>
-              <CardContent className="p-3">
-                <div className="flex items-center gap-3">
-                  <ToolLogo
-                    name={tool.name}
-                    logoUrl={tool.logo_url}
-                    size="sm"
-                    className="shrink-0"
-                  />
-                  <div className="max-w-[20ch] truncate font-medium">
-                    {tool.name}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <Link
+              key={tool.id}
+              href={toolHref(tool)}
+              title={tool.name}
+              className="inline-flex max-w-full items-center gap-2 rounded-md border bg-muted/40 py-1 pl-1.5 pr-2 text-sm transition-colors hover:bg-muted"
+            >
+              <ToolLogo
+                name={tool.name}
+                logoUrl={tool.logo_url}
+                size="sm"
+                className="shrink-0"
+              />
+              <span className="max-w-[20ch] truncate">{tool.name}</span>
+            </Link>
           )
         )}
       </div>
