@@ -1,10 +1,10 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { fetchApiAuthenticated } from "./api";
+import { apiPath } from "@/lib/api-path";
 
 export type User = {
   id: string;
   username: string;
-  email_hash?: string;
   /** Uploaded picture. When absent the UI falls back to Gravatar. */
   avatar_url?: string | null;
   display_name?: string;
@@ -44,7 +44,7 @@ export async function getUserFromUsername(
   username: string,
   supabaseClient?: SupabaseClient
 ): Promise<User> {
-  const path = `/user/${username}`;
+  const path = apiPath`/user/${username}`;
 
   const resp = supabaseClient
     ? await fetchApiAuthenticated(supabaseClient, path)
@@ -81,7 +81,6 @@ export type FollowListUser = {
   username: string;
   display_name?: string;
   bio?: string;
-  email_hash?: string;
   avatar_url?: string | null;
   is_following: boolean;
 };
@@ -133,7 +132,7 @@ export async function followUser(
 ): Promise<void> {
   const response = await fetchApiAuthenticated(
     supabaseClient,
-    `/user/follow/${userId}`,
+    apiPath`/user/follow/${userId}`,
     {
       method: "PUT",
     }
@@ -148,7 +147,7 @@ export async function unfollowUser(
 ): Promise<void> {
   const response = await fetchApiAuthenticated(
     supabaseClient,
-    `/user/follow/${userId}`,
+    apiPath`/user/follow/${userId}`,
     {
       method: "DELETE",
     }

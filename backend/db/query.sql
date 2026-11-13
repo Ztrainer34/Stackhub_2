@@ -9,7 +9,6 @@ SELECT
   location,
   linkedin,
   twitter,
-  email_hash,
   avatar_url,
   created_at,
   updated_at
@@ -30,7 +29,6 @@ SELECT
   location,
   linkedin,
   twitter,
-  email_hash,
   avatar_url,
   created_at,
   updated_at
@@ -53,18 +51,17 @@ SELECT
   location,
   linkedin,
   twitter,
-  email_hash,
   avatar_url,
   created_at,
   updated_at,
   EXISTS(
     SELECT 1 FROM user_follows uf
-    WHERE uf.follower_id = $2 AND uf.followee_id = profiles.id
+    WHERE uf.follower_id = sqlc.arg(viewer_id) AND uf.followee_id = profiles.id
   ) AS is_following
 FROM
   profiles
 WHERE
-  username = $1;
+  username = sqlc.arg(username);
 
 -- name: CreateProfile :one
 INSERT INTO profiles (
@@ -94,17 +91,35 @@ SET
 WHERE id = $1;
 
 -- name: GetPost :one
+-- Visible to everyone once published; otherwise only to its author. viewer_id
+-- is the zero UUID for anonymous callers, which matches no author.
 SELECT *
 FROM posts_with_tools_and_tickets
-WHERE id = $1;
+WHERE id = sqlc.arg(id) AND (is_published OR author_id = sqlc.arg(viewer_id));
 
 -- name: GetPostContent :one
+-- Same rule as GetPost. Unpublishing leaves `content` in place, so without the
+-- check an unpublished post's text stayed readable by id.
 SELECT id, content FROM posts
-WHERE id = $1 LIMIT 1;
+WHERE id = sqlc.arg(id) AND (is_published OR author_id = sqlc.arg(viewer_id))
+LIMIT 1;
+
+-- name: IsPostVisible :one
+-- Whether a viewer may see — and so star or comment on — a post.
+SELECT EXISTS (
+  SELECT 1 FROM posts
+  WHERE id = sqlc.arg(post_id) AND (is_published OR author_id = sqlc.arg(viewer_id))
+);
 
 -- name: GetPostDraftContent :one
 SELECT id, draft_content FROM posts
 WHERE id = $1 AND author_id = sqlc.arg(authenticated_id) LIMIT 1;
+
+-- name: IsPostAuthor :one
+SELECT EXISTS (
+  SELECT 1 FROM posts
+  WHERE id = sqlc.arg(post_id) AND author_id = sqlc.arg(author_id)
+);
 
 -- name: ListPosts :many
 SELECT id, name, description FROM posts
@@ -112,10 +127,13 @@ ORDER BY name
 LIMIT 5; -- FIXME
 
 -- name: CreatePost :one
+-- experience_level is optional; sqlc.narg gives a nullable parameter so an
+-- unanswered dropdown stores NULL rather than an empty string that would fail
+-- the CHECK constraint.
 INSERT INTO posts (
-  author_id, type, name, slug, description
+  author_id, type, name, slug, description, experience_level
 ) VALUES (
-  $1, $2, $3, $4, $5
+  $1, $2, $3, $4, $5, sqlc.narg(experience_level)
 )
 RETURNING id, slug;
 
@@ -235,9 +253,12 @@ history_insert AS (
   WHERE old_post.slug != post_update.slug
   RETURNING post_id
 )
+-- Scoped to the rename having happened: without the EXISTS, a caller who does
+-- not own the post still rewrote its history rows.
 UPDATE post_slug_history AS h
 SET current_slug = $4
-WHERE h.post_id = $1 AND h.current_slug != $4;
+WHERE h.post_id = $1 AND h.current_slug != $4
+  AND EXISTS (SELECT 1 FROM post_update);
 
 -- name: DeletePost :execrows
 DELETE FROM posts
@@ -345,23 +366,43 @@ INSERT INTO tool_categories (
 -- Resolves a URL slug back to a tool id. The slug is the tool name lowercased
 -- with every run of non-alphanumeric characters collapsed to '-'. Must stay in
 -- sync with toolSlug() on the frontend.
+--
+-- Hidden tools still resolve (old links keep working). When names collide, a
+-- visible tool wins over a hidden one, then the oldest wins — so a later copy
+-- can never take over an established tool's URL.
 SELECT id FROM tools
 WHERE btrim(lower(regexp_replace(name, '[^a-zA-Z0-9]+', '-', 'g')), '-') = $1
+ORDER BY (hidden_at IS NOT NULL), created_at, id
 LIMIT 1;
 
+-- name: ToolSlugTaken :one
+-- A new tool whose name gives the same slug as an existing one would share its
+-- URL. Resolving a suggestion must link the existing tool instead.
+SELECT EXISTS (
+  SELECT 1 FROM tools
+  WHERE btrim(lower(regexp_replace(name, '[^a-zA-Z0-9]+', '-', 'g')), '-')
+      = btrim(lower(regexp_replace(sqlc.arg(name)::text, '[^a-zA-Z0-9]+', '-', 'g')), '-')
+);
+
 -- name: AutocompleteTool :many
-SELECT id, name, description, logo_url, similarity(name, $1) AS sml
+-- Typeahead for the post form and the admin ticket queue. Hidden tools are left
+-- out unless include_hidden is set: the admin queue sets it so a suggestion for
+-- a hidden tool is linked to that tool rather than duplicated. Linking does not
+-- un-hide it.
+SELECT id, name, description, logo_url, similarity(name, sqlc.arg(query)) AS sml,
+  (hidden_at IS NOT NULL)::boolean AS is_hidden
 FROM tools
-WHERE name % $1 OR name ILIKE $1 || '%'
+WHERE (name % sqlc.arg(query) OR name ILIKE sqlc.arg(query) || '%')
+  AND (sqlc.arg(include_hidden)::boolean OR hidden_at IS NULL)
 ORDER BY
   CASE
-    WHEN LOWER(name) = LOWER($1) THEN 0           -- exact match first
-    WHEN LOWER(name) LIKE LOWER($1) || '%' THEN 1 -- prefix match second
+    WHEN LOWER(name) = LOWER(sqlc.arg(query)) THEN 0           -- exact match first
+    WHEN LOWER(name) LIKE LOWER(sqlc.arg(query)) || '%' THEN 1 -- prefix match second
     ELSE 2
   END,
   sml DESC,
   name
-LIMIT $2;
+LIMIT sqlc.arg(page_limit);
 
 -- name: GetFacetCounts :one
 WITH
@@ -370,7 +411,7 @@ WITH
   )
 SELECT
   (SELECT COUNT(*) FROM posts, query WHERE posts.content_vector @@ query.q AND posts.is_published = true) AS post_count,
-  (SELECT COUNT(*) FROM tools, query WHERE tools.vector @@ query.q) AS tool_count,
+  (SELECT COUNT(*) FROM tools, query WHERE tools.vector @@ query.q AND tools.hidden_at IS NULL) AS tool_count,
   (SELECT COUNT(*) FROM profiles, query WHERE profiles.vector @@ query.q) AS profile_count;
 
 -- name: SearchPost :many
@@ -396,6 +437,7 @@ SELECT
   COUNT(*) OVER() AS total_count
 FROM tools_with_details twd
 WHERE websearch_to_tsquery('english', $1) @@ (SELECT vector FROM tools WHERE id = twd.id)
+  AND NOT EXISTS (SELECT 1 FROM tools th WHERE th.id = twd.id AND th.hidden_at IS NOT NULL)
 ORDER BY rank DESC
 LIMIT $2 OFFSET $3;
 
@@ -404,7 +446,6 @@ SELECT
   p.id,
   p.username,
   p.display_name,
-  p.email_hash,
   p.avatar_url,
   p.created_at,
   p.updated_at,
@@ -419,11 +460,14 @@ ORDER BY
 LIMIT $2 OFFSET $3;
 
 -- name: GetTool :one
+-- A hidden tool's page still loads; is_hidden tells the page to ask search
+-- engines not to index it.
 SELECT
   twd.*,
-  EXISTS(SELECT 1 FROM tool_owners tow WHERE tow.tool_id = twd.id) AS is_claimed
+  EXISTS(SELECT 1 FROM tool_owners tow WHERE tow.tool_id = twd.id) AS is_claimed,
+  EXISTS(SELECT 1 FROM tools th WHERE th.id = twd.id AND th.hidden_at IS NOT NULL) AS is_hidden
 FROM tools_with_details twd
-WHERE id = $1;
+WHERE twd.id = $1;
 
 -- name: GetToolAuthenticated :one
 SELECT
@@ -436,9 +480,10 @@ SELECT
   -- Page ownership: is_owner unlocks the inline editors, is_claimed hides the
   -- "Claim this page" call to action once somebody has taken the page over.
   EXISTS(SELECT 1 FROM tool_owners tow WHERE tow.profile_id = $2 AND tow.tool_id = twd.id) AS is_owner,
-  EXISTS(SELECT 1 FROM tool_owners tow2 WHERE tow2.tool_id = twd.id) AS is_claimed
+  EXISTS(SELECT 1 FROM tool_owners tow2 WHERE tow2.tool_id = twd.id) AS is_claimed,
+  EXISTS(SELECT 1 FROM tools th WHERE th.id = twd.id AND th.hidden_at IS NOT NULL) AS is_hidden
 FROM tools_with_details twd
-WHERE id = $1;
+WHERE twd.id = $1;
 
 -- name: GetTopPosts :many
 SELECT *
@@ -502,10 +547,12 @@ ORDER BY post_count DESC, t.name ASC
 LIMIT $1;
 
 -- name: GetPublishedPostTypeCounts :one
+-- Counts for the /playbooks filter chips. There is no combo_count any more:
+-- the type was folded into 'playbook', so a combo column would now always
+-- read zero.
 SELECT
   COUNT(*)::int AS all_count,
   COUNT(*) FILTER (WHERE p.type = 'playbook')::int AS playbook_count,
-  COUNT(*) FILTER (WHERE p.type = 'combo')::int AS combo_count,
   COUNT(*) FILTER (WHERE p.type = 'comparison')::int AS comparison_count
 FROM posts p
 WHERE p.is_published
@@ -515,16 +562,18 @@ WHERE p.is_published
   );
 
 -- name: GetTopCategories :many
-SELECT 
+-- Counts visible tools only, so a category whose tools are all hidden drops out.
+SELECT
   c.id,
   c.name,
   c.slug,
   COUNT(tc.tool_id) AS tool_count
-FROM 
+FROM
   categories c
-LEFT JOIN 
+LEFT JOIN
   tool_categories tc ON c.id = tc.category_id
-GROUP BY 
+    AND EXISTS (SELECT 1 FROM tools t WHERE t.id = tc.tool_id AND t.hidden_at IS NULL)
+GROUP BY
   c.id, c.name, c.slug
 HAVING 
   COUNT(tc.tool_id) > 0
@@ -533,13 +582,14 @@ ORDER BY
 LIMIT $1;
 
 -- name: ListTools :many
--- Public browse listing for /tools: all tools, optional name/description search
--- and category (slug) filter, with a selectable sort.
+-- Public browse listing for /tools: all visible tools, optional name/description
+-- search and category (slug) filter, with a selectable sort.
 SELECT
   twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor,
   COUNT(*) OVER() AS total_count
 FROM tools_with_details twd
-WHERE (
+WHERE NOT EXISTS (SELECT 1 FROM tools th WHERE th.id = twd.id AND th.hidden_at IS NOT NULL)
+  AND (
     sqlc.arg(search)::text = ''
     OR twd.name ILIKE '%' || sqlc.arg(search)::text || '%'
     OR twd.description ILIKE '%' || sqlc.arg(search)::text || '%'
@@ -569,6 +619,7 @@ WHERE EXISTS (
   JOIN categories c2 ON tc2.category_id = c2.id 
   WHERE tc2.tool_id = twd.id AND c2.slug = $1
 )
+  AND NOT EXISTS (SELECT 1 FROM tools th WHERE th.id = twd.id AND th.hidden_at IS NOT NULL)
 ORDER BY name
 LIMIT $2 OFFSET $3;
 
@@ -669,13 +720,17 @@ LEFT JOIN
 LEFT JOIN
   categories c ON ttc.category_id = c.id
 WHERE
-  ($1::text = '' OR tt.status = $1::text)
+  (sqlc.arg(status)::text = '' OR tt.status = sqlc.arg(status)::text)
 GROUP BY
   tt.id, p.name, p.slug, requester.username, resolver.username
 ORDER BY
   tt.created_at DESC
-LIMIT $2 OFFSET $3;
+LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
+-- name: ToolExists :one
+-- tool_tickets.resolved_tool_id has no foreign key, so resolving a ticket with
+-- an existing tool checks this first.
+SELECT EXISTS (SELECT 1 FROM tools WHERE id = $1);
 -- name: GetToolTicket :one
 SELECT
   tt.id,
@@ -720,7 +775,7 @@ WHERE
 GROUP BY
   tt.id, p.name, p.slug, requester.username, resolver.username;
 
--- name: ResolveToolTicketWithExisting :exec
+-- name: ResolveToolTicketWithExisting :execrows
 UPDATE tool_tickets
 SET
   status = 'resolved',
@@ -728,9 +783,12 @@ SET
   resolved_by = $3,
   resolved_at = now(),
   updated_at = now()
-WHERE id = $1;
+-- "resolved" is final. Without this, rejecting a resolved ticket and resolving
+-- it again re-sent the requester's "tool approved" email each cycle, and two
+-- concurrent resolves both succeeded. Zero rows means the caller answers 409.
+WHERE id = $1 AND status <> 'resolved';
 
--- name: ResolveToolTicketWithNew :exec
+-- name: ResolveToolTicketWithNew :execrows
 UPDATE tool_tickets
 SET
   status = 'resolved',
@@ -738,21 +796,53 @@ SET
   resolved_by = $3,
   resolved_at = now(),
   updated_at = now()
-WHERE id = $1;
+-- "resolved" is final. Without this, rejecting a resolved ticket and resolving
+-- it again re-sent the requester's "tool approved" email each cycle, and two
+-- concurrent resolves both succeeded. Zero rows means the caller answers 409.
+WHERE id = $1 AND status <> 'resolved';
 
--- name: RejectToolTicket :exec
+-- name: RejectToolTicket :execrows
 UPDATE tool_tickets
 SET
   status = 'rejected',
   resolved_by = $2,
   resolved_at = now(),
   updated_at = now()
-WHERE id = $1;
+-- "resolved" is final. Without this, rejecting a resolved ticket and resolving
+-- it again re-sent the requester's "tool approved" email each cycle, and two
+-- concurrent resolves both succeeded. Zero rows means the caller answers 409.
+WHERE id = $1 AND status <> 'resolved';
 
 -- name: AddPostToolSafe :exec
 INSERT INTO post_tools (post_id, tool_id)
 VALUES ($1, $2)
 ON CONFLICT (post_id, tool_id) DO NOTHING;
+
+-- name: GetPostTypeForToolEdit :one
+-- FOR UPDATE so two concurrent tool edits cannot each remove a tool and leave
+-- the post under its minimum. No row means it is not the caller's post.
+SELECT type AS post_type FROM posts
+WHERE id = sqlc.arg(post_id) AND author_id = sqlc.arg(author_id)
+FOR UPDATE;
+
+-- name: ListPostTicketsByID :many
+-- The state of the suggestions an edit wants to keep, which may have changed
+-- since the page loaded. Scoped to the post, so another post's ticket id is
+-- simply not found.
+SELECT id, status, resolved_tool_id FROM tool_tickets
+WHERE post_id = sqlc.arg(post_id) AND id = ANY(sqlc.arg(ticket_ids)::uuid[]);
+
+-- name: RemovePostToolsExcept :exec
+DELETE FROM post_tools
+WHERE post_id = sqlc.arg(post_id) AND NOT (tool_id = ANY(sqlc.arg(keep)::uuid[]));
+
+-- name: WithdrawPostTicketsExcept :exec
+-- A removed suggestion is deleted, not rejected: nobody reviewed it, and a
+-- rejected ticket would file the post under the author's Rejected tab. Only
+-- pending ones, so a decision already made stays on record.
+DELETE FROM tool_tickets
+WHERE post_id = sqlc.arg(post_id) AND status = 'pending'
+  AND NOT (id = ANY(sqlc.arg(keep)::uuid[]));
 
 -- name: AddToWatchlist :exec
 INSERT INTO watchlist_items (profile_id, tool_id)
@@ -920,7 +1010,8 @@ FROM
   JOIN tools t ON twd.id = t.id,
   user_embedding
 WHERE
-  t.embedding IS NOT NULL 
+  t.embedding IS NOT NULL
+  AND t.hidden_at IS NULL
   AND user_embedding.embedding IS NOT NULL
   AND NOT EXISTS (
     SELECT 1 FROM stack_items si
@@ -959,7 +1050,8 @@ ORDER BY
   cosine_similarity DESC
 LIMIT $2;
 
--- name: FollowUser :exec
+-- name: FollowUser :execrows
+-- Returns 0 when already following, so the caller only notifies on a new follow.
 INSERT INTO user_follows (follower_id, followee_id)
 VALUES ($1, $2)
 ON CONFLICT (follower_id, followee_id) DO NOTHING;
@@ -987,7 +1079,6 @@ SELECT
   p.username,
   p.display_name,
   p.bio,
-  p.email_hash,
   p.avatar_url,
   (sqlc.arg(is_authenticated)::bool AND EXISTS(
     SELECT 1 FROM user_follows uf2
@@ -1006,7 +1097,6 @@ SELECT
   p.username,
   p.display_name,
   p.bio,
-  p.email_hash,
   p.avatar_url,
   (sqlc.arg(is_authenticated)::bool AND EXISTS(
     SELECT 1 FROM user_follows uf2
@@ -1020,16 +1110,25 @@ ORDER BY p.username
 LIMIT sqlc.arg(lim) OFFSET sqlc.arg(off);
 
 -- name: CreateNotification :execrows
+-- At most one notification per (recipient, actor, type, entity) per hour; the
+-- caller emails only when a row was inserted. entity_id is NULL for follows
+-- and standalone tool suggestions, and `entity_id = $4` is never true for
+-- NULL, so the dedup used to pass every time — one email per request.
 INSERT INTO notifications (recipient_id, actor_id, type, entity_id, entity_type, title, message)
 SELECT $1, $2, $3, $4, $5, $6, $7
 WHERE NOT EXISTS (
   SELECT 1 FROM notifications
   WHERE recipient_id = $1
-  AND actor_id = $2
+  AND actor_id IS NOT DISTINCT FROM $2
   AND type = $3
-  AND entity_id = $4
+  AND entity_id IS NOT DISTINCT FROM $4
   AND created_at > NOW() - INTERVAL '1 hour'
 );
+
+-- name: GetEmailHashByUsername :one
+-- Only for the server-side Gravatar proxy. The hash is an unsalted SHA-256 of
+-- the email, so it must never be sent to a client.
+SELECT email_hash FROM profiles WHERE username = $1;
 
 -- name: GetUserEmail :one
 SELECT email::text FROM auth.users WHERE id = $1;
@@ -1074,14 +1173,34 @@ DELETE FROM notifications
 WHERE id = $1 AND recipient_id = $2;
 -- name: GetUserFeed :many
 -- Activity feed, ranked by how much each event has to do with the viewer:
---   tier 0  about you       — unread stars, comments, new followers, tool approvals
---   tier 1  people you follow — they published a playbook / combo / comparison
---   tier 2  tools you follow  — someone published about one
---   tier 3  discovery filler  — recent playbooks, and ONLY for a viewer who
---                               follows nobody and no tools, so an established
---                               account never sees strangers in its feed
--- Within a tier the newest event wins. Every branch carries an event_key so a
--- post matching several reasons appears once, keeping its strongest reason.
+--   tier 0  about you        — unread stars, comments, new followers, tool approvals
+--   tier 1  people you follow  — they published a playbook or comparison
+--   tier 2  tools in your stack — someone published about one
+--   tier 3  other followed tools — watchlist, plus anything followed by hand
+--   tier 4  discovery filler   — recent playbooks, and ONLY for a viewer who
+--                                follows nobody and no tools, so an established
+--                                account never sees strangers in its feed
+--
+-- Tiers 2 and 3 are how "a watchlist tool carries half the weight of a stack
+-- tool" is expressed: both are followed, but a post about something you
+-- actually run always outranks a post about something you are only watching.
+-- Tools in the old stack are absent entirely — archiving unfollows them.
+--
+-- Recency outranks the tiers. Events from the last 3 days form a "fresh" band
+-- that sorts above everything older, and the tiers order events *within* each
+-- band. Tier alone used to decide absolutely, which let a three-week-old post
+-- from someone you follow sit above a post from this morning about a tool you
+-- run — the feed read as stale even when the site was busy.
+--
+-- The tiers still matter, which is the point of banding rather than sorting by
+-- time alone: among today's events you still see people you follow before
+-- watchlist chatter. Only once an event ages out of the band does recency stop
+-- protecting it.
+--
+-- Within a band and tier the newest event wins. Every branch carries an event_key so a
+-- post matching several reasons appears once, keeping its strongest reason —
+-- which is also what makes a post about both a stack tool and a watchlist tool
+-- rank as a stack post.
 --
 -- Deliberately absent: "someone you follow started following X". Adding a tool
 -- to a stack auto-follows it, so those rows were the highest-volume and least
@@ -1091,6 +1210,8 @@ WITH followed_users AS (
   SELECT followee_id FROM user_follows WHERE follower_id = sqlc.arg(viewer_id)
 ), followed_tools AS (
   SELECT tool_id FROM tool_follows WHERE profile_id = sqlc.arg(viewer_id)
+), stack_tools AS (
+  SELECT tool_id FROM stack_items WHERE profile_id = sqlc.arg(viewer_id)
 ), follows_anything AS (
   SELECT (EXISTS(SELECT 1 FROM followed_users)
        OR EXISTS(SELECT 1 FROM followed_tools)) AS yes
@@ -1117,19 +1238,32 @@ WITH followed_users AS (
     AND p.author_id IN (SELECT followee_id FROM followed_users)
 
   UNION ALL
-  -- Tier 2 — a playbook about a tool the viewer follows.
-  SELECT 'post', 'following_tool', 2, 'post:' || p.id::text,
+  -- Tier 2 — a playbook about a tool in the viewer's ACTIVE STACK.
+  SELECT 'post', 'stack_tool', 2, 'post:' || p.id::text,
          p.last_publish, p.author_id, p.id, pt.tool_id, NULL::text
   FROM posts p
   JOIN post_tools pt ON pt.post_id = p.id
   WHERE p.is_published AND p.last_publish IS NOT NULL
     AND pt.tool_id IN (SELECT tool_id FROM followed_tools)
+    AND pt.tool_id IN (SELECT tool_id FROM stack_tools)
 
   UNION ALL
-  -- Tier 3 — recent playbooks, so a brand-new account still sees something.
+  -- Tier 3 — a playbook about a followed tool that is NOT in the stack: the
+  -- watchlist, plus any tool followed by hand from its page. Half the weight of
+  -- tier 2 in the sense that matters — it never outranks it.
+  SELECT 'post', 'watchlist_tool', 3, 'post:' || p.id::text,
+         p.last_publish, p.author_id, p.id, pt.tool_id, NULL::text
+  FROM posts p
+  JOIN post_tools pt ON pt.post_id = p.id
+  WHERE p.is_published AND p.last_publish IS NOT NULL
+    AND pt.tool_id IN (SELECT tool_id FROM followed_tools)
+    AND pt.tool_id NOT IN (SELECT tool_id FROM stack_tools)
+
+  UNION ALL
+  -- Tier 4 — recent playbooks, so a brand-new account still sees something.
   -- Suppressed the moment the viewer follows anyone or any tool: this branch is
   -- what used to put strangers' posts in an established account's feed.
-  SELECT 'post', 'latest', 3, 'post:' || p.id::text,
+  SELECT 'post', 'latest', 4, 'post:' || p.id::text,
          p.last_publish, p.author_id, p.id, NULL::uuid, NULL::text
   FROM posts p
   WHERE p.is_published AND p.last_publish IS NOT NULL
@@ -1143,9 +1277,21 @@ WITH followed_users AS (
 SELECT
   r.kind, r.reason, r.tier, r.occurred_at,
   r.actor_id, actor.username AS actor_username,
-  r.post_id, p.name AS post_name, p.slug AS post_slug, p.type AS post_type, p.description AS post_description,
+  -- sqlc infers a UNION column's type and nullability from the FIRST branch
+  -- only. Read straight from `r`, post_id came out as interface{} (a UUID then
+  -- serialises as a byte array) and notification_message as a non-null string
+  -- (every post row is NULL there, so the scan fails and /feed 500s).
+  --   post_id: taken from the LEFT JOIN, which sqlc knows is nullable. Same
+  --     value, except a notification about a since-deleted post now gives
+  --     NULL rather than a dangling id; the frontend only uses it in a key.
+  --   notification_message: sqlc v1.21 cannot be talked out of `string` here
+  --     (NULLIF comes out as bool, COALESCE as string). A CASE is typed
+  --     interface{}, which pgx fills with a string or nil, so the JSON is
+  --     still a string or null. Values unchanged: post rows were NULL already.
+  p.id AS post_id,
+  p.name AS post_name, p.slug AS post_slug, p.type AS post_type, p.description AS post_description,
   r.tool_id, t.name AS tool_name, t.logo_url AS tool_logo_url,
-  r.notification_message,
+  CASE WHEN r.kind = 'notification' THEN r.notification_message END AS notification_message,
   COUNT(*) OVER() AS total_count
 FROM ranked r
 JOIN profiles actor ON actor.id = r.actor_id
@@ -1153,8 +1299,10 @@ LEFT JOIN posts p ON p.id = r.post_id
 LEFT JOIN tools t ON t.id = r.tool_id
 WHERE r.rn = 1
   -- A feed is what other people did; your own activity is not news to you.
-  AND r.actor_id <> sqlc.arg(viewer_id)
-ORDER BY r.tier, r.occurred_at DESC
+  AND r.actor_id <> sqlc.arg(viewer_id)::uuid
+-- 0 for the last 3 days, 1 for everything older: the outermost sort key, so a
+-- fresh event of any tier outranks a stale one of every tier.
+ORDER BY (r.occurred_at < now() - interval '3 days')::int, r.tier, r.occurred_at DESC
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
 -- name: SetProfileAvatar :exec
@@ -1178,6 +1326,7 @@ WHERE id = sqlc.arg(profile_id);
 SELECT id, name, logo_url
 FROM tools
 WHERE lower(name) = ANY(sqlc.arg(names)::text[])
+  AND hidden_at IS NULL
 ORDER BY name;
 
 -- name: GetToolsByCategoryKeywords :many
@@ -1188,6 +1337,7 @@ FROM tools t
 JOIN tool_categories tc ON tc.tool_id = t.id
 JOIN categories c ON c.id = tc.category_id
 WHERE c.name ILIKE ANY(sqlc.arg(patterns)::text[])
+  AND t.hidden_at IS NULL
   AND t.logo_url IS NOT NULL
   AND t.logo_url <> ''
 ORDER BY t.name
@@ -1227,12 +1377,17 @@ WHERE id = $1;
 -- name: GetToolVendorID :one
 SELECT vendor_id FROM tools WHERE id = $1;
 
+-- name: CountToolsUsingVendor :one
+-- A vendors row can be shared between tools. A page owner may only edit a row
+-- no other tool uses; otherwise they would rewrite another tool's vendor card.
+SELECT COUNT(*) FROM tools WHERE vendor_id = $1;
+
 -- name: CreateVendorForTool :one
 -- Tools imported without vendor details have no vendors row at all; the owner
 -- filling in the vendor card is what creates one.
 INSERT INTO vendors (name)
-SELECT name FROM tools WHERE id = $1
-RETURNING id;
+SELECT t.name FROM tools t WHERE t.id = $1
+RETURNING vendors.id;
 
 -- name: SetToolVendor :exec
 UPDATE tools SET vendor_id = $2, updated_at = now() WHERE id = $1;
@@ -1253,5 +1408,115 @@ DELETE FROM tool_categories WHERE tool_id = $1;
 
 -- name: AddToolCategories :exec
 INSERT INTO tool_categories (tool_id, category_id)
-SELECT $1, unnest($2::int[])
+SELECT sqlc.arg(tool_id)::uuid, unnest(sqlc.arg(category_ids)::int[])
 ON CONFLICT DO NOTHING;
+
+-- name: GetTrendingPlaybooksForUser :many
+-- Personalised "Trending playbooks" for the dashboard, ranked by how close a
+-- playbook's tools sit to the viewer's own tool graph:
+--
+--   tier 1  a tool in the viewer's active stack
+--   tier 2  a tool the viewer follows (watchlist plus manual follows)
+--   tier 3  a tool appearing in a playbook the viewer starred
+--   tier 4  a tool used by someone the viewer follows, in one of their playbooks
+--
+-- A playbook matching several tiers keeps its STRONGEST (lowest) one, via
+-- MIN(tier) — so a post about a stack tool never sinks to tier 4 merely because
+-- someone the viewer follows also uses that tool. Within a tier the most
+-- recently published wins.
+--
+-- Posts the viewer already starred are excluded: this section exists to surface
+-- things they have not seen, and a starred post is already saved. is_starred is
+-- therefore always false, and is kept only so the JSON shape matches the other
+-- post listings the frontend consumes.
+--
+-- This replaces an embedding cosine-similarity ranking that returned NOTHING at
+-- all when a viewer's profile embedding was still null — a silently empty
+-- section for every new account.
+WITH
+  stack_tools AS (
+    SELECT tool_id FROM stack_items WHERE profile_id = sqlc.arg(viewer_id)
+  ),
+  followed_tools AS (
+    SELECT tool_id FROM tool_follows WHERE profile_id = sqlc.arg(viewer_id)
+  ),
+  starred_tools AS (
+    SELECT DISTINCT pt.tool_id
+    FROM post_stars ps
+    JOIN post_tools pt ON pt.post_id = ps.post_id
+    WHERE ps.liker_id = sqlc.arg(viewer_id)
+  ),
+  followed_people_tools AS (
+    SELECT DISTINCT pt.tool_id
+    FROM user_follows uf
+    JOIN posts fp ON fp.author_id = uf.followee_id AND fp.is_published
+    JOIN post_tools pt ON pt.post_id = fp.id
+    WHERE uf.follower_id = sqlc.arg(viewer_id)
+  ),
+  candidates AS (
+    SELECT pt.post_id, 1 AS tier FROM post_tools pt
+      WHERE pt.tool_id IN (SELECT tool_id FROM stack_tools)
+    UNION ALL
+    SELECT pt.post_id, 2 FROM post_tools pt
+      WHERE pt.tool_id IN (SELECT tool_id FROM followed_tools)
+    UNION ALL
+    SELECT pt.post_id, 3 FROM post_tools pt
+      WHERE pt.tool_id IN (SELECT tool_id FROM starred_tools)
+    UNION ALL
+    SELECT pt.post_id, 4 FROM post_tools pt
+      WHERE pt.tool_id IN (SELECT tool_id FROM followed_people_tools)
+  ),
+  ranked AS (
+    SELECT post_id, MIN(tier) AS tier FROM candidates GROUP BY post_id
+  )
+SELECT
+  pwt.id, pwt.type, pwt.name, pwt.slug, pwt.description,
+  pwt.updated_at, pwt.created_at, pwt.last_draft_update, pwt.last_publish,
+  pwt.author_id, pwt.is_published, pwt.author_username, pwt.tools,
+  r.tier::int AS tier,
+  false AS is_starred
+FROM ranked r
+JOIN posts_with_tools_and_tickets pwt ON pwt.id = r.post_id
+JOIN posts p ON p.id = r.post_id
+WHERE p.is_published
+  AND p.last_publish IS NOT NULL
+  AND p.author_id <> sqlc.arg(viewer_id)
+  AND NOT EXISTS (
+    SELECT 1 FROM post_stars ps
+    WHERE ps.post_id = p.id AND ps.liker_id = sqlc.arg(viewer_id)
+  )
+ORDER BY r.tier, p.last_publish DESC
+LIMIT sqlc.arg(page_limit);
+
+-- name: GetPopularTools :many
+-- Tools "rising this week", for the dashboard shelf.
+--
+-- The weekly signal is how many playbooks published in the last 7 days mention
+-- the tool — people writing about it right now. Stack membership CANNOT provide
+-- this: stack_items is (profile_id, tool_id) with no timestamp, so there is no
+-- way to know when a tool was added to anyone's stack. Publishing activity is
+-- the only "this week" the schema can actually answer.
+--
+-- All-time stack count breaks ties, so a quiet week falls back to the tools
+-- most people run rather than emptying the shelf. Name breaks the remaining
+-- ties, keeping the order stable between loads instead of shuffling.
+SELECT
+  twd.id, twd.name, twd.description, twd.logo_url,
+  twd.created_at, twd.updated_at, twd.categories, twd.vendor,
+  COUNT(DISTINCT si.profile_id) AS stack_count,
+  COUNT(DISTINCT recent.post_id) AS recent_mentions
+FROM tools_with_details twd
+LEFT JOIN stack_items si ON si.tool_id = twd.id
+LEFT JOIN (
+  SELECT pt.tool_id, pt.post_id
+  FROM post_tools pt
+  JOIN posts p ON p.id = pt.post_id
+  WHERE p.is_published
+    AND p.last_publish IS NOT NULL
+    AND p.last_publish >= now() - interval '7 days'
+) recent ON recent.tool_id = twd.id
+WHERE NOT EXISTS (SELECT 1 FROM tools th WHERE th.id = twd.id AND th.hidden_at IS NOT NULL)
+GROUP BY twd.id, twd.name, twd.description, twd.logo_url,
+         twd.created_at, twd.updated_at, twd.categories, twd.vendor
+ORDER BY recent_mentions DESC, stack_count DESC, twd.name ASC
+LIMIT sqlc.arg(page_limit);

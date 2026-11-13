@@ -7,7 +7,8 @@
  *   description - literal copy, used as-is (skips scraping the description)
  *   logo    - literal logo URL, used as-is (skips picking one from the page)
  *   rename  - optional corrected product name
- *   fetch   - the page to scrape description/logo from
+ *   fetch   - the page to scrape description/logo from; leave it out to write
+ *             only the literal values (what tool-enrichment-verifier produces)
  *   website - what to store as the vendor website (tracking params stripped)
  *   vendor  - optional literal vendor fields (HQ, founding year, socials)
  *
@@ -16,6 +17,14 @@
  * page only fills a blank, so a good existing description is never replaced by
  * a worse one. Vendor fields fill blanks unless given literally.
  *
+ * Entries WITHOUT `fetch` (enrichment results) only ever fill blanks: nothing
+ * already on the page is replaced — unless OVERWRITE=1, which lets their
+ * literal description and logo replace the current ones (a hand-checked
+ * correction file). Vendor fields still only fill blanks. Every entry is validated before anything is
+ * written — the id must belong to a tool with that name, URLs must be http(s),
+ * and only the vendor columns below are accepted — and one bad entry stops the
+ * whole run.
+ *
  * Dry run (default): prints what it found, writes NOTHING.
  * Apply:  APPLY=1 node scripts/apply-manual-fixes.mjs
  */
@@ -23,6 +32,7 @@ import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 
 const APPLY = process.env.APPLY === "1";
+const OVERWRITE = process.env.OVERWRITE === "1";
 const IN = process.env.IN || "scripts/manual-fixes.json";
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36";
@@ -129,10 +139,52 @@ async function unlock(url) {
 }
 
 const targets = JSON.parse(readFileSync(IN, "utf8"));
+
+// ---- validate everything before writing anything ----------------------------
+// These values go straight into href/src on the public tool page, bypassing the
+// API's validate.WebURL, so check them here.
+const VENDOR_KEYS = new Set(["website", "head_office", "year_of_foundation", "linkedin_profile", "x_profile"]);
+const isHttp = (s) => {
+  try { return ["http:", "https:"].includes(new URL(s).protocol); } catch { return false; }
+};
+function problems(t) {
+  const out = [];
+  if (!t.id || !t.name) out.push("needs id and name");
+  // Fill-blanks entries may not carry an overwriting key (rename).
+  if (!t.fetch)
+    for (const k of Object.keys(t))
+      if (!["id", "name", "logo", "website", "description", "vendor"].includes(k)) out.push(`"${k}" needs a fetch entry`);
+  if (t.description != null && (typeof t.description !== "string" || t.description.trim().length < 40 || t.description.length > 3000))
+    out.push("description must be 40-3000 characters of text");
+  if (t.logo != null && !isHttp(t.logo)) out.push("logo must be an http(s) URL");
+  if (t.website != null && !isHttp(t.website)) out.push("website must be an http(s) URL");
+  if (t.fetch != null && !isHttp(t.fetch)) out.push("fetch must be an http(s) URL");
+  const v = t.vendor ?? {};
+  for (const k of Object.keys(v)) if (!VENDOR_KEYS.has(k)) out.push(`vendor.${k} is not an accepted field`);
+  if (v.website != null && !isHttp(v.website)) out.push("vendor.website must be an http(s) URL");
+  if (v.linkedin_profile != null && !/^https:\/\/([a-z]+\.)?linkedin\.com\/company\/[^\s/]+\/?$/i.test(v.linkedin_profile))
+    out.push("vendor.linkedin_profile must be https://www.linkedin.com/company/<slug>");
+  if (v.x_profile != null && !/^@[A-Za-z0-9_]{1,30}$/.test(v.x_profile)) out.push("vendor.x_profile must be @handle");
+  const year = v.year_of_foundation;
+  if (year != null && !(Number.isInteger(year) && year >= 1800 && year <= new Date().getFullYear()))
+    out.push("vendor.year_of_foundation must be a plausible four-digit year");
+  if (v.head_office != null && (typeof v.head_office !== "string" || !v.head_office.trim() || v.head_office.length > 80))
+    out.push("vendor.head_office must be 1-80 characters");
+  return out;
+}
+const invalid = targets.map((t) => [t, problems(t)]).filter(([, p]) => p.length);
+if (invalid.length) {
+  for (const [t, p] of invalid) console.error(`  ✗ ${t.name ?? t.id ?? "(entry)"}: ${p.join("; ")}`);
+  console.error(`\n${invalid.length} invalid entr${invalid.length === 1 ? "y" : "ies"} in ${IN}. Nothing was written.`);
+  process.exit(1);
+}
+
 console.log(`===== ${APPLY ? "APPLYING" : "DRY RUN"}: ${targets.length} tools =====\n`);
 
 for (const t of targets) {
-  const needNothingFromPage = Boolean(t.description && t.logo);
+  // Enrichment results carry no page to fetch, and only fill blanks.
+  const fillOnly = !t.fetch;
+  const needNothingFromPage = !t.fetch || Boolean(t.description && t.logo);
   let page = needNothingFromPage ? null : await get(t.fetch);
   let via = needNothingFromPage ? "literal" : "direct";
   // Retry through the proxy when blocked, or when the page loaded but carried
@@ -152,39 +204,72 @@ for (const t of targets) {
   // rotates, or block us entirely.
   const logo = t.logo ?? (page ? pickLogo(page.html, page.url) : null);
 
-  if (!page && !description) {
+  if (t.fetch && !page && !description) {
     console.log(`  ✗ ${t.name.padEnd(14)} could not fetch ${t.fetch}`);
     continue;
   }
 
-  console.log(`  ${t.name}${t.rename ? ` -> ${t.rename}` : ""}  [${via}]`);
+  const { data: cur } = await supabase
+    .from("tools")
+    .select("name,description,logo_url,vendor_id,vendor:vendors(id,website,head_office,year_of_foundation,linkedin_profile,x_profile)")
+    .eq("id", t.id)
+    .maybeSingle();
+
+  // The id is what gets written; the name is what a person reviews. If they
+  // disagree, the review showed a different tool than the one about to change.
+  if (!cur || cur.name.trim().toLowerCase() !== t.name.trim().toLowerCase()) {
+    console.log(`  ✗ ${t.name}: id ${t.id} is ${cur ? `"${cur.name}"` : "not a tool"} — skipped`);
+    continue;
+  }
+
+  let sharedBy = 1;
+  if (cur.vendor_id) {
+    const { count } = await supabase
+      .from("tools").select("id", { count: "exact", head: true }).eq("vendor_id", cur.vendor_id);
+    sharedBy = count ?? 1;
+  }
+
+  console.log(`  ${t.name}${t.rename ? ` -> ${t.rename}` : ""}  [${via}${fillOnly ? ", blanks only" : ""}]`);
   console.log(
     `     desc : ${description ? `${t.description ? "[literal] " : ""}"${description.slice(0, 90)}…"` : "—"}`
   );
   console.log(`     logo : ${t.logo ? "[literal] " : ""}${logo || "—"}`);
-  if (t.vendor) console.log(`     vendor: ${JSON.stringify(t.vendor)}`);
-
-  const { data: cur } = await supabase
-    .from("tools")
-    .select("description,logo_url,vendor_id,vendor:vendors(id,website,head_office,year_of_foundation,linkedin_profile,x_profile)")
-    .eq("id", t.id)
-    .single();
 
   const patch = {};
   // Literal copy corrects; scraped copy only fills a gap, so a good existing
   // description is never replaced by weaker page metadata.
-  if (description && (t.description || !cur?.description || cur.description.trim().length < 40))
+  const literalWins = !fillOnly || OVERWRITE;
+  if (description && ((t.description && literalWins) || !cur.description || cur.description.trim().length < 40))
     patch.description = description;
-  if (logo && (t.logo || !cur?.logo_url)) patch.logo_url = logo;
+  if (logo && ((t.logo && literalWins) || !cur.logo_url)) patch.logo_url = logo;
+  if (OVERWRITE) {
+    if (patch.description && cur.description && cur.description !== patch.description) console.log(`     replaces description: "${cur.description.slice(0, 60)}…"`);
+    if (patch.logo_url && cur.logo_url && cur.logo_url !== patch.logo_url) console.log(`     replaces logo       : ${cur.logo_url}`);
+  }
   if (t.rename && t.rename !== t.name) patch.name = t.rename;
+
+  const v = cur.vendor ?? {};
+  const vpatch = { ...(t.vendor ?? {}) };
+  if (t.website && !v.website) vpatch.website = t.website;
+  // Literal vendor values are corrections too, but never blank out real data —
+  // and enrichment results never replace anything.
+  for (const k of Object.keys(vpatch)) {
+    if (vpatch[k] == null || (fillOnly && v[k] != null && v[k] !== "")) delete vpatch[k];
+  }
 
   const keeping = [];
   if (description && !patch.description) keeping.push("description (existing kept)");
   if (logo && !patch.logo_url) keeping.push("logo (existing kept)");
+  for (const k of Object.keys({ ...(t.vendor ?? {}), ...(t.website ? { website: 1 } : {}) }))
+    if (!(k in vpatch)) keeping.push(`${k} (existing kept)`);
   console.log(
     `     WILL WRITE: ${Object.keys(patch).join(", ") || "nothing"}` +
       (keeping.length ? `   |  ${keeping.join(", ")}` : "")
   );
+  if (Object.keys(vpatch).length) {
+    console.log(`     VENDOR    : ${JSON.stringify(vpatch)}`);
+    if (sharedBy > 1) console.log(`     ⚠ this vendor row is shared by ${sharedBy} tools — all of their pages change`);
+  }
 
   if (!APPLY) continue;
 
@@ -192,11 +277,6 @@ for (const t of targets) {
     const { error } = await supabase.from("tools").update(patch).eq("id", t.id);
     if (error) console.error(`     tool: ${error.message}`);
   }
-
-  const vpatch = { ...(t.vendor ?? {}) };
-  if (t.website && !cur?.vendor?.website) vpatch.website = t.website;
-  // Literal vendor values are corrections too, but never blank out real data.
-  for (const k of Object.keys(vpatch)) if (vpatch[k] == null) delete vpatch[k];
 
   if (Object.keys(vpatch).length) {
     if (cur?.vendor?.id) {

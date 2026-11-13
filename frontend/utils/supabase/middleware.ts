@@ -35,20 +35,13 @@ export async function updateSession(request: NextRequest) {
 
   // IMPORTANT: DO NOT REMOVE auth.getUser()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Called for its side effect: it refreshes the session cookies.
+  await supabase.auth.getUser();
 
-  if (
-    !user &&
-    !request.nextUrl.pathname.startsWith("/login") &&
-    !request.nextUrl.pathname.startsWith("/")
-  ) {
-    // no user, potentially respond by redirecting the user to the login page
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
-  }
+  // There is deliberately no login gate here. The template's one never fired —
+  // its `!pathname.startsWith("/")` is false for every path — and nothing
+  // relied on it: each protected page checks auth itself on the server
+  // (getServerAuthState), which is where that check belongs.
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is.
   // If you're creating a new response object with NextResponse.next() make sure to:

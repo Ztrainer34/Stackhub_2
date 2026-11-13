@@ -16,30 +16,9 @@ import {
 } from "lucide-react";
 import { useFeed } from "@/lib/queries/use-feed";
 import { FeedItem } from "@/lib/feed";
+import { timeAgo } from "@/lib/time-ago";
 
 /** "3 hours ago" / "2 days ago" — compact relative time for feed entries. */
-function timeAgo(iso: string): string {
-  const seconds = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
-  const units: [number, Intl.RelativeTimeFormatUnit][] = [
-    [60, "second"],
-    [60, "minute"],
-    [24, "hour"],
-    [7, "day"],
-    [4.35, "week"],
-    [12, "month"],
-  ];
-  let value = seconds;
-  let unit: Intl.RelativeTimeFormatUnit = "second";
-  for (const [step, next] of units) {
-    if (Math.abs(value) < step) break;
-    value /= step;
-    unit = next;
-  }
-  return new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(
-    -Math.round(value),
-    unit
-  );
-}
 
 function ActorLink({ username }: { username: string }) {
   return (
@@ -127,9 +106,14 @@ function FeedRow({ item }: { item: FeedItem }) {
             · {timeAgo(item.occurred_at)}
           </span>
 
-          {item.reason === "following_tool" && (
+          {item.reason === "stack_tool" && (
             <Badge variant="outline" className="text-[10px] font-normal">
-              tool you follow
+              in your stack
+            </Badge>
+          )}
+          {item.reason === "watchlist_tool" && (
+            <Badge variant="outline" className="text-[10px] font-normal">
+              saved for later
             </Badge>
           )}
           {item.reason === "latest" && (
@@ -178,13 +162,12 @@ export default function ActivityFeed({ limit = 20 }: { limit?: number }) {
 
   return (
     <section className="mb-10">
-      <div className="flex items-center gap-2 mb-2">
+      {/* No subtitle: the rows explain themselves, and a line of prose under
+          every heading pushed the actual feed below the fold. */}
+      <div className="flex items-center gap-2 mb-4">
         <Activity className="h-5 w-5 text-primary" />
         <h2 className="text-2xl font-semibold">Your feed</h2>
       </div>
-      <p className="text-muted-foreground mb-4">
-        What happened to you, then playbooks from the people and tools you follow
-      </p>
 
       {isLoading ? (
         <div className="space-y-4">

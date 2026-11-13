@@ -1,0 +1,17 @@
+[
+  { "name": "Codex", "website": "https://openai.com/codex", "categories": ["AI Coding Assistants", "AI Code Generation"] },
+  { "name": "Cubic", "website": "https://www.cubic.dev", "categories": ["Peer Code Review", "AI Coding Assistants"] },
+  { "name": "DynaPictures", "website": "https://www.dynapictures.com", "categories": ["AI Image Generators", "AI Personalization"] },
+  { "name": "GetLeads", "website": "https://www.getleads.io", "categories": ["People Search APIs", "Lead Generation APIs", "MCPs For Sales AI Agents"] },
+  { "name": "Kleo", "website": "https://www.kleo.so", "categories": ["Content Ideation"] },
+  { "name": "Knock2", "website": "https://www.knock2.ai", "categories": ["AI Visitor Identification", "Website Visitor Identification"] },
+  { "name": "Kondo", "website": "https://www.trykondo.com", "categories": ["AI LinkedIn Outreach", "Social Selling"] },
+  { "name": "Linear", "website": "https://linear.app", "categories": ["Project Management", "Bug Tracking"] },
+  { "name": "Next.js", "website": "https://nextjs.org", "categories": ["JavaScript Web Frameworks"] },
+  { "name": "Paper", "website": "https://paper.design", "categories": ["Content Design"] },
+  { "name": "PlanetScale", "website": "https://planetscale.com", "categories": ["Database as a Service (DBaaS)"] },
+  { "name": "Playwright", "website": "https://playwright.dev", "categories": ["Automation Testing", "Data Scraping"] },
+  { "name": "Tella", "website": "https://www.tella.com", "categories": ["AI Video Prospecting", "Video Editing"] },
+  { "name": "Usermaven", "website": "https://usermaven.com", "categories": ["Product Analytics"] },
+  { "name": "Xnapper", "website": "https://xnapper.com", "categories": ["Website Screenshot"] }
+]

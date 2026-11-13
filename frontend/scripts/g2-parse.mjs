@@ -92,7 +92,13 @@ export const countWords = (s) => (s ? s.trim().split(/\s+/).filter(Boolean).leng
  */
 export function summarize(text, maxWords = 200) {
   if (!text) return null;
-  const sentences = text.match(/[^.!?]+[.!?]+(?:\s|$)/g) || [text];
+  // Split only where punctuation is followed by whitespace. Matching
+  // /[^.!?]+[.!?]+\s/ instead silently dropped everything before a period inside
+  // a word, so "Next.js is a framework." came out as "js is a framework.".
+  const sentences = text.split(/(?<=[.!?])\s+/);
+  // An unfinished tail after real sentences is G2 page chrome ("Seller X
+  // Discussions X Community"), not copy.
+  if (sentences.length > 1 && !/[.!?]["')\]]*$/.test(sentences[sentences.length - 1])) sentences.pop();
 
   const kept = [];
   let words = 0;

@@ -155,7 +155,7 @@ C. ONE NAME EXTENDS ANOTHER — 112 groups  (review)
       [OLD] Boomerang for Gmail
 
   15.
-      [NEW] Browse   (https://www.browse.ai/)
+      Browse[NEW]    (https://www.browse.ai/)
       [OLD] Browse AI
 
   16.

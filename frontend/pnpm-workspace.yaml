@@ -1,4 +1,14 @@
+# pnpm 10+ refuses to run a dependency's install scripts unless it is listed
+# here, so a compromised package cannot execute code on install by default.
+#
+# All three below are standard and their scripts are required:
+#   @parcel/watcher  native file watching, used by the dev server
+#   sharp            image processing — Next.js uses it for image optimisation
+#   unrs-resolver    native module resolver used by the ESLint toolchain
+#
+# Without these, `pnpm install` exits 1 with ERR_PNPM_IGNORED_BUILDS and
+# `pnpm dev` never starts.
 allowBuilds:
-  '@parcel/watcher': set this to true or false
-  sharp: set this to true or false
-  unrs-resolver: set this to true or false
+  '@parcel/watcher': true
+  sharp: true
+  unrs-resolver: true

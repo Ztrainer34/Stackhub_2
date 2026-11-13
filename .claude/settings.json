@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc --noEmit)",
+      "Bash(npx next lint:*)",
+      "Bash(npx eslint:*)",
+      "Bash(pnpm build)",
+      "Bash(pnpm lint)",
+      "Bash(pnpm test:*)",
+      "Bash(npm run build)",
+      "Bash(go build:*)",
+      "Bash(go vet:*)",
+      "Bash(go test:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./backend/.env)",
+      "Read(./frontend/.env.local)",
+      "Bash(go run:*)"
+    ]
+  }
+}

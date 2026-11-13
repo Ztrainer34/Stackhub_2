@@ -32,8 +32,6 @@ export default function UserInfoTabs({ username }: { username: string }) {
         return currentPosts;
       case "playbooks":
         return currentPosts.filter(post => post.type === "playbook");
-      case "combos":
-        return currentPosts.filter(post => post.type === "combo");
       case "comparisons":
         return currentPosts.filter(post => post.type === "comparison");
       default:
@@ -112,10 +110,9 @@ export default function UserInfoTabs({ username }: { username: string }) {
       onValueChange={handleTabChange}
       className="w-full"
     >
-      <TabsList className="grid w-full grid-cols-5">
+      <TabsList className="grid w-full grid-cols-4">
         <TabsTrigger value="overview">Overview</TabsTrigger>
         <TabsTrigger value="playbooks">Playbooks</TabsTrigger>
-        <TabsTrigger value="combos">Combos</TabsTrigger>
         <TabsTrigger value="comparisons">Comparisons</TabsTrigger>
         <TabsTrigger value="starred">Starred</TabsTrigger>
       </TabsList>
@@ -145,22 +142,6 @@ export default function UserInfoTabs({ username }: { username: string }) {
           <>
             {filteredPosts.length === 0 ? (
               <EmptyState message="No playbooks found" />
-            ) : (
-              <PostGrid posts={filteredPosts} />
-            )}
-          </>
-        )}
-      </TabsContent>
-      
-      <TabsContent value="combos" className="mt-6">
-        {currentQuery.isLoading && <LoadingSkeleton />}
-        {currentQuery.error && (
-          <EmptyState message="Error loading combos" />
-        )}
-        {currentQuery.data && (
-          <>
-            {filteredPosts.length === 0 ? (
-              <EmptyState message="No combos found" />
             ) : (
               <PostGrid posts={filteredPosts} />
             )}

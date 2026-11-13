@@ -26,7 +26,6 @@ import {
   Shield,
   Layers,
   BookOpen,
-  Blocks,
   GitCompare,
   Star,
   Wrench,
@@ -41,7 +40,6 @@ import NotificationBell from "./notification-bell";
 interface User {
   id: string;
   username: string;
-  email_hash?: string;
 }
 
 interface NavBarContentProps {
@@ -108,11 +106,6 @@ export default function NavBarContent({ user }: NavBarContentProps) {
                       <BookOpen /> Playbooks
                     </DropdownMenuItem>
                   </Link>
-                  <Link href={`/${user.username}?tab=combos`}>
-                    <DropdownMenuItem>
-                      <Blocks /> Combos
-                    </DropdownMenuItem>
-                  </Link>
                   <Link href={`/${user.username}?tab=comparisons`}>
                     <DropdownMenuItem>
                       <GitCompare /> Comparisons
@@ -149,7 +142,7 @@ export default function NavBarContent({ user }: NavBarContentProps) {
             ) : (
               <Dialog>
                 <DialogTrigger asChild>
-                  <Button variant="outline">Log In</Button>
+                  <Button variant="outline">Login</Button>
                 </DialogTrigger>
                 <DialogContent className="p-10">
                   {!hideDialogTitle && (

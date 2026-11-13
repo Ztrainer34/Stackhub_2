@@ -153,7 +153,7 @@ export function ToolPageAbout({ tool }: { tool: Tool }) {
         ) : (
           <p className="text-muted-foreground text-sm">
             {current.is_owner
-              ? "No description yet — use the pencil to write one."
+              ? "No description yet. Use the pencil to write one."
               : `No description for ${current.name} yet.`}
           </p>
         )}

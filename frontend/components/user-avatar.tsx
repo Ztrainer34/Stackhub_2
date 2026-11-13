@@ -1,5 +1,6 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { User } from "@/lib/user";
+import { apiPath } from "@/lib/api-path";
 import { cn } from "@/lib/utils";
 
 interface UserAvatarProps {
@@ -17,19 +18,17 @@ const gravatarSizes = {
 };
 
 // Precedence: an uploaded picture, then Gravatar, then the initial in
-// AvatarFallback (which Radix shows whenever the image fails to load).
+// AvatarFallback (which Radix shows whenever the image fails to load — the
+// Gravatar route answers 404 for anyone without one).
+//
+// Gravatar goes through our API rather than gravatar.com directly. A direct
+// URL needs the email hash, and an unsalted SHA-256 of an email is reversible
+// for any address in a breach list — so the backend fetches the image and the
+// hash never reaches the browser.
 function getUserAvatarUrl(user: User, size: "sm" | "md" | "lg" | "xl"): string {
   if (user.avatar_url) return user.avatar_url;
 
-  const pixelSize = gravatarSizes[size];
-
-  // If we have the pre-computed hash from the backend, use it
-  if (user.email_hash) {
-    return `https://gravatar.com/avatar/${user.email_hash}?s=${pixelSize}&d=404`;
-  }
-
-  // Fallback for users without email_hash (shouldn't happen after migration)
-  return `https://gravatar.com/avatar/00000000000000000000000000000000?s=${pixelSize}&d=404`;
+  return `${process.env.NEXT_PUBLIC_API_URL!}${apiPath`/user/${user.username}/gravatar`}?s=${gravatarSizes[size]}`;
 }
 
 const sizeClasses = {
