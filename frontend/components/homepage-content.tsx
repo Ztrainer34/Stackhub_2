@@ -203,10 +203,16 @@ export default function HomepageContent({
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          // auto-rows-fr makes every row as tall as the tallest tile in the
+          // grid (not just its own row), so all tiles share one height.
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 auto-rows-fr gap-4">
             {initialTopPosts.map((post) => (
-              <Link key={post.id} href={`/${post.author_username}/${post.slug}`}>
-                <PostCard post={post} />
+              <Link
+                key={post.id}
+                href={`/${post.author_username}/${post.slug}`}
+                className="block h-full"
+              >
+                <PostCard post={post} className="h-full flex flex-col" />
               </Link>
             ))}
           </div>

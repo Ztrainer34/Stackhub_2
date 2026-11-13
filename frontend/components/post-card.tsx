@@ -344,7 +344,9 @@ export default function PostCard({
         </CardDescription>
       </CardHeader>
 
-      <CardContent className="pt-0">
+      {/* mt-auto pins the author row to the bottom when a parent stretches
+          the card (h-full flex flex-col), e.g. the homepage grid. */}
+      <CardContent className="pt-0 mt-auto">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Avatar className="h-5 w-5">
