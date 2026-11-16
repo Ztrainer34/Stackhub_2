@@ -844,6 +844,27 @@ DELETE FROM tool_tickets
 WHERE post_id = sqlc.arg(post_id) AND status = 'pending'
   AND NOT (id = ANY(sqlc.arg(keep)::uuid[]));
 
+-- name: ListToolTicketsForAlert :many
+-- The admin "new tool suggested" digest. Pending only: a suggestion withdrawn
+-- (deleted) or already decided before the digest went out is not news.
+SELECT
+  tt.id,
+  tt.tool_name,
+  COALESCE(tt.tool_description, '')::text AS tool_description,
+  COALESCE(tt.tool_website, '')::text AS tool_website,
+  requester.username AS requester_username,
+  p.name AS post_name,
+  COALESCE(array_agg(c.name ORDER BY c.name) FILTER (WHERE c.id IS NOT NULL), '{}')::text[] AS category_names
+FROM tool_tickets tt
+JOIN profiles requester ON tt.requested_by = requester.id
+LEFT JOIN posts p ON tt.post_id = p.id
+LEFT JOIN tool_ticket_categories ttc ON tt.id = ttc.ticket_id
+LEFT JOIN categories c ON ttc.category_id = c.id
+WHERE tt.id = ANY(sqlc.arg(ticket_ids)::uuid[])
+  AND tt.status = 'pending'
+GROUP BY tt.id, requester.username, p.name
+ORDER BY tt.created_at;
+
 -- name: AddToWatchlist :exec
 INSERT INTO watchlist_items (profile_id, tool_id)
 VALUES ($1, $2)
@@ -1295,12 +1316,17 @@ SELECT
   CASE WHEN r.kind = 'notification' THEN r.notification_message END AS notification_message,
   COUNT(*) OVER() AS total_count
 FROM ranked r
-JOIN profiles actor ON actor.id = r.actor_id
+-- LEFT JOIN: a tool-approved notification has no actor (the resolver is not
+-- named), so its actor_username is NULL and the client shows "StackHub".
+LEFT JOIN profiles actor ON actor.id = r.actor_id
 LEFT JOIN posts p ON p.id = r.post_id
 LEFT JOIN tools t ON t.id = r.tool_id
 WHERE r.rn = 1
   -- A feed is what other people did; your own activity is not news to you.
-  AND r.actor_id <> sqlc.arg(viewer_id)::uuid
+  -- Only a tool-approved notification may have no actor: any other row without
+  -- one (its actor deleted) is still left out, as it was before the LEFT JOIN.
+  AND (r.actor_id <> sqlc.arg(viewer_id)::uuid
+       OR (r.actor_id IS NULL AND r.reason = 'tool_approved'))
 -- 0 for the last 3 days, 1 for everything older: the outermost sort key, so a
 -- fresh event of any tier outranks a stale one of every tier.
 -- event_key breaks ties so LIMIT/OFFSET pages are stable; it is unique per row (deduped by rn = 1).
@@ -1351,6 +1377,11 @@ LIMIT sqlc.arg(lim);
 SELECT EXISTS(
   SELECT 1 FROM tool_owners WHERE tool_id = $1 AND profile_id = $2
 ) AS is_owner;
+
+-- name: IsAdmin :one
+-- Gate for every /admin route (RequireAdmin) and the is_admin flag on GET /me.
+-- Admins are granted out of band (scripts/grant-admin.mjs), never through the API.
+SELECT EXISTS(SELECT 1 FROM admins WHERE profile_id = sqlc.arg(profile_id)) AS is_admin;
 
 -- name: ListToolOwners :many
 SELECT p.id, p.username, p.display_name, p.avatar_url, tow.granted_at

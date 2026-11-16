@@ -3,7 +3,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 export interface Notification {
   id: string;
-  actor_id: string;
+  /** Null when the notification has no actor (tool approved): shown as StackHub. */
+  actor_id: string | null;
   type: string;
   entity_id: string;
   entity_type: string;
@@ -11,7 +12,7 @@ export interface Notification {
   message: string;
   is_read: boolean;
   created_at: string;
-  actor_username: string;
+  actor_username: string | null;
 }
 
 export interface NotificationsResponse {

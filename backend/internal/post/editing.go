@@ -34,7 +34,7 @@ func (h *Handler) CreatePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	created, err := postService{db: h.DB}.create(r.Context(), userID, form)
+	created, err := postService{db: h.DB, alerts: h.Alerter}.create(r.Context(), userID, form)
 	if err != nil {
 		httpx.WriteError(w, err)
 		return
@@ -267,7 +267,7 @@ func (h *Handler) UpdatePostTools(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tools, err := postService{db: h.DB}.setTools(r.Context(), userID, id, form)
+	tools, err := postService{db: h.DB, alerts: h.Alerter}.setTools(r.Context(), userID, id, form)
 	if err != nil {
 		httpx.WriteError(w, err)
 		return

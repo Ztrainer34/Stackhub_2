@@ -18,8 +18,9 @@ import (
 // ticketService holds the rules for resolving and rejecting tool tickets. The
 // handlers in tickets.go only read the request and write the response.
 //
-// /admin has no role check (see CLAUDE.md), so everything here is reachable by
-// any signed-in user. Nothing here may grant more than a ticket resolution.
+// /admin requires the admin role (admins table, RequireAdmin in routes.go).
+// Admins are still not trusted blindly: nothing here may grant more than a
+// ticket resolution.
 type ticketService struct {
 	db pg.TxBeginner
 	q  *db.Queries
@@ -78,8 +79,10 @@ func CleanSuggestedTool(name, description, website string) (string, string, erro
 
 // CreatePostTickets files a tool ticket for each tool suggested while creating
 // a post, inside the post's transaction. The suggestions must already have
-// been through CleanSuggestedTool.
-func CreatePostTickets(ctx context.Context, q *db.Queries, postID, requester uuid.UUID, suggestions []Suggestion) error {
+// been through CleanSuggestedTool. It returns the new tickets' ids so the caller
+// can alert admins once its transaction commits.
+func CreatePostTickets(ctx context.Context, q *db.Queries, postID, requester uuid.UUID, suggestions []Suggestion) ([]uuid.UUID, error) {
+	ticketIDs := make([]uuid.UUID, 0, len(suggestions))
 	for _, s := range suggestions {
 		ticketID, err := q.CreateToolTicket(ctx, db.CreateToolTicketParams{
 			// Nullable since tickets can be filed without a post (the
@@ -91,8 +94,9 @@ func CreatePostTickets(ctx context.Context, q *db.Queries, postID, requester uui
 			ToolWebsite:     pgtype.Text{String: s.Website, Valid: true},
 		})
 		if err != nil {
-			return apperr.InvalidFrom("Failed to create suggested tool", err)
+			return nil, apperr.InvalidFrom("Failed to create suggested tool", err)
 		}
+		ticketIDs = append(ticketIDs, ticketID)
 
 		if len(s.Categories) == 0 {
 			continue
@@ -102,16 +106,21 @@ func CreatePostTickets(ctx context.Context, q *db.Queries, postID, requester uui
 			links = append(links, db.AddToolTicketCategoriesParams{TicketID: ticketID, CategoryID: int32(categoryID)})
 		}
 		if _, err := q.AddToolTicketCategories(ctx, links); err != nil {
-			return apperr.InvalidFrom("Failed to add suggested tool categories", err)
+			return nil, apperr.InvalidFrom("Failed to add suggested tool categories", err)
 		}
 	}
-	return nil
+	return ticketIDs, nil
 }
 
 // notifyToolApproved creates an in-app notification telling the ticket
 // requester their suggested tool was approved. Returns whether a new
 // notification was created (so the caller can also send an email). No-op when
 // the admin resolved their own ticket.
+//
+// The notification has no actor: the resolver is deliberately not named, so an
+// admin's username never reaches the requester. The clients show "StackHub".
+// (A NULL actor is part of the one-hour dedupe key, which compares it with IS
+// NOT DISTINCT FROM, and the feed keeps such a row; see GetUserFeed.)
 //
 // The entity is the approved tool. It used to be the ticket's post (NULL for a
 // standalone suggestion), and since notifications are deduplicated per
@@ -126,7 +135,7 @@ func notifyToolApproved(ctx context.Context, q *db.Queries, ticket db.GetToolTic
 	entityType := "tool"
 	rows, err := q.CreateNotification(ctx, db.CreateNotificationParams{
 		RecipientID: ticket.RequestedBy,
-		ActorID:     pg.UUID(resolverID),
+		ActorID:     pgtype.UUID{}, // NULL: StackHub, not the resolver
 		Type:        "tool_approved",
 		EntityID:    pg.UUID(toolID),
 		EntityType:  pg.Text(&entityType),
@@ -220,17 +229,16 @@ func (s ticketService) resolveWithExisting(ctx context.Context, ticketID, resolv
 			ResolvedToolID: pg.UUID(toolID),
 			ResolvedBy:     pg.UUID(resolverID),
 		}))
-		// A hidden tool stays hidden: /admin has no role check, so an approval
-		// here is not a trusted act, and un-hiding would let any signed-in user
-		// undo the curation. Un-hiding is done by hand (scripts/hide-tools.mjs).
+		// A hidden tool stays hidden: un-hiding is a curation decision made only
+		// with scripts/hide-tools.mjs, never by a ticket approval.
 		return toolID, err
 	})
 }
 
 // validateNewTool checks the tool a ticket is about to be resolved with and
-// returns it trimmed. It becomes a public tool page, and /admin has no role
-// check, so this is effectively any signed-in user's input: the same name and
-// description limits as a suggestion, and an http(s) logo.
+// returns it trimmed. It becomes a public tool page, and a resolver is not
+// trusted: the same name and description limits as a suggestion, and an
+// http(s) logo.
 func validateNewTool(req ResolveTicketWithNewRequest) (ResolveTicketWithNewRequest, error) {
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {

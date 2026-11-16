@@ -91,7 +91,7 @@ export async function fetchToolTicket(id: string): Promise<ToolTicket> {
   const response = await fetchApiAuthenticated(supabase, `/admin/tool-tickets/${id}`);
   
   if (!response.ok) {
-    throw new Error(`Failed to fetch tool ticket: ${response.statusText}`);
+    throw new Error(`Failed to fetch tool ticket: ${response.status} ${response.statusText}`);
   }
   
   return response.json();
@@ -110,7 +110,7 @@ export async function resolveTicketWithExisting(ticketId: string, toolId: string
   });
   
   if (!response.ok) {
-    throw new Error(`Failed to resolve ticket: ${response.statusText}`);
+    throw new Error(`Failed to resolve ticket: ${response.status} ${response.statusText}`);
   }
 }
 
@@ -132,7 +132,7 @@ export async function resolveTicketWithNew(ticketId: string, toolData: {
   });
   
   if (!response.ok) {
-    throw new Error(`Failed to create tool and resolve ticket: ${response.statusText}`);
+    throw new Error(`Failed to create tool and resolve ticket: ${response.status} ${response.statusText}`);
   }
   
   return response.json();
@@ -147,7 +147,7 @@ export async function rejectTicket(ticketId: string): Promise<void> {
   });
   
   if (!response.ok) {
-    throw new Error(`Failed to reject ticket: ${response.statusText}`);
+    throw new Error(`Failed to reject ticket: ${response.status} ${response.statusText}`);
   }
 }
 
@@ -166,7 +166,7 @@ export async function searchTools(query: string, limit: number = 10): Promise<To
   const response = await fetchApiAuthenticated(supabase, `/tool/autocomplete?${searchParams.toString()}`);
   
   if (!response.ok) {
-    throw new Error(`Failed to search tools: ${response.statusText}`);
+    throw new Error(`Failed to search tools: ${response.status} ${response.statusText}`);
   }
   
   const results = await response.json();
@@ -232,7 +232,7 @@ export async function getCategories(): Promise<Array<{ id: number; name: string 
     const response = await fetchApiAuthenticated(supabase, '/homepage/top-categories?limit=100');
     
     if (!response.ok) {
-      throw new Error(`Failed to fetch categories: ${response.statusText}`);
+      throw new Error(`Failed to fetch categories: ${response.status} ${response.statusText}`);
     }
     
     const categories = await response.json();

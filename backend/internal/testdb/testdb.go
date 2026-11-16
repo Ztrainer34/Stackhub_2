@@ -81,6 +81,34 @@ func TwoProfiles(t *testing.T, tx pgx.Tx) (uuid.UUID, uuid.UUID) {
 	return profiles[0], profiles[1]
 }
 
+// MakeAdmin gives a profile the admin role for the rest of the test's
+// transaction. It applies the admin migration first (it is idempotent), so a
+// local database that predates it still works; the rollback undoes the table
+// along with the row.
+func MakeAdmin(t *testing.T, tx pgx.Tx, id uuid.UUID) {
+	t.Helper()
+	ensureAdminTable(t, tx)
+	if _, err := tx.Exec(context.Background(), `INSERT INTO admins (profile_id) VALUES ($1) ON CONFLICT DO NOTHING`, id); err != nil {
+		t.Fatalf("make admin: %v", err)
+	}
+}
+
+// NotAdmin takes the admin role away from a profile, for the rest of the test.
+func NotAdmin(t *testing.T, tx pgx.Tx, id uuid.UUID) {
+	t.Helper()
+	ensureAdminTable(t, tx)
+	if _, err := tx.Exec(context.Background(), `DELETE FROM admins WHERE profile_id = $1`, id); err != nil {
+		t.Fatalf("revoke admin: %v", err)
+	}
+}
+
+func ensureAdminTable(t *testing.T, tx pgx.Tx) {
+	t.Helper()
+	if _, err := tx.Exec(context.Background(), MigrationUp(t, "20261116120000_admin_role.sql")); err != nil {
+		t.Fatalf("apply the admin migration: %v", err)
+	}
+}
+
 // SomeTools returns n existing tools, or skips.
 func SomeTools(t *testing.T, tx pgx.Tx, n int) []uuid.UUID {
 	t.Helper()

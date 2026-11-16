@@ -48,6 +48,8 @@ function notificationIcon(reason: FeedItem["reason"]) {
  * reassembled from parts here.
  */
 function NotificationRow({ item }: { item: FeedItem }) {
+  // A notification with no actor (tool approved) comes from StackHub itself.
+  const actorName = item.actor_username ?? "StackHub";
   const body = (
     <div className="flex items-center gap-x-1.5 text-sm">
       {notificationIcon(item.reason)}
@@ -64,11 +66,11 @@ function NotificationRow({ item }: { item: FeedItem }) {
     <div className="flex gap-3 py-4">
       <Avatar className="h-8 w-8 shrink-0">
         <AvatarFallback className="text-xs">
-          {item.actor_username.charAt(0).toUpperCase()}
+          {actorName.charAt(0).toUpperCase()}
         </AvatarFallback>
       </Avatar>
       <div className="min-w-0 flex-1">
-        {item.post_slug ? (
+        {item.post_slug && item.actor_username ? (
           <Link
             href={`/${item.actor_username}/${item.post_slug}`}
             className="hover:underline"
@@ -85,6 +87,9 @@ function NotificationRow({ item }: { item: FeedItem }) {
 
 export function FeedRow({ item }: { item: FeedItem }) {
   if (item.kind === "notification") return <NotificationRow item={item} />;
+
+  // Post rows always have an author; a row without one has nothing to show.
+  if (!item.actor_username) return null;
 
   return (
     <div className="flex gap-3 py-4">

@@ -54,7 +54,13 @@ supabase/          local Supabase config
 - **Auth:** `httpx.UserID(r)` in the required group, `httpx.UserIDIfPresent(r)`
   in the optional group. Frontend: `getServerAuthState()` in server components
   (`lib/auth-server.ts`), `useAuth()` in client components. `/me` returns
-  200 / 401 / 428 (needs onboarding).
+  200 / 401 / 428 (needs onboarding), plus `is_admin` for the viewer only.
+- **`/admin` needs the admin role.** The five `/admin/...` routes sit FLAT in
+  their own `r.Group` in `routes.go`, behind `shmiddleware.RequireAdmin`, which
+  asks the `admins` table on every request (no cache). Never `r.Route("/admin")`:
+  `chi.Walk` under-reports mounted sub-routers, so the golden could not see the
+  check. `TestAdminRoutesAreBehindRequireAdmin` and `TestAdminRoutesRejectNonAdmins`
+  guard it; `IsAdmin` may be called only by that gate and `GET /me`.
 - **Integration tests** run only against a LOCAL database:
   `TEST_DB_CONNECTION=postgresql://postgres:postgres@127.0.0.1:54322/postgres`.
   They refuse hosted databases. `cmd/server/characterisation_integration_test.go`
@@ -100,16 +106,24 @@ Gotchas (sqlc v1.21):
 3. **Frontend:** push to `main`; Vercel builds. `NEXT_PUBLIC_*` vars are baked in
    at build time, so set them before the build.
 
-Backend before its migration 404s every affected page (has happened). The reverse
-order is safe. Public API responses are cached up to ~5 min (`httpx.CachePublic`),
+Backend before its migration 404s every affected page (has happened); for the
+admin role it makes every `/admin` request a 500 (the `admins` table is missing).
+The reverse order is safe. Public API responses are cached up to ~5 min (`httpx.CachePublic`),
 so a change can take a few minutes to show.
 
 ## Security-relevant facts
 
-- **`/admin` has NO role check.** The backend `/admin` group is just the
-  authenticated group, and `frontend/app/admin/layout.tsx` carries a TODO. Any
-  signed-in user can resolve or reject tool tickets. It is a UI convention, not a
-  boundary: **do not add privileged capabilities behind it** until a real role exists.
+- **`/admin` requires the admin role** (the `admins` table, `RequireAdmin` in
+  `routes.go`, checked in the database on every request, failing closed). Admins
+  are granted only out of band with `frontend/scripts/grant-admin.mjs` (dry run,
+  then `APPLY=1` with the printed `ADMIN_PROFILE_IDS`; or the SQL editor), never
+  over HTTP. The table has RLS with no policies and no `anon`/`authenticated`
+  grants. Admin status is private: only the viewer's own `GET /me` returns
+  `is_admin`, and the frontend uses it only to show the link and 404 the layout
+  (cosmetic; the backend enforces). Ticket services still treat a resolver as
+  untrusted (URL checks, hidden tools stay hidden). Deploy a role change as
+  **migration -> grant (script) -> backend -> frontend**. A compromised admin:
+  revoke it AND sign it out or ban it in Supabase Auth and rotate the password.
 - Privileged work runs out of band through `frontend/scripts/*.mjs` with the
   Supabase **service-role key** (bypasses RLS), run by hand, never served. Only
   `app/api/claim/route.ts` and `app/auth/callback/route.tsx` use that key inside
@@ -117,6 +131,7 @@ so a change can take a few minutes to show.
 - **The repo is public.** No secrets, no personal emails in committed files.
   Generated data goes in gitignored `frontend/scripts/enrichment/`.
 - Never read `.env*` files or print secret values.
+- Admin alert addresses (`ADMIN_NOTIFY_EMAILS`) live only in the VPS env, never in the repo.
 
 ## Hidden tools
 
@@ -129,7 +144,8 @@ keep pointing at hidden tools.
   popular/recommended tools and onboarding already do.
 - A hidden tool's page still loads, with `is_hidden: true`, and asks search
   engines not to index it. User stacks/watchlists/follows still show hidden tools.
-- **Nothing over HTTP un-hides a tool.** Only `frontend/scripts/hide-tools.mjs`
+- **Nothing over HTTP un-hides a tool** (a curation decision, not a ticket
+  approval). Only `frontend/scripts/hide-tools.mjs`
   (`UNHIDE_BATCH=<label>` or `UNHIDE_NAMES="A,B"`, dry run unless `APPLY=1`).
   Approving a ticket with a hidden tool links it but leaves it hidden; resolve-new
   refuses a name whose URL slug is already taken.
@@ -152,7 +168,8 @@ keep pointing at hidden tools.
 
 - **Backend:** `DB_CONNECTION`, `JWT_SECRET`, `SUPABASE_PROJECT_REF`,
   `RESEND_API_KEY`, `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY`,
-  `S3_SECRET_ACCESS_KEY`, `S3_BUCKET_NAME`
+  `S3_SECRET_ACCESS_KEY`, `S3_BUCKET_NAME`; optional: `ADMIN_NOTIFY_EMAILS`
+  (comma-separated admin recipients of "new tool suggested" alerts; unset = off)
 - **Frontend:** `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SUPABASE_URL`,
   `NEXT_PUBLIC_SUPABASE_ANON_KEY` (server-only: `SUPABASE_SERVICE_ROLE_KEY`)
 - **Scripts:** `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `BRIGHTDATA_TOKEN`

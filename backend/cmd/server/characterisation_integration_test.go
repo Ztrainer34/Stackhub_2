@@ -250,6 +250,10 @@ func TestResolveTicketCharacterisationIntegration(t *testing.T) {
 	ctx := context.Background()
 	q := db.New(tx)
 	requester, resolver := testdb.TwoProfiles(t, tx)
+	testdb.MakeAdmin(t, tx, resolver)
+	// The "resolving your own suggestion" case below acts as the requester, so
+	// the requester has to be an admin too for that request to reach the handler.
+	testdb.MakeAdmin(t, tx, requester)
 	cats := testdb.SomeCategories(t, tx, 2)
 
 	// Each subtest gets its own post, so neither depends on the other's

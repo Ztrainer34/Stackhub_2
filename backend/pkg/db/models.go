@@ -21,6 +21,11 @@ type AccountClaim struct {
 	ClaimantNonce pgtype.Text        `json:"claimant_nonce"`
 }
 
+type Admin struct {
+	ProfileID uuid.UUID          `json:"profile_id"`
+	GrantedAt pgtype.Timestamptz `json:"granted_at"`
+}
+
 type AuthUser struct {
 	ID    uuid.UUID   `json:"id"`
 	Email pgtype.Text `json:"email"`

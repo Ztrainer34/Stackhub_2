@@ -1,11 +1,16 @@
 package mail
 
 import (
+	"regexp"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"html/template"
+	netmail "net/mail"
 	"net/url"
+	"strings"
+	"unicode"
 
 	"github.com/resend/resend-go/v2"
 )
@@ -180,5 +185,220 @@ func (m *Mailer) SendWelcome(ctx context.Context, to string, data WelcomeData) e
 		return err
 	}
 
+	return nil
+}
+
+// NewToolItem is one suggested tool in the admin digest. Every field except
+// TicketID comes from a signed-in user and is untrusted.
+type NewToolItem struct {
+	TicketID          string
+	ToolName          string
+	Website           string
+	Description       string
+	RequesterUsername string
+	PlaybookName      string
+	Categories        []string
+}
+
+// ParseRecipients reads a comma-separated list of plain email addresses (the
+// ADMIN_NOTIFY_EMAILS setting). An empty list is nil, nil: the feature is off.
+// Anything else wrong — an empty entry, a display name, an angle bracket, a
+// quote, a control character, more than max addresses — is an error and the
+// caller turns the feature off, rather than mailing half a list. The error
+// never echoes the input.
+func ParseRecipients(raw string, max int) ([]string, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, nil
+	}
+
+	var out []string
+	seen := map[string]bool{}
+	for _, token := range strings.Split(raw, ",") {
+		token = strings.TrimSpace(token)
+		if token == "" {
+			return nil, errors.New("recipient list has an empty entry")
+		}
+		for _, r := range token {
+			if unicode.IsControl(r) || r == '"' || r == '<' || r == '>' {
+				return nil, errors.New("recipient list has an unsafe character")
+			}
+		}
+		addr, err := netmail.ParseAddress(token)
+		if err != nil || addr.Name != "" || addr.Address != token {
+			return nil, errors.New("recipient list has an invalid address")
+		}
+		key := strings.ToLower(token)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, token)
+	}
+	if len(out) > max {
+		return nil, errors.New("recipient list is too long")
+	}
+	return out, nil
+}
+
+// sanitize makes user text safe to show in the admin digest: control, format
+// and line/paragraph-separator characters (CR, LF, tab, right-to-left
+// overrides, zero-width characters, U+2028) become spaces, runs of whitespace
+// collapse, and the result is cut to maxRunes with an ellipsis. It does NOT
+// escape HTML: do that last, after cutting, so an entity is never cut in half.
+func sanitize(s string, maxRunes int) string {
+	s = strings.ToValidUTF8(s, " ")
+	s = strings.Map(func(r rune) rune {
+		if unicode.In(r, unicode.Cc, unicode.Cf, unicode.Zl, unicode.Zp) {
+			return ' '
+		}
+		return r
+	}, s)
+	s = strings.Join(strings.Fields(s), " ")
+
+	runes := []rune(s)
+	if len(runes) <= maxRunes {
+		return s
+	}
+	return strings.TrimSpace(string(runes[:maxRunes])) + "…"
+}
+
+const maxWebsiteRunes = 300
+
+// defangURL turns a user's website into text no mail client will link or
+// pre-fetch: the scheme becomes hxxp(s), no "://" survives, and "." and "@"
+// are bracketed, so https://stackhub.me@evil.example cannot read as, or
+// auto-link to, a StackHub address. The admin reads it and decides.
+func defangURL(s string) string {
+	s = sanitize(s, maxWebsiteRunes)
+	switch {
+	case len(s) >= 8 && strings.EqualFold(s[:8], "https://"):
+		s = "hxxps://" + s[8:]
+	case len(s) >= 7 && strings.EqualFold(s[:7], "http://"):
+		s = "hxxp://" + s[7:]
+	}
+	s = strings.ReplaceAll(s, "://", "[:]//")
+	s = strings.ReplaceAll(s, ".", "[.]")
+	s = strings.ReplaceAll(s, "@", "[at]")
+	return s
+}
+
+// linkLike matches the places a mail client starts auto-linking plain text:
+// a dot inside a word (evil.example, www.x.com) and "@" (user@host). Ordinary
+// sentence punctuation (a dot followed by a space or the end) is left alone.
+var linkLike = regexp.MustCompile(`\.([\p{L}\p{N}])`)
+
+// neutraliseLinks stops free text from becoming a clickable link in the admin's
+// mail client. HTML-escaping alone does not: Gmail and Outlook link bare URLs
+// and domains. The scheme becomes hxxp(s), "://" is broken, and in-word dots
+// and "@" are bracketed. The admin can still read it; nothing is clickable.
+func neutraliseLinks(s string) string {
+	for _, p := range []struct{ from, to string }{{"https://", "hxxps://"}, {"http://", "hxxp://"}} {
+		for {
+			i := strings.Index(strings.ToLower(s), p.from)
+			if i < 0 {
+				break
+			}
+			s = s[:i] + p.to + s[i+len(p.from):]
+		}
+	}
+	s = strings.ReplaceAll(s, "://", "[:]//")
+	s = linkLike.ReplaceAllString(s, "[.]$1")
+	return strings.ReplaceAll(s, "@", "[at]")
+}
+
+// digestText is sanitize, then neutralise links, then HTML-escape, in that
+// order: truncating after escaping could cut an entity in half.
+func digestText(s string, maxRunes int) string {
+	return template.HTMLEscapeString(neutraliseLinks(sanitize(s, maxRunes)))
+}
+
+// BuildNewToolDigest renders the admin email for newly suggested tools. The
+// subject is constant text and a count: it never contains user input, so a
+// suggestion cannot write the subject line. The only link per tool is the
+// Review button, built from siteURL and the ticket id; everything a user wrote
+// is escaped, labelled unverified, and never put in an href.
+func BuildNewToolDigest(items []NewToolItem, more int, moreSubmitters int) (subject, html string) {
+	total := len(items) + more
+	if total == 1 {
+		subject = "New tool suggestion on StackHub"
+	} else {
+		subject = fmt.Sprintf("New tool suggestions on StackHub (%d)", total)
+	}
+
+	var b strings.Builder
+	b.WriteString(`<p style="font-size:18px;color:#2d3748;margin:0 0 16px">`)
+	if total == 1 {
+		b.WriteString(`A new tool was suggested.`)
+	} else {
+		b.WriteString(fmt.Sprintf(`%d new tools were suggested.`, total))
+	}
+	b.WriteString(`</p>`)
+
+	line := func(text string) {
+		b.WriteString(`<p style="margin:0 0 4px;font-size:14px;color:#2d3748">` + text + `</p>`)
+	}
+
+	for _, it := range items {
+		b.WriteString(`<div style="border:1px solid #e6ebf1;border-radius:6px;padding:16px;margin:0 0 16px">`)
+		b.WriteString(`<p style="margin:0 0 8px;font-size:12px;color:#718096">Unverified user input — do not click or trust</p>`)
+		b.WriteString(`<div style="background:#f7fafc;border-radius:4px;padding:10px 12px;margin:0 0 12px">`)
+		if name := digestText(it.ToolName, 200); name != "" {
+			b.WriteString(`<p style="margin:0 0 6px;font-size:16px;color:#000000"><strong>` + name + `</strong></p>`)
+		}
+		if site := defangURL(it.Website); site != "" {
+			line("Website: " + template.HTMLEscapeString(site))
+		}
+		if desc := digestText(it.Description, 300); desc != "" {
+			line("Description: " + desc)
+		}
+		var cats []string
+		for _, c := range it.Categories {
+			if c = digestText(c, 60); c != "" {
+				cats = append(cats, c)
+			}
+		}
+		if len(cats) > 0 {
+			line("Categories: " + strings.Join(cats, ", "))
+		}
+		if user := digestText(it.RequesterUsername, 30); user != "" {
+			line("Suggested by @" + user)
+		}
+		if pb := digestText(it.PlaybookName, 120); pb != "" {
+			line("From playbook: " + pb)
+		}
+		b.WriteString(`</div>`)
+		b.WriteString(ctaButton(siteURL+"/admin/tool-tickets/"+url.PathEscape(it.TicketID), "Review", true))
+		b.WriteString(`</div>`)
+	}
+
+	if more > 0 {
+		b.WriteString(fmt.Sprintf(`<p style="margin:0 0 12px">+%d more from %d submitters not listed.</p>`, more, moreSubmitters))
+		b.WriteString(`<div style="margin:0 0 16px">` + ctaButton(siteURL+"/admin/tool-tickets", "Open the ticket queue", false) + `</div>`)
+	}
+
+	b.WriteString(`<p style="margin:16px 0 0;font-size:12px;color:#718096">You get this because you are listed as a StackHub admin.</p>`)
+
+	return subject, emailShell(b.String())
+}
+
+// SendNewToolDigest emails the admins a digest of newly suggested tools. The
+// error it returns is fixed text: a provider error can echo the recipients, and
+// the caller logs it.
+func (m *Mailer) SendNewToolDigest(ctx context.Context, to []string, items []NewToolItem, more, moreSubmitters int) error {
+	if len(to) == 0 {
+		return errors.New("new tool digest: no recipients")
+	}
+	subject, html := BuildNewToolDigest(items, more, moreSubmitters)
+
+	params := &resend.SendEmailRequest{
+		From:    fmt.Sprintf("StackHub <notifications@%s>", m.domain),
+		To:      to,
+		Subject: subject,
+		Html:    html,
+	}
+
+	if _, err := m.client.Emails.SendWithContext(ctx, params); err != nil {
+		return errors.New("new tool digest: provider rejected the send")
+	}
 	return nil
 }

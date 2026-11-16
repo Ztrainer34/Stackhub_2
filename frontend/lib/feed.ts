@@ -38,8 +38,13 @@ export interface FeedItem {
    */
   tier: number;
   occurred_at: string;
-  actor_id: string;
-  actor_username: string;
+  /**
+   * Who did it. Null for a notification with no actor, such as "your tool was
+   * approved": StackHub itself, so the resolving admin is never named. Show
+   * "StackHub" for those. Post rows always have an actor.
+   */
+  actor_id: string | null;
+  actor_username: string | null;
   post_id: string | null;
   post_name: string | null;
   post_slug: string | null;

@@ -103,6 +103,9 @@ func (h *Handler) SuggestTool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// After the commit, so a rolled-back suggestion alerts nobody.
+	h.Alerter.Enqueue(userID, ticketID)
+
 	w.WriteHeader(http.StatusCreated)
 }
 

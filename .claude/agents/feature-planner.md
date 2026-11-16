@@ -37,7 +37,10 @@ You never edit files. You may run read-only commands (`git log`, `git diff`,
      WSL and never hand-edited. Note sqlc gotchas that apply to the queries you
      propose (`CASE`, `NULLIF`, `COALESCE`, `UNION` types).
    - Any query that lists tools publicly must filter `hidden_at IS NULL`.
-   - `/admin` has no role check: never plan a privileged capability behind it.
+   - `/admin` requires the admin role (`admins` table, `RequireAdmin`, flat
+     group in `routes.go`). Admins are granted only out of band
+     (`scripts/grant-admin.mjs`), never over HTTP; any new `/admin` route goes
+     in that group, and a resolver's input is still untrusted.
    - Frontend server state goes through React Query hooks in `lib/queries/`;
      copy `useCreatePost` for mutations.
    - Deploy order is migration → backend → frontend.

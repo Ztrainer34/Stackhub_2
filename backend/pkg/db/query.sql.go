@@ -2185,12 +2185,15 @@ SELECT
   CASE WHEN r.kind = 'notification' THEN r.notification_message END AS notification_message,
   COUNT(*) OVER() AS total_count
 FROM ranked r
-JOIN profiles actor ON actor.id = r.actor_id
+LEFT JOIN profiles actor ON actor.id = r.actor_id
 LEFT JOIN posts p ON p.id = r.post_id
 LEFT JOIN tools t ON t.id = r.tool_id
 WHERE r.rn = 1
   -- A feed is what other people did; your own activity is not news to you.
-  AND r.actor_id <> $1::uuid
+  -- Only a tool-approved notification may have no actor: any other row without
+  -- one (its actor deleted) is still left out, as it was before the LEFT JOIN.
+  AND (r.actor_id <> $1::uuid
+       OR (r.actor_id IS NULL AND r.reason = 'tool_approved'))
 ORDER BY (r.occurred_at < now() - interval '3 days')::int, r.tier, r.occurred_at DESC, r.event_key
 LIMIT $3 OFFSET $2
 `
@@ -2208,7 +2211,7 @@ type GetUserFeedRow struct {
 	OccurredAt          pgtype.Timestamptz `json:"occurred_at"`
 	EventKey            string             `json:"event_key"`
 	ActorID             pgtype.UUID        `json:"actor_id"`
-	ActorUsername       string             `json:"actor_username"`
+	ActorUsername       pgtype.Text        `json:"actor_username"`
 	PostID              pgtype.UUID        `json:"post_id"`
 	PostName            pgtype.Text        `json:"post_name"`
 	PostSlug            pgtype.Text        `json:"post_slug"`
@@ -2256,6 +2259,8 @@ type GetUserFeedRow struct {
 // to a stack auto-follows it, so those rows were the highest-volume and least
 // informative thing in the feed, and they named tools the viewer had no
 // relationship with.
+// LEFT JOIN: a tool-approved notification has no actor (the resolver is not
+// named), so its actor_username is NULL and the client shows "StackHub".
 // 0 for the last 3 days, 1 for everything older: the outermost sort key, so a
 // fresh event of any tier outranks a stale one of every tier.
 // event_key breaks ties so LIMIT/OFFSET pages are stable; it is unique per row (deduped by rn = 1).
@@ -2621,6 +2626,19 @@ func (q *Queries) GetUserStats(ctx context.Context, authorID uuid.UUID) (GetUser
 		&i.ToolsFollowedCount,
 	)
 	return i, err
+}
+
+const isAdmin = `-- name: IsAdmin :one
+SELECT EXISTS(SELECT 1 FROM admins WHERE profile_id = $1) AS is_admin
+`
+
+// Gate for every /admin route (RequireAdmin) and the is_admin flag on GET /me.
+// Admins are granted out of band (scripts/grant-admin.mjs), never through the API.
+func (q *Queries) IsAdmin(ctx context.Context, profileID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, isAdmin, profileID)
+	var is_admin bool
+	err := row.Scan(&is_admin)
+	return is_admin, err
 }
 
 const isFollowing = `-- name: IsFollowing :one
@@ -3245,6 +3263,66 @@ func (q *Queries) ListToolTickets(ctx context.Context, arg ListToolTicketsParams
 			&i.ResolverUsername,
 			&i.Categories,
 			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listToolTicketsForAlert = `-- name: ListToolTicketsForAlert :many
+SELECT
+  tt.id,
+  tt.tool_name,
+  COALESCE(tt.tool_description, '')::text AS tool_description,
+  COALESCE(tt.tool_website, '')::text AS tool_website,
+  requester.username AS requester_username,
+  p.name AS post_name,
+  COALESCE(array_agg(c.name ORDER BY c.name) FILTER (WHERE c.id IS NOT NULL), '{}')::text[] AS category_names
+FROM tool_tickets tt
+JOIN profiles requester ON tt.requested_by = requester.id
+LEFT JOIN posts p ON tt.post_id = p.id
+LEFT JOIN tool_ticket_categories ttc ON tt.id = ttc.ticket_id
+LEFT JOIN categories c ON ttc.category_id = c.id
+WHERE tt.id = ANY($1::uuid[])
+  AND tt.status = 'pending'
+GROUP BY tt.id, requester.username, p.name
+ORDER BY tt.created_at
+`
+
+type ListToolTicketsForAlertRow struct {
+	ID                uuid.UUID   `json:"id"`
+	ToolName          string      `json:"tool_name"`
+	ToolDescription   string      `json:"tool_description"`
+	ToolWebsite       string      `json:"tool_website"`
+	RequesterUsername string      `json:"requester_username"`
+	PostName          pgtype.Text `json:"post_name"`
+	CategoryNames     []string    `json:"category_names"`
+}
+
+// The admin "new tool suggested" digest. Pending only: a suggestion withdrawn
+// (deleted) or already decided before the digest went out is not news.
+func (q *Queries) ListToolTicketsForAlert(ctx context.Context, ticketIds []uuid.UUID) ([]ListToolTicketsForAlertRow, error) {
+	rows, err := q.db.Query(ctx, listToolTicketsForAlert, ticketIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListToolTicketsForAlertRow
+	for rows.Next() {
+		var i ListToolTicketsForAlertRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ToolName,
+			&i.ToolDescription,
+			&i.ToolWebsite,
+			&i.RequesterUsername,
+			&i.PostName,
+			&i.CategoryNames,
 		); err != nil {
 			return nil, err
 		}

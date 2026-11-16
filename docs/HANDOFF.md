@@ -31,9 +31,13 @@ Read `CLAUDE.md` first. This file is only what is NOT in the code, git or CLAUDE
    141, X 92 of 268; 52 tools have none.
 5. **Check in the Supabase dashboard** that `anon`/`authenticated` cannot UPDATE or
    SELECT `tools` directly via PostgREST (could bypass hiding). Never verified.
-6. Optional: real admin role (`profiles.is_admin`, granted by script) + an admin
-   import page (~1 day). Would close the open `/admin` hole and give the client a
-   browser import with no key on his machine. Discussed, not built.
+6. **Admin role: BUILT (2026-11-16), not yet deployed.** An `admins` table (not a
+   `profiles` column), `RequireAdmin` in front of `/admin`, granted by
+   `frontend/scripts/grant-admin.mjs`. Deploy: migration
+   `20261116120000_admin_role.sql` -> grant yourselves with the script -> backend ->
+   frontend (backend first makes `/admin` 500). Still optional and not built: an
+   admin import page (~1 day) that would give the client a browser import with no
+   key on his machine.
 
 ## Decisions made here that are not in the code
 
@@ -44,8 +48,10 @@ Read `CLAUDE.md` first. This file is only what is NOT in the code, git or CLAUDE
   unclear matches and are kept visible. The keep-list lives in
   `frontend/scripts/enrichment/keep-list.json` (gitignored).
 - **Un-hiding is script-only.** Approving a ticket with a hidden tool must not
-  un-hide it: `/admin` has no role check, so any signed-in user could undo the
-  curation. The first security review blocked on exactly that.
+  un-hide it: un-hiding is a curation decision made only with
+  `scripts/hide-tools.mjs`. (Written when `/admin` had no role check, so any
+  signed-in user could undo the curation; the first security review blocked on
+  exactly that. `/admin` now needs the admin role, but the rule stays.)
 - **"Findy (Jason AI)" was NOT imported** — same product as "Jason AI SDR".
 - **All other tools were imported even without a website/category** (user chose
   that over holding them back).

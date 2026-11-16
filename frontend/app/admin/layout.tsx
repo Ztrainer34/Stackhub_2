@@ -1,5 +1,5 @@
 import { getServerAuthState } from "@/lib/auth-server";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Tickets, Home } from "lucide-react";
@@ -11,9 +11,15 @@ interface AdminLayoutProps {
 export default async function AdminLayout({ children }: AdminLayoutProps) {
   const authState = await getServerAuthState();
 
-  // TODO: Add proper admin role check
   if (authState.status !== 'authenticated') {
     redirect(authState.status === 'unauthenticated' ? "/login" : "/");
+  }
+
+  // Not an admin: a 404, so the page does not even confirm that /admin exists.
+  // This hides the UI only. The backend refuses every /admin API call from a
+  // non-admin (RequireAdmin), which is the actual boundary.
+  if (!authState.user.is_admin) {
+    notFound();
   }
 
   return (

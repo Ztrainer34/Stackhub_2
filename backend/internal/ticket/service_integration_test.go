@@ -2,6 +2,7 @@ package ticket
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -132,8 +133,9 @@ func TestResolveWithNewIsAtomicIntegration(t *testing.T) {
 }
 
 // Approving a suggestion with a hidden tool links the tool but leaves it hidden,
-// batch label and all: /admin has no role check, so an approval must not undo
-// the curation. Un-hiding is done by hand with scripts/hide-tools.mjs.
+// batch label and all: /admin requires the admin role (admins table, RequireAdmin
+// in routes.go), but un-hiding is a curation decision made only with
+// scripts/hide-tools.mjs, never by a ticket approval.
 func TestResolveWithHiddenToolKeepsItHiddenIntegration(t *testing.T) {
 	conn := testdb.Open(t)
 	tx := testdb.Begin(t, conn)
@@ -186,5 +188,115 @@ func TestResolveWithNewRefusesTakenNameIntegration(t *testing.T) {
 	apperrtest.Want(t, "name already taken", err, apperr.KindConflict, "A tool with this name already exists. Resolve the suggestion with the existing tool instead.")
 	if after := testdb.Scalar[int64](t, tx, `SELECT count(*) FROM tools`); after != before {
 		t.Errorf("tools %d -> %d; a refused resolution must not create a tool", before, after)
+	}
+}
+
+func TestCreatePostTicketsReturnsTheNewIDsIntegration(t *testing.T) {
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
+	ctx := context.Background()
+	q := db.New(tx)
+	requester, _ := testdb.TwoProfiles(t, tx)
+	postID := testdb.Scalar[uuid.UUID](t, tx, `SELECT id FROM posts LIMIT 1`)
+
+	ids, err := CreatePostTickets(ctx, q, postID, requester, []Suggestion{
+		{Name: "Returned One", Website: "https://example.com"},
+		{Name: "Returned Two"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 2 {
+		t.Fatalf("got %d ids; want one per suggestion", len(ids))
+	}
+	for _, id := range ids {
+		if n := testdb.Scalar[int64](t, tx, `SELECT count(*) FROM tool_tickets WHERE id = $1 AND requested_by = $2`, id, requester); n != 1 {
+			t.Errorf("ticket %s does not exist for the requester", id)
+		}
+	}
+
+	none, err := CreatePostTickets(ctx, q, postID, requester, nil)
+	if err != nil || len(none) != 0 {
+		t.Errorf("no suggestions: got %v, %v; want no ids and no error", none, err)
+	}
+}
+
+func TestListToolTicketsForAlertIntegration(t *testing.T) {
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
+	ctx := context.Background()
+	q := db.New(tx)
+	requester, resolver := testdb.TwoProfiles(t, tx)
+	cats := testdb.SomeCategories(t, tx, 2)
+	postID := testdb.Scalar[uuid.UUID](t, tx, `SELECT id FROM posts LIMIT 1`)
+	postName := testdb.Scalar[string](t, tx, `SELECT name FROM posts WHERE id = $1`, postID)
+	username := testdb.Scalar[string](t, tx, `SELECT username FROM profiles WHERE id = $1`, requester)
+
+	posted, err := CreatePostTickets(ctx, q, postID, requester, []Suggestion{
+		{Name: "Alert On Post", Description: "d", Website: "https://example.com", Categories: []int{int(cats[0]), int(cats[1])}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	standalone, err := q.CreateStandaloneToolTicket(ctx, db.CreateStandaloneToolTicketParams{RequestedBy: requester, ToolName: "Alert Standalone"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := q.CreateStandaloneToolTicket(ctx, db.CreateStandaloneToolTicketParams{RequestedBy: requester, ToolName: "Alert Resolved"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rejected, err := q.CreateStandaloneToolTicket(ctx, db.CreateStandaloneToolTicketParams{RequestedBy: requester, ToolName: "Alert Rejected"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE tool_tickets SET status = 'resolved', resolved_by = $2 WHERE id = $1`, resolved, resolver); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE tool_tickets SET status = 'rejected', resolved_by = $2 WHERE id = $1`, rejected, resolver); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := q.ListToolTicketsForAlert(ctx, []uuid.UUID{posted[0], standalone, resolved, rejected, uuid.New()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("got %d rows; want only the two pending tickets", len(rows))
+	}
+	for _, r := range rows {
+		if r.RequesterUsername != username {
+			t.Errorf("%s: requester %q; want %q", r.ToolName, r.RequesterUsername, username)
+		}
+		switch r.ID {
+		case posted[0]:
+			if !r.PostName.Valid || r.PostName.String != postName {
+				t.Errorf("post ticket: PostName %+v; want %q", r.PostName, postName)
+			}
+			// The database's own ordering: its collation need not be byte order.
+			wantCats := testdb.IDs[string](t, tx, `SELECT name FROM categories WHERE id = ANY($1) ORDER BY name`, cats)
+			if len(r.CategoryNames) != 2 || strings.Join(r.CategoryNames, "|") != strings.Join(wantCats, "|") {
+				t.Errorf("post ticket: categories %v; want %v", r.CategoryNames, wantCats)
+			}
+			if r.ToolDescription != "d" || r.ToolWebsite != "https://example.com" {
+				t.Errorf("post ticket: description %q, website %q", r.ToolDescription, r.ToolWebsite)
+			}
+		case standalone:
+			if r.PostName.Valid {
+				t.Errorf("standalone ticket: PostName %+v; want none", r.PostName)
+			}
+			if len(r.CategoryNames) != 0 || r.ToolDescription != "" || r.ToolWebsite != "" {
+				t.Errorf("standalone ticket: want empty categories, description and website, got %+v", r)
+			}
+		default:
+			t.Errorf("unexpected ticket %s (%s) listed", r.ID, r.ToolName)
+		}
+	}
+
+	for name, ids := range map[string][]uuid.UUID{"empty list": {}, "nil list": nil} {
+		got, err := q.ListToolTicketsForAlert(ctx, ids)
+		if err != nil || len(got) != 0 {
+			t.Errorf("%s: got %d rows, %v; want none and no error", name, len(got), err)
+		}
 	}
 }

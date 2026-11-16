@@ -2,6 +2,7 @@ package post
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -10,6 +11,7 @@ import (
 	"stackhub.com/stackhub/internal/apperr/apperrtest"
 	"stackhub.com/stackhub/internal/testdb"
 	"stackhub.com/stackhub/internal/ticket"
+	"stackhub.com/stackhub/pkg/db"
 )
 
 // toolEditFixture is a fresh post of the given type with the given tools linked.
@@ -199,6 +201,168 @@ func TestSetToolsIgnoresAnotherPostsTicketIntegration(t *testing.T) {
 	// that belongs to another post.
 	_, err := posts.setTools(ctx, author, postID, UpdatePostToolsForm{TicketIDs: []uuid.UUID{foreign}})
 	apperrtest.Want(t, "another post's ticket", err, apperr.KindInvalid, "Playbooks require at least one tool or tool suggestion")
+}
+
+// idRecorder stands in for the alert loader and channel: it records which ticket
+// ids the Alerter asked about, and answers with one alert per id. Nothing is
+// sent anywhere.
+type idRecorder struct {
+	mu     sync.Mutex
+	loaded []uuid.UUID
+	sent   []ticket.AlertBatch
+}
+
+func (r *idRecorder) Load(_ context.Context, ids []uuid.UUID) ([]ticket.NewToolAlert, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.loaded = append(r.loaded, ids...)
+	alerts := make([]ticket.NewToolAlert, len(ids))
+	for i, id := range ids {
+		alerts[i] = ticket.NewToolAlert{TicketID: id, ToolName: "tool", RequesterUsername: "someone"}
+	}
+	return alerts, nil
+}
+
+func (r *idRecorder) Name() string { return "recorder" }
+
+func (r *idRecorder) Deliver(_ context.Context, batch ticket.AlertBatch) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.sent = append(r.sent, batch)
+	return nil
+}
+
+func (r *idRecorder) loadedIDs() []uuid.UUID {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]uuid.UUID(nil), r.loaded...)
+}
+
+func newPlaybookForm(suggestions ...ticket.Suggestion) CreatePostWithSuggestedToolsForm {
+	return CreatePostWithSuggestedToolsForm{
+		Type:           "playbook",
+		Name:           "Alert playbook " + uuid.NewString(),
+		SuggestedTools: suggestions,
+	}
+}
+
+func sameIDs(a, b []uuid.UUID) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	seen := map[uuid.UUID]int{}
+	for _, id := range a {
+		seen[id]++
+	}
+	for _, id := range b {
+		seen[id]--
+	}
+	for _, n := range seen {
+		if n != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func TestCreateAlertsAdminsToTheNewSuggestionsIntegration(t *testing.T) {
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
+	rec := &idRecorder{}
+	alerter := ticket.NewAlerter(rec.Load, []ticket.AlertChannel{rec}, ticket.DefaultAlerterConfig())
+	posts := postService{db: tx, alerts: alerter}
+	author, _ := testdb.TwoProfiles(t, tx)
+
+	created, err := posts.create(context.Background(), author, newPlaybookForm(
+		ticket.Suggestion{Name: "Alert Tool One", Website: "https://example.com"},
+		ticket.Suggestion{Name: "Alert Tool Two"},
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	alerter.Flush(context.Background())
+
+	want := testdb.IDs[uuid.UUID](t, tx, `SELECT id FROM tool_tickets WHERE post_id = $1`, created.ID)
+	if len(want) != 2 {
+		t.Fatalf("%d tickets filed; want 2", len(want))
+	}
+	if got := rec.loadedIDs(); !sameIDs(got, want) {
+		t.Errorf("alerted about %v; want exactly the two new tickets %v", got, want)
+	}
+}
+
+func TestFailedCreateAlertsNobodyIntegration(t *testing.T) {
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
+	rec := &idRecorder{}
+	alerter := ticket.NewAlerter(rec.Load, []ticket.AlertChannel{rec}, ticket.DefaultAlerterConfig())
+	posts := postService{db: tx, alerts: alerter}
+	author, _ := testdb.TwoProfiles(t, tx)
+
+	form := newPlaybookForm(ticket.Suggestion{Name: "Never Filed"})
+	form.Name = "   " // fails validation, before anything is stored
+	if _, err := posts.create(context.Background(), author, form); err == nil {
+		t.Fatal("create with an empty name succeeded")
+	}
+	alerter.Flush(context.Background())
+
+	if got := rec.loadedIDs(); len(got) != 0 {
+		t.Errorf("a refused create alerted about %v", got)
+	}
+}
+
+func TestSetToolsAlertsAdminsToTheNewSuggestionIntegration(t *testing.T) {
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
+	rec := &idRecorder{}
+	alerter := ticket.NewAlerter(rec.Load, []ticket.AlertChannel{rec}, ticket.DefaultAlerterConfig())
+	posts := postService{db: tx, alerts: alerter}
+	author, _ := testdb.TwoProfiles(t, tx)
+	tools := testdb.SomeTools(t, tx, 1)
+	postID := toolEditFixture(t, tx, "playbook", author, tools[0])
+
+	_, err := posts.setTools(context.Background(), author, postID, UpdatePostToolsForm{
+		Tools:          tools,
+		SuggestedTools: []ticket.Suggestion{{Name: "Edit Time Suggestion"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	alerter.Flush(context.Background())
+
+	want := testdb.IDs[uuid.UUID](t, tx, `SELECT id FROM tool_tickets WHERE post_id = $1`, postID)
+	if got := rec.loadedIDs(); len(want) != 1 || !sameIDs(got, want) {
+		t.Errorf("alerted about %v; want the one new ticket %v", got, want)
+	}
+}
+
+// A suggestion withdrawn between the request and the digest is not news, and
+// the rest of the digest still goes out.
+func TestAWithdrawnSuggestionIsLeftOutOfTheDigestIntegration(t *testing.T) {
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
+	rec := &idRecorder{}
+	alerter := ticket.NewAlerter(ticket.LoadAlertsFrom(db.New(tx)), []ticket.AlertChannel{rec}, ticket.DefaultAlerterConfig())
+	posts := postService{db: tx, alerts: alerter}
+	author, _ := testdb.TwoProfiles(t, tx)
+
+	created, err := posts.create(context.Background(), author, newPlaybookForm(
+		ticket.Suggestion{Name: "Kept In Digest"},
+		ticket.Suggestion{Name: "Withdrawn Before Digest"},
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(context.Background(), `DELETE FROM tool_tickets WHERE post_id = $1 AND tool_name = 'Withdrawn Before Digest'`, created.ID); err != nil {
+		t.Fatal(err)
+	}
+	alerter.Flush(context.Background())
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if len(rec.sent) != 1 || len(rec.sent[0].Alerts) != 1 || rec.sent[0].Alerts[0].ToolName != "Kept In Digest" {
+		t.Errorf("digest = %+v; want only the suggestion that still exists", rec.sent)
+	}
 }
 
 func TestSetToolsRefusesAnUnknownToolIntegration(t *testing.T) {

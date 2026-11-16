@@ -91,10 +91,18 @@ Read these as *places to look*, not as known bugs. Verify each against the code.
   proves the caller may act on that object. If you cannot find it, that is your
   finding. Also check that the SQL itself scopes by owner (`WHERE id = $1 AND
   author_id = $2`), not only a check-then-act in Go that a race could slip past.
-- **`/admin/*` has no role check.** Any signed-in user can resolve and reject
-  tool tickets. This is known and accepted. Do not re-report it — but **do**
-  report, as Critical, any change that puts a new capability behind `/admin`
-  on the assumption it is protected.
+- **`/admin/*` requires the admin role.** The five routes are registered flat in
+  their own group in `routes.go`, behind `RequireAdmin`, which checks the
+  `admins` table on every request and fails closed. Verify, as Critical if
+  broken: any `/admin` route outside that group or registered twice, a mounted
+  `r.Route("/admin")` (chi.Walk cannot see its middleware), a cache on the
+  check, `IsAdmin` called anywhere but the gate and `GET /me`, `is_admin`
+  returned by any endpoint other than the viewer's own `/me`, admin status put
+  in the token hook, or the `admins` table losing RLS or gaining a policy or an
+  `anon`/`authenticated` grant. Admins are granted only by
+  `scripts/grant-admin.mjs` or the SQL editor, never over HTTP. A ticket
+  resolver is still untrusted input: report any weakening of the URL checks or
+  of "a hidden tool stays hidden".
 - Owner-only reads like `/user/{slug}/approval-posts` must compare the slug's
   user to the caller. Check that comparison exists and cannot be bypassed by case
   or by a renamed slug resolving through slug history.
@@ -282,8 +290,8 @@ When modelling these, go past the generic and check:
   ownership; a fork of an unpublished or deleted post; attribution that can be
   spoofed or stripped.
 - **Any new role** (admin, moderator) — where the role is stored, who can grant
-  it, and every existing route it must now be checked on. Remember `/admin`
-  today checks nothing.
+  it, and every existing route it must now be checked on. The one role that
+  exists is admin (the `admins` table, `RequireAdmin` on the `/admin` group).
 
 ### Output
 

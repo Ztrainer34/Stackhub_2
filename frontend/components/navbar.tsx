@@ -3,6 +3,7 @@ import NavBarContent from "./navbar-content";
 interface User {
   id: string;
   username: string;
+  is_admin?: boolean;
 }
 
 interface NavBarProps {
