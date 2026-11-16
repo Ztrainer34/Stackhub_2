@@ -144,6 +144,9 @@ keep pointing at hidden tools.
   assuming a narrow key is enough.
 - Drafts vs published: `posts.draft_content` is the working copy, `content` the
   published one; publish copies draft → content.
+- E2E: Playwright in `frontend/e2e/` (`pnpm e2e`, needs the local stack under
+  `pnpm dev`), run by `.github/workflows/e2e.yml` with an Allure report. See
+  `frontend/e2e/README.md`.
 
 ## Environment variables (names only)
 

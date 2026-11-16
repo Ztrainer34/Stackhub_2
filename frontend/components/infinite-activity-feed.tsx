@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FeedRow, FeedEmptyState } from "@/components/activity-feed";
-import { flattenFeedPages } from "@/lib/feed";
+import { feedItemKey, flattenFeedPages } from "@/lib/feed";
 import { useInfiniteFeed } from "@/lib/queries/use-feed";
 
 export default function InfiniteActivityFeed() {
@@ -64,7 +64,7 @@ export default function InfiniteActivityFeed() {
     <>
       <div className="divide-y rounded-lg border px-4">
         {items.map((item) => (
-          <FeedRow key={item.event_key} item={item} />
+          <FeedRow key={feedItemKey(item)} item={item} />
         ))}
       </div>
       <div ref={sentinelRef} aria-hidden="true" className="h-1" />

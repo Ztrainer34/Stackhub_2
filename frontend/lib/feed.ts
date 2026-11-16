@@ -88,6 +88,25 @@ export function nextFeedPage(last: FeedResponse): number | undefined {
 }
 
 /**
+ * Identity of a feed row. Uses the server's event_key, and falls back to a key
+ * built from the row's own fields when it is missing.
+ *
+ * The fallback matters during a deploy: if the frontend is live before the
+ * backend that adds event_key, every row arrives with `event_key` undefined.
+ * Keying on that collapsed the whole infinite feed to its first row.
+ */
+export function feedItemKey(item: FeedItem): string {
+  if (item.event_key) return item.event_key;
+  return [
+    item.kind,
+    item.reason,
+    item.post_id ?? "",
+    item.actor_id,
+    item.occurred_at,
+  ].join(":");
+}
+
+/**
  * Concatenates pages in order, dropping any item whose event_key was already
  * seen. Offset paging can repeat a row when new events arrive or one ages
  * out of the 3-day band between page loads; the first occurrence wins.
@@ -97,8 +116,9 @@ export function flattenFeedPages(pages: FeedResponse[]): FeedItem[] {
   const out: FeedItem[] = [];
   for (const page of pages) {
     for (const item of page.items) {
-      if (seen.has(item.event_key)) continue;
-      seen.add(item.event_key);
+      const key = feedItemKey(item);
+      if (seen.has(key)) continue;
+      seen.add(key);
       out.push(item);
     }
   }

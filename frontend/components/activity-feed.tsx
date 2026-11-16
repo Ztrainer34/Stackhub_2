@@ -15,7 +15,7 @@ import {
   UserPlus,
 } from "lucide-react";
 import { useFeed } from "@/lib/queries/use-feed";
-import { FeedItem, hasMoreFeed } from "@/lib/feed";
+import { FeedItem, feedItemKey, hasMoreFeed } from "@/lib/feed";
 import { Button } from "@/components/ui/button";
 import { timeAgo } from "@/lib/time-ago";
 
@@ -201,7 +201,7 @@ export default function ActivityFeed({ limit = 5 }: { limit?: number }) {
         <>
           <div className="divide-y rounded-lg border px-4">
             {items.map((item) => (
-              <FeedRow key={item.event_key} item={item} />
+              <FeedRow key={feedItemKey(item)} item={item} />
             ))}
           </div>
           {data && hasMoreFeed(data) && (

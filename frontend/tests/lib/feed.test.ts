@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  feedItemKey,
   flattenFeedPages,
   hasMoreFeed,
   nextFeedPage,
@@ -88,5 +89,136 @@ describe("flattenFeedPages", () => {
     flattenFeedPages([p1, p2]);
     expect(p1.items).toHaveLength(2);
     expect(p2.items).toHaveLength(2);
+  });
+});
+
+/**
+ * A row as it arrives from a backend older than the frontend: no event_key at
+ * all. The type says string, the wire says otherwise, hence the cast.
+ */
+function keyless(overrides: Partial<FeedItem> = {}): FeedItem {
+  return { ...item("x"), event_key: undefined as unknown as string, ...overrides };
+}
+
+function pageOf(items: FeedItem[], page = 1): FeedResponse {
+  return { items, page, limit: 20, total_count: items.length };
+}
+
+describe("feedItemKey", () => {
+  it("returns the event_key when it is a non-empty string", () => {
+    expect(feedItemKey(item("post:abc"))).toBe("post:abc");
+    expect(feedItemKey(item("notification:123"))).toBe("notification:123");
+  });
+
+  it.each([
+    ["undefined", undefined],
+    ["null", null],
+    ["an empty string", ""],
+  ])("returns a non-empty fallback when event_key is %s", (_label, value) => {
+    const key = feedItemKey(keyless({ event_key: value as unknown as string, post_id: "p1" }));
+    expect(typeof key).toBe("string");
+    expect(key.length).toBeGreaterThan(0);
+  });
+
+  it("gives the same key to two separate objects with identical fields", () => {
+    // Dedupe across pages depends on the SAME row producing the SAME key.
+    const a = keyless({ post_id: "p1" });
+    const b = keyless({ post_id: "p1" });
+    expect(feedItemKey(a)).toBe(feedItemKey(b));
+  });
+
+  it("is deterministic across repeated calls", () => {
+    const row = keyless({ post_id: "p1" });
+    expect(feedItemKey(row)).toBe(feedItemKey(row));
+  });
+
+  // Each field below is part of a row's identity. If the fallback ignores one,
+  // rows that differ only in that field collapse into one, silently.
+  it("gives different keys to rows that differ only in kind", () => {
+    const a = keyless({ kind: "post", post_id: "p1" });
+    const b = keyless({ kind: "notification", post_id: "p1" });
+    expect(feedItemKey(a)).not.toBe(feedItemKey(b));
+  });
+
+  it("gives different keys to rows that differ only in reason", () => {
+    const a = keyless({ reason: "latest", post_id: "p1" });
+    const b = keyless({ reason: "post_star", post_id: "p1" });
+    expect(feedItemKey(a)).not.toBe(feedItemKey(b));
+  });
+
+  it("gives different keys to rows that differ only in post_id", () => {
+    const a = keyless({ post_id: "p1" });
+    const b = keyless({ post_id: "p2" });
+    expect(feedItemKey(a)).not.toBe(feedItemKey(b));
+  });
+
+  it("gives different keys to rows that differ only in actor_id", () => {
+    const a = keyless({ actor_id: "a", post_id: "p1" });
+    const b = keyless({ actor_id: "b", post_id: "p1" });
+    expect(feedItemKey(a)).not.toBe(feedItemKey(b));
+  });
+
+  it("gives different keys to rows that differ only in occurred_at", () => {
+    const a = keyless({ occurred_at: "2026-06-15T12:00:00.000Z", post_id: "p1" });
+    const b = keyless({ occurred_at: "2026-06-15T12:00:01.000Z", post_id: "p1" });
+    expect(feedItemKey(a)).not.toBe(feedItemKey(b));
+  });
+
+  it("does not throw on a null post_id", () => {
+    expect(() => feedItemKey(keyless({ post_id: null }))).not.toThrow();
+  });
+
+  it("gives a null-post_id row a different key from a row with a post_id", () => {
+    // Notification rows such as "follow" have no post; they must not collide
+    // with a post row from the same actor at the same instant.
+    const noPost = keyless({ post_id: null });
+    const withPost = keyless({ post_id: "p1" });
+    expect(feedItemKey(noPost)).not.toBe(feedItemKey(withPost));
+  });
+});
+
+describe("flattenFeedPages with rows that have no event_key", () => {
+  // Real incident: the frontend shipped before the backend. Every row arrived
+  // with event_key undefined, all shared one dedupe key, and the feed showed
+  // only its first row.
+  it("keeps five distinct rows on one page, in order", () => {
+    const rows = [1, 2, 3, 4, 5].map((n) => keyless({ post_id: `p${n}` }));
+    const out = flattenFeedPages([pageOf(rows)]);
+    expect(out.map((i) => i.post_id)).toEqual(["p1", "p2", "p3", "p4", "p5"]);
+  });
+
+  it("keeps rows that differ only in occurred_at", () => {
+    const rows = [
+      keyless({ occurred_at: "2026-06-15T12:00:00.000Z" }),
+      keyless({ occurred_at: "2026-06-15T12:00:01.000Z" }),
+      keyless({ occurred_at: "2026-06-15T12:00:02.000Z" }),
+    ];
+    const out = flattenFeedPages([pageOf(rows)]);
+    expect(out.map((i) => i.occurred_at)).toEqual(rows.map((r) => r.occurred_at));
+  });
+
+  it("keeps rows from different pages when they are different rows", () => {
+    const p1 = pageOf([keyless({ post_id: "p1" }), keyless({ post_id: "p2" })], 1);
+    const p2 = pageOf([keyless({ post_id: "p3" }), keyless({ post_id: "p4" })], 2);
+    const out = flattenFeedPages([p1, p2]);
+    expect(out.map((i) => i.post_id)).toEqual(["p1", "p2", "p3", "p4"]);
+  });
+
+  it("drops the same row repeated on a later page, keeping the first object", () => {
+    const first = keyless({ post_id: "p1" });
+    const p1 = pageOf([first, keyless({ post_id: "p2" })], 1);
+    const p2 = pageOf([keyless({ post_id: "p1" }), keyless({ post_id: "p3" })], 2);
+    const out = flattenFeedPages([p1, p2]);
+    expect(out.map((i) => i.post_id)).toEqual(["p1", "p2", "p3"]);
+    expect(out[0]).toBe(first);
+  });
+
+  it("still dedupes keyed items when they are mixed with keyless rows", () => {
+    const keyed = item("post:dup");
+    const p1 = pageOf([keyed, keyless({ post_id: "p1" })], 1);
+    const p2 = pageOf([item("post:dup"), keyless({ post_id: "p2" })], 2);
+    const out = flattenFeedPages([p1, p2]);
+    expect(out).toHaveLength(3);
+    expect(out[0]).toBe(keyed);
   });
 });
