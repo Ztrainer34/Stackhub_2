@@ -323,6 +323,84 @@ func TestBuildNewToolDigestOmitsEmptyFields(t *testing.T) {
 
 // Escaping stops markup, not links: Gmail and Outlook turn a bare URL or domain
 // in HTML mail into a clickable link. Every free-text field has to be inert.
+// The reason is typed by an admin but lands in an email sent from StackHub's
+// own domain: it must be inert text, whatever it contains.
+func TestBuildToolRejectedReasonIsInertText(t *testing.T) {
+	reason := `<a href="https://evil.example/x">go</a> & visit www.evil.example or a@b.co`
+	subject, html := BuildToolRejected("Notion", reason)
+
+	for _, leaked := range []string{`href="https://evil`, "https://evil.example", "www.evil.example", "a@b.co", "evil.example/x"} {
+		if strings.Contains(html, leaked) {
+			t.Errorf("%q survives as markup or a linkable string:\n%s", leaked, html)
+		}
+	}
+	for _, want := range []string{"&lt;a", "hxxps", "[.]", "[at]"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("%q missing from the email:\n%s", want, html)
+		}
+	}
+	// The only link is the constant button to the tool list.
+	if got := strings.Count(html, "<a "); got != 1 {
+		t.Errorf("want exactly one link element (the button), got %d:\n%s", got, html)
+	}
+	if !strings.Contains(html, `<a href="https://stackhub.me/tools"`) {
+		t.Errorf("the button does not point at the site's tool list:\n%s", html)
+	}
+	if strings.Contains(subject, "evil") || strings.Contains(subject, "Notion") {
+		t.Errorf("subject %q carries user text", subject)
+	}
+	if !strings.Contains(html, "The StackHub Team") || strings.Contains(html, "<script") {
+		t.Errorf("footer missing or script present:\n%s", html)
+	}
+}
+
+func TestBuildToolRejectedKeepsEntitiesIntact(t *testing.T) {
+	_, html := BuildToolRejected("Notion", "Too similar to Airtable &")
+	if !strings.Contains(html, "Airtable &amp;</div>") {
+		t.Errorf("a trailing & must come out as an intact &amp;:\n%s", html)
+	}
+	if strings.Contains(html, "&amp;amp;") {
+		t.Errorf("an entity was escaped twice:\n%s", html)
+	}
+}
+
+func TestBuildToolRejectedSubjectIsConstant(t *testing.T) {
+	want, _ := BuildToolRejected("Notion", "Duplicate")
+	for _, name := range []string{"Notion\r\nBcc: attacker@evil.example", "Subject: pwned", strings.Repeat("x", 5000)} {
+		subject, html := BuildToolRejected(name, "Duplicate")
+		if subject != want {
+			t.Errorf("tool name %q changed the subject to %q", name, subject)
+		}
+		if strings.ContainsAny(subject, "\r\n") {
+			t.Errorf("subject has a line break: %q", subject)
+		}
+		if strings.Contains(html, "\r\nBcc:") || strings.Contains(html, "attacker@evil.example") {
+			t.Errorf("the tool name's header text reached the body unchanged:\n%s", html)
+		}
+	}
+}
+
+func TestBuildToolRejectedDropsInvisibleCharacters(t *testing.T) {
+	_, html := BuildToolRejected("No\u202Etion\u200B", "bad\u202Ereason\u200Bwith\u2028breaks\r\nand\ttabs")
+	for _, r := range []rune{'\u202E', '\u200B', '\u2028'} {
+		if strings.ContainsRune(html, r) {
+			t.Errorf("U+%04X reached the email", r)
+		}
+	}
+	if !strings.Contains(html, "bad reason with breaks and tabs") {
+		t.Errorf("the reason was not flattened to one line:\n%s", html)
+	}
+}
+
+func TestBuildToolRejectedEscapesToolName(t *testing.T) {
+	_, html := BuildToolRejected(`<img src=x onerror=alert(1)> evil.example`, "Duplicate")
+	for _, bad := range []string{"<img", "evil.example"} {
+		if strings.Contains(html, bad) {
+			t.Errorf("%q in the tool name reached the email as is:\n%s", bad, html)
+		}
+	}
+}
+
 func TestNeutraliseLinks(t *testing.T) {
 	for _, in := range []string{
 		"re-verify at stackhub-admin-verify.com/login",

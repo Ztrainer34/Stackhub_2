@@ -1365,6 +1365,7 @@ SELECT
   tt.tool_description,
   tt.tool_website,
   tt.status,
+  tt.rejection_reason,
   tt.resolved_tool_id,
   tt.resolved_by,
   tt.resolved_at,
@@ -1409,6 +1410,7 @@ type GetToolTicketRow struct {
 	ToolDescription   pgtype.Text        `json:"tool_description"`
 	ToolWebsite       pgtype.Text        `json:"tool_website"`
 	Status            string             `json:"status"`
+	RejectionReason   pgtype.Text        `json:"rejection_reason"`
 	ResolvedToolID    pgtype.UUID        `json:"resolved_tool_id"`
 	ResolvedBy        pgtype.UUID        `json:"resolved_by"`
 	ResolvedAt        pgtype.Timestamptz `json:"resolved_at"`
@@ -1432,6 +1434,7 @@ func (q *Queries) GetToolTicket(ctx context.Context, id uuid.UUID) (GetToolTicke
 		&i.ToolDescription,
 		&i.ToolWebsite,
 		&i.Status,
+		&i.RejectionReason,
 		&i.ResolvedToolID,
 		&i.ResolvedBy,
 		&i.ResolvedAt,
@@ -2190,10 +2193,11 @@ LEFT JOIN posts p ON p.id = r.post_id
 LEFT JOIN tools t ON t.id = r.tool_id
 WHERE r.rn = 1
   -- A feed is what other people did; your own activity is not news to you.
-  -- Only a tool-approved notification may have no actor: any other row without
-  -- one (its actor deleted) is still left out, as it was before the LEFT JOIN.
+  -- Only a tool-approved or tool-rejected notification may have no actor: any
+  -- other row without one (its actor deleted) is still left out, as it was
+  -- before the LEFT JOIN. An explicit allowlist, never "any notification".
   AND (r.actor_id <> $1::uuid
-       OR (r.actor_id IS NULL AND r.reason = 'tool_approved'))
+       OR (r.actor_id IS NULL AND r.reason IN ('tool_approved', 'tool_rejected')))
 ORDER BY (r.occurred_at < now() - interval '3 days')::int, r.tier, r.occurred_at DESC, r.event_key
 LIMIT $3 OFFSET $2
 `
@@ -3168,6 +3172,7 @@ SELECT
   tt.tool_description,
   tt.tool_website,
   tt.status,
+  tt.rejection_reason,
   tt.resolved_tool_id,
   tt.resolved_by,
   tt.resolved_at,
@@ -3222,6 +3227,7 @@ type ListToolTicketsRow struct {
 	ToolDescription   pgtype.Text        `json:"tool_description"`
 	ToolWebsite       pgtype.Text        `json:"tool_website"`
 	Status            string             `json:"status"`
+	RejectionReason   pgtype.Text        `json:"rejection_reason"`
 	ResolvedToolID    pgtype.UUID        `json:"resolved_tool_id"`
 	ResolvedBy        pgtype.UUID        `json:"resolved_by"`
 	ResolvedAt        pgtype.Timestamptz `json:"resolved_at"`
@@ -3252,6 +3258,7 @@ func (q *Queries) ListToolTickets(ctx context.Context, arg ListToolTicketsParams
 			&i.ToolDescription,
 			&i.ToolWebsite,
 			&i.Status,
+			&i.RejectionReason,
 			&i.ResolvedToolID,
 			&i.ResolvedBy,
 			&i.ResolvedAt,
@@ -3982,6 +3989,40 @@ func (q *Queries) ListUserWatchlist(ctx context.Context, username string) ([]Lis
 	return items, nil
 }
 
+const lockToolTicketStatus = `-- name: LockToolTicketStatus :one
+SELECT tt.status, tt.requested_by, tt.tool_name,
+       EXISTS(SELECT 1 FROM profiles p WHERE p.id = tt.requested_by) AS requester_exists
+FROM tool_tickets tt
+WHERE tt.id = $1
+FOR UPDATE OF tt
+`
+
+type LockToolTicketStatusRow struct {
+	Status          string    `json:"status"`
+	RequestedBy     uuid.UUID `json:"requested_by"`
+	ToolName        string    `json:"tool_name"`
+	RequesterExists bool      `json:"requester_exists"`
+}
+
+// Rejecting reads the ticket's previous status to decide whether this is the
+// first rejection (notify) or a re-rejection (only the reason changes). FOR
+// UPDATE makes two concurrent rejects take turns, so only one sees "pending".
+// requester_exists: tool_tickets.requested_by has no foreign key, but a
+// notification's recipient does. Without this, a ticket whose requester's
+// profile was deleted could never be rejected (the notification insert fails
+// and aborts the transaction); such a rejection simply notifies nobody.
+func (q *Queries) LockToolTicketStatus(ctx context.Context, id uuid.UUID) (LockToolTicketStatusRow, error) {
+	row := q.db.QueryRow(ctx, lockToolTicketStatus, id)
+	var i LockToolTicketStatusRow
+	err := row.Scan(
+		&i.Status,
+		&i.RequestedBy,
+		&i.ToolName,
+		&i.RequesterExists,
+	)
+	return i, err
+}
+
 const markAllNotificationsRead = `-- name: MarkAllNotificationsRead :exec
 UPDATE notifications 
 SET is_read = true 
@@ -4029,22 +4070,26 @@ const rejectToolTicket = `-- name: RejectToolTicket :execrows
 UPDATE tool_tickets
 SET
   status = 'rejected',
+  rejection_reason = $1,
   resolved_by = $2,
   resolved_at = now(),
   updated_at = now()
-WHERE id = $1 AND status <> 'resolved'
+WHERE id = $3 AND status <> 'resolved'
 `
 
 type RejectToolTicketParams struct {
-	ID         uuid.UUID   `json:"id"`
+	Reason     pgtype.Text `json:"reason"`
 	ResolvedBy pgtype.UUID `json:"resolved_by"`
+	ID         uuid.UUID   `json:"id"`
 }
 
+// The reason is shown to the requester (notification and email) and to admins;
+// it is never selected by a requester-facing or public query.
 // "resolved" is final. Without this, rejecting a resolved ticket and resolving
 // it again re-sent the requester's "tool approved" email each cycle, and two
 // concurrent resolves both succeeded. Zero rows means the caller answers 409.
 func (q *Queries) RejectToolTicket(ctx context.Context, arg RejectToolTicketParams) (int64, error) {
-	result, err := q.db.Exec(ctx, rejectToolTicket, arg.ID, arg.ResolvedBy)
+	result, err := q.db.Exec(ctx, rejectToolTicket, arg.Reason, arg.ResolvedBy, arg.ID)
 	if err != nil {
 		return 0, err
 	}

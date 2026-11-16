@@ -7,6 +7,8 @@ export interface ToolTicket {
   tool_description: string;
   tool_website: string;
   status: "pending" | "resolved" | "rejected";
+  /** Why a rejected ticket was rejected. Admin-only; null before a rejection. */
+  rejection_reason?: string | null;
   // Null for standalone suggestions submitted from the /tools "Add tool" flow.
   post_id: string | null;
   post_name: string | null;
@@ -138,16 +140,26 @@ export async function resolveTicketWithNew(ticketId: string, toolData: {
   return response.json();
 }
 
-// Reject a tool ticket
-export async function rejectTicket(ticketId: string): Promise<void> {
+// Reject a tool ticket. The reason is required: the requester is told it, in-app
+// and by email.
+export async function rejectTicket(ticketId: string, reason: string): Promise<void> {
   const supabase = createClient();
-  
+
   const response = await fetchApiAuthenticated(supabase, `/admin/tool-tickets/${ticketId}/reject`, {
     method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ reason }),
   });
-  
+
   if (!response.ok) {
-    throw new Error(`Failed to reject ticket: ${response.status} ${response.statusText}`);
+    // A 400 carries the reason's problem in plain text ("Reason must be at
+    // least 10 characters"); show it rather than a bare status.
+    const detail = response.status === 400
+      ? (await response.text()).trim() || response.statusText
+      : response.statusText;
+    throw new Error(`Failed to reject ticket: ${response.status} ${detail}`);
   }
 }
 

@@ -230,6 +230,7 @@ type ToolTicket struct {
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 	Vector          interface{}        `json:"vector"`
+	RejectionReason pgtype.Text        `json:"rejection_reason"`
 }
 
 type ToolTicketCategory struct {

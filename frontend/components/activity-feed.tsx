@@ -13,6 +13,7 @@ import {
   MessageSquare,
   Star,
   UserPlus,
+  XCircle,
 } from "lucide-react";
 import { useFeed } from "@/lib/queries/use-feed";
 import { FeedItem, feedItemKey, hasMoreFeed } from "@/lib/feed";
@@ -39,6 +40,8 @@ function notificationIcon(reason: FeedItem["reason"]) {
     return <MessageSquare className="h-4 w-4 text-primary" />;
   if (reason === "tool_approved")
     return <CheckCircle2 className="h-4 w-4 text-emerald-600" />;
+  if (reason === "tool_rejected")
+    return <XCircle className="h-4 w-4 text-red-600" />;
   return <UserPlus className="h-4 w-4 text-primary" />;
 }
 

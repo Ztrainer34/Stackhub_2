@@ -44,6 +44,62 @@ func TestToolApprovalDecisionIntegration(t *testing.T) {
 	}
 }
 
+// The rejection email is due exactly once: on the move from pending to
+// rejected, for someone other than the requester. The service says so through
+// its return value; the handler only sends.
+func TestToolRejectionEmailDecisionIntegration(t *testing.T) {
+	conn := testdb.Open(t)
+	tx := testdb.Begin(t, conn)
+	ctx := context.Background()
+	q := db.New(tx)
+	tickets := ticketService{db: tx, q: q}
+	requester, resolver := testdb.TwoProfiles(t, tx)
+
+	standalone := func(by uuid.UUID, name string) uuid.UUID {
+		t.Helper()
+		id, err := q.CreateStandaloneToolTicket(ctx, db.CreateStandaloneToolTicketParams{RequestedBy: by, ToolName: name})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+
+	ticket := standalone(requester, "Rejection Email Tool")
+	first, err := tickets.reject(ctx, ticket, resolver, " Too similar\r\nto an existing tool ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := toolRejection{requesterID: requester, toolName: "Rejection Email Tool", reason: "Too similar to an existing tool"}
+	if first == nil || *first != want {
+		t.Errorf("first rejection = %+v; want an email %+v", first, want)
+	}
+
+	second, err := tickets.reject(ctx, ticket, resolver, "A different reason, long enough.")
+	if err != nil || second != nil {
+		t.Errorf("rejecting again: %+v, %v; want no email and no error", second, err)
+	}
+	if got := testdb.Scalar[string](t, tx, `SELECT rejection_reason FROM tool_tickets WHERE id = $1`, ticket); got != "A different reason, long enough." {
+		t.Errorf("reason after rejecting again = %q", got)
+	}
+
+	own, err := tickets.reject(ctx, standalone(resolver, "Own Rejection Tool"), resolver, "Rejecting my own request.")
+	if err != nil || own != nil {
+		t.Errorf("rejecting your own ticket: %+v, %v; want no email and no error", own, err)
+	}
+
+	// A bad reason is refused before the ticket is touched.
+	bad := standalone(requester, "Bad Reason Tool")
+	if r, err := tickets.reject(ctx, bad, resolver, "short"); err == nil || r != nil {
+		t.Errorf("short reason: %+v, %v; want an error", r, err)
+	}
+	if status := testdb.Scalar[string](t, tx, `SELECT status FROM tool_tickets WHERE id = $1`, bad); status != "pending" {
+		t.Errorf("status %q after a refused reason; want pending", status)
+	}
+
+	_, err = tickets.reject(ctx, uuid.New(), resolver, "There is no such ticket.")
+	apperrtest.Want(t, "unknown ticket", err, apperr.KindNotFound, "Tool ticket not found")
+}
+
 // Every approved tool notifies its requester once, even when one admin
 // approves several of their suggestions within the hour. The notification used
 // to be keyed on the ticket's post (NULL for a standalone suggestion), so the

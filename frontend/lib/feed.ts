@@ -13,7 +13,8 @@ export type FeedReason =
   | "post_star"
   | "post_comment"
   | "follow"
-  | "tool_approved";
+  | "tool_approved"
+  | "tool_rejected";
 
 export type FeedKind = "notification" | "post";
 
@@ -40,7 +41,7 @@ export interface FeedItem {
   occurred_at: string;
   /**
    * Who did it. Null for a notification with no actor, such as "your tool was
-   * approved": StackHub itself, so the resolving admin is never named. Show
+   * approved" or "not approved": StackHub itself, so the resolving admin is never named. Show
    * "StackHub" for those. Post rows always have an actor.
    */
   actor_id: string | null;

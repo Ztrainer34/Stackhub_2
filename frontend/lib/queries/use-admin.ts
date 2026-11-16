@@ -90,10 +90,11 @@ export function useRejectTicket() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (ticketId: string) => rejectTicket(ticketId),
-    onSuccess: (data, ticketId) => {
+    mutationFn: ({ ticketId, reason }: { ticketId: string; reason: string }) =>
+      rejectTicket(ticketId, reason),
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["admin", "tool-tickets"] });
-      queryClient.invalidateQueries({ queryKey: ["admin", "tool-ticket", ticketId] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "tool-ticket", variables.ticketId] });
     },
   });
 }

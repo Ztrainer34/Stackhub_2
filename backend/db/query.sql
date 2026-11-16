@@ -688,6 +688,7 @@ SELECT
   tt.tool_description,
   tt.tool_website,
   tt.status,
+  tt.rejection_reason,
   tt.resolved_tool_id,
   tt.resolved_by,
   tt.resolved_at,
@@ -740,6 +741,7 @@ SELECT
   tt.tool_description,
   tt.tool_website,
   tt.status,
+  tt.rejection_reason,
   tt.resolved_tool_id,
   tt.resolved_by,
   tt.resolved_at,
@@ -802,16 +804,33 @@ SET
 WHERE id = $1 AND status <> 'resolved';
 
 -- name: RejectToolTicket :execrows
+-- The reason is shown to the requester (notification and email) and to admins;
+-- it is never selected by a requester-facing or public query.
 UPDATE tool_tickets
 SET
   status = 'rejected',
-  resolved_by = $2,
+  rejection_reason = sqlc.arg(reason),
+  resolved_by = sqlc.arg(resolved_by),
   resolved_at = now(),
   updated_at = now()
 -- "resolved" is final. Without this, rejecting a resolved ticket and resolving
 -- it again re-sent the requester's "tool approved" email each cycle, and two
 -- concurrent resolves both succeeded. Zero rows means the caller answers 409.
-WHERE id = $1 AND status <> 'resolved';
+WHERE id = sqlc.arg(id) AND status <> 'resolved';
+
+-- name: LockToolTicketStatus :one
+-- Rejecting reads the ticket's previous status to decide whether this is the
+-- first rejection (notify) or a re-rejection (only the reason changes). FOR
+-- UPDATE makes two concurrent rejects take turns, so only one sees "pending".
+-- requester_exists: tool_tickets.requested_by has no foreign key, but a
+-- notification's recipient does. Without this, a ticket whose requester's
+-- profile was deleted could never be rejected (the notification insert fails
+-- and aborts the transaction); such a rejection simply notifies nobody.
+SELECT tt.status, tt.requested_by, tt.tool_name,
+       EXISTS(SELECT 1 FROM profiles p WHERE p.id = tt.requested_by) AS requester_exists
+FROM tool_tickets tt
+WHERE tt.id = sqlc.arg(id)
+FOR UPDATE OF tt;
 
 -- name: AddPostToolSafe :exec
 INSERT INTO post_tools (post_id, tool_id)
@@ -1323,10 +1342,11 @@ LEFT JOIN posts p ON p.id = r.post_id
 LEFT JOIN tools t ON t.id = r.tool_id
 WHERE r.rn = 1
   -- A feed is what other people did; your own activity is not news to you.
-  -- Only a tool-approved notification may have no actor: any other row without
-  -- one (its actor deleted) is still left out, as it was before the LEFT JOIN.
+  -- Only a tool-approved or tool-rejected notification may have no actor: any
+  -- other row without one (its actor deleted) is still left out, as it was
+  -- before the LEFT JOIN. An explicit allowlist, never "any notification".
   AND (r.actor_id <> sqlc.arg(viewer_id)::uuid
-       OR (r.actor_id IS NULL AND r.reason = 'tool_approved'))
+       OR (r.actor_id IS NULL AND r.reason IN ('tool_approved', 'tool_rejected')))
 -- 0 for the last 3 days, 1 for everything older: the outermost sort key, so a
 -- fresh event of any tier outranks a stale one of every tier.
 -- event_key breaks ties so LIMIT/OFFSET pages are stable; it is unique per row (deduped by rn = 1).

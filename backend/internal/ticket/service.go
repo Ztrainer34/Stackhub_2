@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"stackhub.com/stackhub/internal/apperr"
 	"stackhub.com/stackhub/internal/pg"
@@ -309,18 +311,133 @@ func (s ticketService) resolveWithNew(ctx context.Context, ticketID, resolverID 
 	return tool, approval, nil
 }
 
-// reject marks a ticket rejected. A rejected ticket can still be resolved
-// later (a reviewer may change their mind); a resolved one cannot be rejected.
-func (s ticketService) reject(ctx context.Context, ticketID, resolverID uuid.UUID) error {
-	updated, err := s.q.RejectToolTicket(ctx, db.RejectToolTicketParams{
-		ID:         ticketID,
-		ResolvedBy: pgtype.UUID{Bytes: resolverID, Valid: true},
+// Bounds on a rejection reason, in characters, counted after cleaning. The
+// frontend (lib/reject-reason.ts) enforces the same numbers.
+const (
+	minRejectReasonLen = 10
+	maxRejectReasonLen = 500
+)
+
+// validateRejectReason checks the reason an admin gives for rejecting a tool
+// suggestion and returns it cleaned: control, format and separator characters
+// (line breaks, bidi overrides, zero-width characters) become single spaces and
+// the ends are trimmed. The result is plain, UNESCAPED text: each place that
+// shows it escapes it for that place. A reason that is too long is refused,
+// never truncated.
+func validateRejectReason(raw string) (string, error) {
+	// Over HTTP, encoding/json has already replaced invalid UTF-8 and lone
+	// surrogates with U+FFFD, so ValidString alone never fires there. Refusing
+	// U+FFFD as well makes "invalid text is a 400" true on both paths.
+	if !utf8.ValidString(raw) || strings.ContainsRune(raw, utf8.RuneError) {
+		return "", apperr.Invalid("Reason must be valid text")
+	}
+	reason := validate.CleanText(raw)
+	switch n := utf8.RuneCountInString(reason); {
+	case n == 0:
+		return "", apperr.Invalid("A reason is required")
+	case n < minRejectReasonLen:
+		return "", apperr.Invalid(fmt.Sprintf("Reason must be at least %d characters", minRejectReasonLen))
+	case n > maxRejectReasonLen:
+		return "", apperr.Invalid(fmt.Sprintf("Reason must be at most %d characters", maxRejectReasonLen))
+	}
+	return reason, nil
+}
+
+// toolRejection is the "your tool was not approved" email to send once a
+// rejection has committed.
+type toolRejection struct {
+	requesterID uuid.UUID
+	toolName    string
+	reason      string
+}
+
+// notifyToolRejected creates, inside the rejecting transaction, the in-app
+// notification telling the requester their suggested tool was not approved,
+// with the reviewer's reason. It returns whether a new notification was
+// created (so the caller also sends the email).
+//
+// Like tool_approved it has no actor: the admin is deliberately not named. Its
+// entity is the ticket, with entity type "tool_ticket" (never "post": clients
+// link a post entity to the post). An error is returned, not swallowed: a failed
+// statement aborts the transaction, so the rejection must not commit without it.
+func notifyToolRejected(ctx context.Context, q *db.Queries, ticketID, requesterID uuid.UUID, toolName, reason string) (bool, error) {
+	entityType := "tool_ticket"
+	rows, err := q.CreateNotification(ctx, db.CreateNotificationParams{
+		RecipientID: requesterID,
+		ActorID:     pgtype.UUID{}, // NULL: StackHub, not the reviewer
+		Type:        "tool_rejected",
+		EntityID:    pg.UUID(ticketID),
+		EntityType:  pg.Text(&entityType),
+		Title:       "Tool not approved",
+		Message:     fmt.Sprintf("Your suggested tool “%s” was not approved. Reason: %s", validate.CleanText(toolName), reason),
 	})
 	if err != nil {
-		return apperr.Internal("Could not reject ticket", err)
+		return false, err
+	}
+	return rows > 0, nil
+}
+
+// reject marks a ticket rejected, with the reviewer's reason. A rejected ticket
+// can still be resolved later (a reviewer may change their mind) and can be
+// rejected again to change the reason; a resolved one cannot be rejected.
+//
+// The requester is told once, on the move from pending to rejected, and not
+// when the reviewer is the requester. Rejecting again only updates the reason:
+// no second notification and no second email. The ticket row is locked first, so
+// two concurrent rejections take turns and only one sees "pending". The reason
+// is validated before anything else, so a bad one touches nothing.
+//
+// It returns the email to send, or nil.
+func (s ticketService) reject(ctx context.Context, ticketID, resolverID uuid.UUID, rawReason string) (*toolRejection, error) {
+	reason, err := validateRejectReason(rawReason)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, apperr.Internal("Could not start transaction", err)
+	}
+	defer tx.Rollback(ctx)
+	q := db.New(tx)
+
+	ticket, err := q.LockToolTicketStatus(ctx, ticketID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, apperr.NotFoundFrom("Tool ticket not found", err)
+	}
+	if err != nil {
+		return nil, apperr.Internal("Could not reject ticket", err)
+	}
+	if ticket.Status == "resolved" {
+		return nil, apperr.Conflict(ticketResolvedMsg)
+	}
+
+	updated, err := q.RejectToolTicket(ctx, db.RejectToolTicketParams{
+		ID:         ticketID,
+		ResolvedBy: pg.UUID(resolverID),
+		Reason:     pg.Text(&reason),
+	})
+	if err != nil {
+		return nil, apperr.Internal("Could not reject ticket", err)
 	}
 	if updated == 0 {
-		return apperr.Conflict(ticketResolvedMsg)
+		return nil, apperr.Conflict(ticketResolvedMsg)
 	}
-	return nil
+
+	notified := false
+	if ticket.Status == "pending" && ticket.RequestedBy != resolverID && ticket.RequesterExists {
+		notified, err = notifyToolRejected(ctx, q, ticketID, ticket.RequestedBy, ticket.ToolName, reason)
+		if err != nil {
+			log.Println(err)
+			return nil, apperr.Internal("Could not notify the requester", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, apperr.Internal("Could not commit transaction", err)
+	}
+	if !notified {
+		return nil, nil
+	}
+	return &toolRejection{requesterID: ticket.RequestedBy, toolName: ticket.ToolName, reason: reason}, nil
 }

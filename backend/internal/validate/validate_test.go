@@ -5,6 +5,30 @@ import (
 	"testing"
 )
 
+func TestCleanText(t *testing.T) {
+	cases := []struct{ name, in, want string }{
+		{"empty", "", ""},
+		{"plain text is unchanged", "Not a fit for the catalogue.", "Not a fit for the catalogue."},
+		{"edges are trimmed", "  hello  ", "hello"},
+		{"CR LF and tab become one space", "a\r\nb\tc", "a b c"},
+		{"runs of whitespace collapse", "a \n\n \t  b", "a b"},
+		{"right-to-left override", "a‮b", "a b"},
+		{"bidi isolate", "a⁦b⁩c", "a b c"},
+		{"zero-width space", "a​b", "a b"},
+		{"line and paragraph separators", "a b c", "a b c"},
+		{"NUL and other controls", "a\x00b\x07c", "a b c"},
+		{"only invisible characters", "​‮  \t", ""},
+		{"invalid UTF-8 becomes a space", "a\xffb", "a b"},
+		{"emoji and accents survive", "café 🚫", "café 🚫"},
+		{"markup is not escaped", `<a href="x">&</a>`, `<a href="x">&</a>`},
+	}
+	for _, c := range cases {
+		if got := CleanText(c.in); got != c.want {
+			t.Errorf("%s: CleanText(%q) = %q; want %q", c.name, c.in, got, c.want)
+		}
+	}
+}
+
 // normalizeWebURL guards every URL a user can make the site render as a link
 // or an image source. The cases that matter most are the rejections: each one
 // is a way to put script, or a link that is not a web page, in front of other

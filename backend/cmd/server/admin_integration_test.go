@@ -96,12 +96,13 @@ func TestNonAdminCannotRejectATicketIntegration(t *testing.T) {
 		return status, resolvedBy
 	}
 
-	api.expect("non-admin rejects", "POST", path, other, "", http.StatusForbidden, "Forbidden")
+	const rejectBody = `{"reason":"Not a good fit for the catalogue."}`
+	api.expect("non-admin rejects", "POST", path, other, rejectBody, http.StatusForbidden, "Forbidden")
 	if status, by := state(); status != "pending" || by != nil {
 		t.Errorf("after a refused reject the ticket is %q resolved_by %v; want pending and NULL", status, by)
 	}
 
-	if status, body := api.call("POST", path, admin, ""); status != http.StatusNoContent {
+	if status, body := api.call("POST", path, admin, rejectBody); status != http.StatusNoContent {
 		t.Fatalf("admin rejects: %d %q; want 204", status, body)
 	}
 	if status, by := state(); status != "rejected" || by == nil || *by != admin {

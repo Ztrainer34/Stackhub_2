@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	"github.com/resend/resend-go/v2"
+	"stackhub.com/stackhub/internal/validate"
 )
 
 type Mailer struct {
@@ -139,6 +140,57 @@ func (m *Mailer) SendToolApproved(ctx context.Context, to, toolName string) erro
 	return err
 }
 
+// Caps on the text of a rejection email, in characters. The reason is already
+// capped at 500 by the ticket service; the mailer does not trust that.
+const (
+	maxRejectedToolNameRunes = 200
+	maxRejectedReasonRunes   = 500
+)
+
+// toolRejectedSubject is constant on purpose: the subject never carries user
+// text, so neither a tool name nor a reason can write the subject line.
+const toolRejectedSubject = "Update on the tool you suggested"
+
+// BuildToolRejected renders the email telling a user that a tool they suggested
+// was not approved. The tool name and the reviewer's reason are free text: each
+// goes through the same three steps as the admin digest (clean, neutralise
+// links, HTML-escape, in that order), so nothing in them can become markup, a
+// clickable link or a header. The only link is the constant button to the
+// site's tool list; the reason is never part of an href.
+func BuildToolRejected(toolName, reason string) (subject, html string) {
+	name := digestText(toolName, maxRejectedToolNameRunes)
+	why := digestText(reason, maxRejectedReasonRunes)
+
+	var b strings.Builder
+	b.WriteString(`<p style="font-size:18px;color:#2d3748;margin:0 0 16px">Thanks for your suggestion.</p>`)
+	b.WriteString(`<p style="margin:0 0 16px">We reviewed the tool you suggested, <strong>` + name + `</strong>, and we were not able to add it to StackHub this time.</p>`)
+	b.WriteString(`<p style="margin:0 0 8px;font-size:14px;color:#718096">The reviewer&rsquo;s reason</p>`)
+	b.WriteString(`<div style="background:#f7fafc;border-left:3px solid #cbd5e0;border-radius:4px;padding:10px 14px;margin:0 0 24px;color:#2d3748">` + why + `</div>`)
+	b.WriteString(`<div style="margin:0 0 24px">` + ctaButton(siteURL+"/tools", "Browse tools", true) + `</div>`)
+	b.WriteString(`<p style="margin:0">Thanks for helping the catalog grow,<br/><strong style="color:#2d3748">The StackHub Team</strong></p>`)
+
+	return toolRejectedSubject, emailShell(b.String())
+}
+
+// SendToolRejected notifies a user that a tool they suggested was not
+// approved, with the reviewer's reason. The error it returns is fixed text: a
+// provider error can echo the recipient's address, and the caller logs it.
+func (m *Mailer) SendToolRejected(ctx context.Context, to, toolName, reason string) error {
+	subject, html := BuildToolRejected(toolName, reason)
+
+	params := &resend.SendEmailRequest{
+		From:    fmt.Sprintf("StackHub <notifications@%s>", m.domain),
+		To:      []string{to},
+		Subject: subject,
+		Html:    html,
+	}
+
+	if _, err := m.client.Emails.SendWithContext(ctx, params); err != nil {
+		return errors.New("tool rejected email: provider rejected the send")
+	}
+	return nil
+}
+
 // SendNewFollower notifies a user that someone started following them.
 func (m *Mailer) SendNewFollower(ctx context.Context, to, actorName, actorUsername string) error {
 	ctaBlock := ""
@@ -246,14 +298,7 @@ func ParseRecipients(raw string, max int) ([]string, error) {
 // collapse, and the result is cut to maxRunes with an ellipsis. It does NOT
 // escape HTML: do that last, after cutting, so an entity is never cut in half.
 func sanitize(s string, maxRunes int) string {
-	s = strings.ToValidUTF8(s, " ")
-	s = strings.Map(func(r rune) rune {
-		if unicode.In(r, unicode.Cc, unicode.Cf, unicode.Zl, unicode.Zp) {
-			return ' '
-		}
-		return r
-	}, s)
-	s = strings.Join(strings.Fields(s), " ")
+	s = validate.CleanText(s)
 
 	runes := []rune(s)
 	if len(runes) <= maxRunes {
