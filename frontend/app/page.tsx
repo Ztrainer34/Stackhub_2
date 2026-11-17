@@ -3,23 +3,73 @@ import { getRecommendedTopPosts, getPopularTools } from "@/lib/homepage";
 import Link from "next/link";
 import HomepageContent from "@/components/homepage-content";
 import { createClient } from "@/utils/supabase/server";
+import type { Metadata } from "next";
+import type { Post } from "@/lib/post";
+import PostCard from "@/components/post-card";
+import { to } from "@/lib/error-handling";
+import { SITE_NAME, SITE_URL } from "@/lib/site";
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
   ArrowRight,
-  BookOpen,
   GitCompare,
   Layers,
-  Star,
   TrendingUp,
   Search,
   PenTool,
   Share2,
 } from "lucide-react"
 
-async function LandingPage() {
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+  openGraph: { url: "/" },
+};
+
+/**
+ * Organization + WebSite structured data, so Google can tie the brand name to
+ * this domain and show a sitelinks search box.
+ */
+function HomeJsonLd() {
+  const data = [
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      name: SITE_NAME,
+      url: SITE_URL,
+      // TODO: add `logo` (a square PNG of at least 112px, e.g. /logo.png) once
+      // one exists in public/. The favicon is too small to qualify.
+      // TODO: official profiles (LinkedIn company page, X, Product Hunt). Left
+      // empty rather than guessed: a wrong sameAs is worse than none.
+      sameAs: [] as string[],
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: SITE_NAME,
+      url: SITE_URL,
+      potentialAction: {
+        "@type": "SearchAction",
+        target: {
+          "@type": "EntryPoint",
+          urlTemplate: `${SITE_URL}/search?q={search_term_string}`,
+        },
+        "query-input": "required name=search_term_string",
+      },
+    },
+  ];
+  return (
+    <script
+      type="application/ld+json"
+      // Static, trusted data; `<` is escaped so nothing can close the tag.
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(data).replace(/</g, "\\u003c") }}
+    />
+  );
+}
+
+
+async function LandingPage({ topPosts }: { topPosts: Post[] }) {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Hero Section */}
@@ -32,6 +82,10 @@ async function LandingPage() {
 
             <p className="text-xl text-muted-foreground max-w-2xl leading-relaxed">
               Show and tell for GTMs
+            </p>
+
+            <p className="text-base text-muted-foreground max-w-2xl">
+              StackHub is where GTM operators share their tool stacks and playbooks.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md">
@@ -64,69 +118,15 @@ async function LandingPage() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[
-              {
-                title: "HubSpot vs Salesforce",
-                description: "Complete CRM comparison for marketing teams with feature breakdowns",
-                author: "Sarah Chen",
-                stars: 234,
-                comments: 45,
-                tags: ["CRM", "Marketing", "Sales"],
-              },
-              {
-                title: "Email Marketing Stack",
-                description: "Best practices for building an effective email marketing workflow",
-                author: "Mike Rodriguez",
-                stars: 189,
-                comments: 32,
-                tags: ["Email", "Automation", "Marketing"],
-              },
-              {
-                title: "Analytics Tools Guide",
-                description: "Comprehensive guide to choosing the right analytics platform",
-                author: "Alex Kim",
-                stars: 156,
-                comments: 28,
-                tags: ["Analytics", "Data", "Marketing"],
-              },
-            ].map((article, index) => (
-              <Card key={index} className="hover:shadow-lg transition-shadow cursor-pointer">
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-2 flex-1">
-                      <CardTitle className="hover:text-primary transition-colors">{article.title}</CardTitle>
-                      <CardDescription className="line-clamp-2">{article.description}</CardDescription>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-1 mt-3">
-                    {article.tags.map((tag, tagIndex) => (
-                      <Badge key={tagIndex} variant="secondary" className="text-xs">
-                        {tag}
-                      </Badge>
-                    ))}
-                  </div>
-                </CardHeader>
-
-                <CardContent>
-                  <div className="flex items-center justify-between text-sm text-muted-foreground">
-                    <span>by {article.author}</span>
-                    <div className="flex items-center space-x-4">
-                      <div className="flex items-center space-x-1">
-                        <Star className="h-3 w-3" />
-                        <span>{article.stars}</span>
-                      </div>
-                      <div className="flex items-center space-x-1">
-                        <BookOpen className="h-3 w-3" />
-                        <span>{article.comments}</span>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          {topPosts.length > 0 ? (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {topPosts.map((post) => (
+                <Link key={post.id} href={`/${post.author_username}/${post.slug}`}>
+                  <PostCard post={post} className="h-full" />
+                </Link>
+              ))}
+            </div>
+          ) : null}
 
           <div className="text-center mt-12">
             <Link href="/playbooks">
@@ -263,7 +263,20 @@ export default async function HomePage() {
   const authState = await getServerAuthState();
 
   if (authState.status !== 'authenticated') {
-    return LandingPage();
+    // Signed-out visitors include search engines: this is the page Google
+    // indexes for "stackhub", so it shows real playbooks as real links.
+    const [topPostsError, topPosts] = await to(
+      getRecommendedTopPosts(6, await createClient())
+    );
+    if (topPostsError) {
+      console.error("Trending playbooks unavailable:", topPostsError);
+    }
+    return (
+      <>
+        <HomeJsonLd />
+        <LandingPage topPosts={topPosts ?? []} />
+      </>
+    );
   }
 
   // Pre-fetch data for authenticated users. Six of each — the dashboard shows
