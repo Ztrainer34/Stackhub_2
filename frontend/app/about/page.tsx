@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, Users, Building2, UserSearch, Wrench } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "About | StackHub",
+  title: "About",
+  alternates: { canonical: "/about" },
   description:
     "StackHub is where GTM people show their tool stack and learn from everyone else's.",
 };

@@ -3,7 +3,8 @@ import { LegalDoc } from "@/components/legal-doc";
 import { privacyHtml } from "@/lib/legal/privacy";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy | StackHub",
+  title: "Privacy Policy",
+  alternates: { canonical: "/privacy" },
   description: "How StackHub collects, uses, and protects your information.",
 };
 

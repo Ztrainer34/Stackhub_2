@@ -6,7 +6,7 @@ import { getServerAuthState } from "@/lib/auth-server";
 import InfiniteActivityFeed from "@/components/infinite-activity-feed";
 
 export const metadata: Metadata = {
-  title: "Your feed | StackHub",
+  title: "Your feed",
   robots: { index: false, follow: false },
 };
 
