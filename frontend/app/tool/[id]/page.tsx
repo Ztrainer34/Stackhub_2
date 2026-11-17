@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { cache } from "react";
-import { Tool, getTool } from "@/lib/tool";
+import { Tool, getTool, toolHref } from "@/lib/tool";
+import { SITE_NAME, metaDescription } from "@/lib/site";
 import { createClient } from "@/utils/supabase/server";
 import { HydrationBoundary, QueryClient, dehydrate } from "@tanstack/react-query";
 import { notFound } from "next/navigation";
@@ -15,6 +16,18 @@ import { ToolPageVendor } from "./tool-page-vendor";
 // One backend call per request, shared by the metadata and the page.
 const loadTool = cache(async (id: string) => getTool(await createClient(), id));
 
+/**
+ * "{name}: who uses it and their playbooks", falling back to shorter forms so
+ * the full title (with the " | StackHub" template) stays near 60 characters.
+ */
+function toolTitle(name: string): string {
+  const candidates = [
+    `${name}: who uses it and their playbooks`,
+    `${name}: users and playbooks`,
+  ];
+  return candidates.find((t) => t.length <= 48) ?? name;
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -24,9 +37,24 @@ export async function generateMetadata({
   try {
     const tool = await loadTool(id);
     // A hidden tool keeps its page for old links, but leaves search engines.
-    return tool.is_hidden ? { robots: { index: false, follow: true } } : {};
+    if (tool.is_hidden) return { robots: { index: false, follow: true } };
+
+    const title = toolTitle(tool.name);
+    const description = metaDescription(
+      tool.description?.trim() ||
+        `${tool.name} on ${SITE_NAME}: see which GTM operators use it and read their playbooks.`
+    );
+    const url = toolHref(tool);
+    return {
+      title,
+      description,
+      alternates: { canonical: url },
+      openGraph: { title, description, url, type: "website" },
+      twitter: { card: "summary", title, description },
+    };
   } catch {
-    return {};
+    // The page itself 404s; keep the error page out of the index too.
+    return { robots: { index: false } };
   }
 }
 
