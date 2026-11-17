@@ -11,11 +11,13 @@ import Youtube from '@tiptap/extension-youtube'
 import { Selection } from "@tiptap/extensions";
 import { renderToReactElement } from "@tiptap/static-renderer";
 import { Ghost } from "lucide-react";
+import { tableExtensions } from "@/lib/tiptap-table";
 
 // Import the same styles as Editor
 import "@/components/tiptap-node/blockquote-node/blockquote-node.scss"
 import "@/components/tiptap-node/code-block-node/code-block-node.scss"
 import "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node.scss"
+import "@/components/tiptap-node/table-node/table-node.scss"
 import "@/components/tiptap-node/list-node/list-node.scss"
 import "@/components/tiptap-node/image-node/image-node.scss"
 import "@/components/tiptap-node/heading-node/heading-node.scss"
@@ -81,6 +83,7 @@ export default function ContentReader({
       Superscript,
       Subscript,
       Selection,
+      ...tableExtensions,
       Youtube.configure({
         controls: true,
         nocookie: true,
