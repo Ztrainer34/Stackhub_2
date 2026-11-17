@@ -18,6 +18,7 @@ import { PostTools } from "@/components/post-tools";
 import { Clock } from "lucide-react";
 import { formatUpdatedDate } from "@/lib/format-updated-date";
 import type { Metadata } from "next";
+import { SITE_NAME, metaDescription } from "@/lib/site";
 
 export async function generateMetadata({
   params,
@@ -37,16 +38,21 @@ export async function generateMetadata({
     return {
       title: "Post not found",
       description: "The requested post could not be found.",
+      robots: { index: false },
     };
   }
 
   const [author, postResponse] = results;
   const post = postResponse.post;
 
-  const title = `${post.name} by ${author.username} | StackHub`;
-  const description = post.description || `A ${post.type.toLowerCase()} by ${author.username} on StackHub`;
-  const url = `https://stackhub.me/${username}/${playbook_slug}`;
-  // const imageUrl = await userAvatarUrl(author);
+  const title = `${post.name} by ${author.display_name || author.username}`;
+  const description = metaDescription(
+    post.description ||
+      `A ${post.type.toLowerCase()} by ${author.username} on ${SITE_NAME}`
+  );
+  // An old slug redirects to the current one; canonicalise to where it lands.
+  // Relative: metadataBase in the root layout makes it absolute.
+  const url = `/${author.username}/${postResponse.canonical_slug || post.slug}`;
 
   return {
     title,
@@ -55,9 +61,9 @@ export async function generateMetadata({
       title,
       description,
       url,
-      siteName: "StackHub",
-      locale: "en_US",
       type: "article",
+      publishedTime: post.created_at,
+      modifiedTime: post.updated_at,
     },
     twitter: {
       card: "summary",
