@@ -10,7 +10,7 @@ import { to } from "@/lib/error-handling";
 import { SITE_NAME, SITE_URL } from "@/lib/site";
 
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
   ArrowRight,
