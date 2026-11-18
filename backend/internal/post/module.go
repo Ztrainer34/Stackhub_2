@@ -4,6 +4,7 @@ package post
 import (
 	"stackhub.com/stackhub/internal/pg"
 	"stackhub.com/stackhub/internal/storage"
+	"stackhub.com/stackhub/internal/ticket"
 	"stackhub.com/stackhub/pkg/db"
 	"stackhub.com/stackhub/pkg/mail"
 )
@@ -15,4 +16,5 @@ type Handler struct {
 	Queries *db.Queries
 	Mailer  *mail.Mailer // nil in tests: emails are skipped
 	Bucket  *storage.Bucket
+	Alerter *ticket.Alerter // nil when admin alerts are off, and in tests
 }

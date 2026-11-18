@@ -40,6 +40,7 @@ import NotificationBell from "./notification-bell";
 interface User {
   id: string;
   username: string;
+  is_admin?: boolean;
 }
 
 interface NavBarContentProps {
@@ -127,11 +128,14 @@ export default function NavBarContent({ user }: NavBarContentProps) {
                       <Settings /> Settings
                     </DropdownMenuItem>
                   </Link>
-                  <Link href={"/admin"}>
-                    <DropdownMenuItem>
-                      <Shield /> Admin
-                    </DropdownMenuItem>
-                  </Link>
+                  {/* Cosmetic: /admin itself 404s for non-admins, and the API refuses them. */}
+                  {user.is_admin && (
+                    <Link href={"/admin"}>
+                      <DropdownMenuItem>
+                        <Shield /> Admin
+                      </DropdownMenuItem>
+                    </Link>
+                  )}
                   <Link href={"/auth/logout"}>
                     <DropdownMenuItem>
                       <LogOut /> Sign out

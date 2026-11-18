@@ -688,6 +688,7 @@ SELECT
   tt.tool_description,
   tt.tool_website,
   tt.status,
+  tt.rejection_reason,
   tt.resolved_tool_id,
   tt.resolved_by,
   tt.resolved_at,
@@ -740,6 +741,7 @@ SELECT
   tt.tool_description,
   tt.tool_website,
   tt.status,
+  tt.rejection_reason,
   tt.resolved_tool_id,
   tt.resolved_by,
   tt.resolved_at,
@@ -802,16 +804,33 @@ SET
 WHERE id = $1 AND status <> 'resolved';
 
 -- name: RejectToolTicket :execrows
+-- The reason is shown to the requester (notification and email) and to admins;
+-- it is never selected by a requester-facing or public query.
 UPDATE tool_tickets
 SET
   status = 'rejected',
-  resolved_by = $2,
+  rejection_reason = sqlc.arg(reason),
+  resolved_by = sqlc.arg(resolved_by),
   resolved_at = now(),
   updated_at = now()
 -- "resolved" is final. Without this, rejecting a resolved ticket and resolving
 -- it again re-sent the requester's "tool approved" email each cycle, and two
 -- concurrent resolves both succeeded. Zero rows means the caller answers 409.
-WHERE id = $1 AND status <> 'resolved';
+WHERE id = sqlc.arg(id) AND status <> 'resolved';
+
+-- name: LockToolTicketStatus :one
+-- Rejecting reads the ticket's previous status to decide whether this is the
+-- first rejection (notify) or a re-rejection (only the reason changes). FOR
+-- UPDATE makes two concurrent rejects take turns, so only one sees "pending".
+-- requester_exists: tool_tickets.requested_by has no foreign key, but a
+-- notification's recipient does. Without this, a ticket whose requester's
+-- profile was deleted could never be rejected (the notification insert fails
+-- and aborts the transaction); such a rejection simply notifies nobody.
+SELECT tt.status, tt.requested_by, tt.tool_name,
+       EXISTS(SELECT 1 FROM profiles p WHERE p.id = tt.requested_by) AS requester_exists
+FROM tool_tickets tt
+WHERE tt.id = sqlc.arg(id)
+FOR UPDATE OF tt;
 
 -- name: AddPostToolSafe :exec
 INSERT INTO post_tools (post_id, tool_id)
@@ -843,6 +862,27 @@ WHERE post_id = sqlc.arg(post_id) AND NOT (tool_id = ANY(sqlc.arg(keep)::uuid[])
 DELETE FROM tool_tickets
 WHERE post_id = sqlc.arg(post_id) AND status = 'pending'
   AND NOT (id = ANY(sqlc.arg(keep)::uuid[]));
+
+-- name: ListToolTicketsForAlert :many
+-- The admin "new tool suggested" digest. Pending only: a suggestion withdrawn
+-- (deleted) or already decided before the digest went out is not news.
+SELECT
+  tt.id,
+  tt.tool_name,
+  COALESCE(tt.tool_description, '')::text AS tool_description,
+  COALESCE(tt.tool_website, '')::text AS tool_website,
+  requester.username AS requester_username,
+  p.name AS post_name,
+  COALESCE(array_agg(c.name ORDER BY c.name) FILTER (WHERE c.id IS NOT NULL), '{}')::text[] AS category_names
+FROM tool_tickets tt
+JOIN profiles requester ON tt.requested_by = requester.id
+LEFT JOIN posts p ON tt.post_id = p.id
+LEFT JOIN tool_ticket_categories ttc ON tt.id = ttc.ticket_id
+LEFT JOIN categories c ON ttc.category_id = c.id
+WHERE tt.id = ANY(sqlc.arg(ticket_ids)::uuid[])
+  AND tt.status = 'pending'
+GROUP BY tt.id, requester.username, p.name
+ORDER BY tt.created_at;
 
 -- name: AddToWatchlist :exec
 INSERT INTO watchlist_items (profile_id, tool_id)
@@ -1276,6 +1316,7 @@ WITH followed_users AS (
 )
 SELECT
   r.kind, r.reason, r.tier, r.occurred_at,
+  r.event_key::text AS event_key,
   r.actor_id, actor.username AS actor_username,
   -- sqlc infers a UNION column's type and nullability from the FIRST branch
   -- only. Read straight from `r`, post_id came out as interface{} (a UUID then
@@ -1294,15 +1335,22 @@ SELECT
   CASE WHEN r.kind = 'notification' THEN r.notification_message END AS notification_message,
   COUNT(*) OVER() AS total_count
 FROM ranked r
-JOIN profiles actor ON actor.id = r.actor_id
+-- LEFT JOIN: a tool-approved notification has no actor (the resolver is not
+-- named), so its actor_username is NULL and the client shows "StackHub".
+LEFT JOIN profiles actor ON actor.id = r.actor_id
 LEFT JOIN posts p ON p.id = r.post_id
 LEFT JOIN tools t ON t.id = r.tool_id
 WHERE r.rn = 1
   -- A feed is what other people did; your own activity is not news to you.
-  AND r.actor_id <> sqlc.arg(viewer_id)::uuid
+  -- Only a tool-approved or tool-rejected notification may have no actor: any
+  -- other row without one (its actor deleted) is still left out, as it was
+  -- before the LEFT JOIN. An explicit allowlist, never "any notification".
+  AND (r.actor_id <> sqlc.arg(viewer_id)::uuid
+       OR (r.actor_id IS NULL AND r.reason IN ('tool_approved', 'tool_rejected')))
 -- 0 for the last 3 days, 1 for everything older: the outermost sort key, so a
 -- fresh event of any tier outranks a stale one of every tier.
-ORDER BY (r.occurred_at < now() - interval '3 days')::int, r.tier, r.occurred_at DESC
+-- event_key breaks ties so LIMIT/OFFSET pages are stable; it is unique per row (deduped by rn = 1).
+ORDER BY (r.occurred_at < now() - interval '3 days')::int, r.tier, r.occurred_at DESC, r.event_key
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
 -- name: SetProfileAvatar :exec
@@ -1349,6 +1397,11 @@ LIMIT sqlc.arg(lim);
 SELECT EXISTS(
   SELECT 1 FROM tool_owners WHERE tool_id = $1 AND profile_id = $2
 ) AS is_owner;
+
+-- name: IsAdmin :one
+-- Gate for every /admin route (RequireAdmin) and the is_admin flag on GET /me.
+-- Admins are granted out of band (scripts/grant-admin.mjs), never through the API.
+SELECT EXISTS(SELECT 1 FROM admins WHERE profile_id = sqlc.arg(profile_id)) AS is_admin;
 
 -- name: ListToolOwners :many
 SELECT p.id, p.username, p.display_name, p.avatar_url, tow.granted_at

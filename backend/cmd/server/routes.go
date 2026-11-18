@@ -52,11 +52,11 @@ func (app *App) routes(tokenAuth *jwtauth.JWTAuth) http.Handler {
 	searchAPI := &search.Handler{Queries: app.queries}
 	notificationAPI := &notification.Handler{Queries: app.queries}
 	stackAPI := &stack.Handler{DB: app.db, Queries: app.queries}
-	ticketAPI := &ticket.Handler{DB: app.db, Queries: app.queries, Mailer: app.mailer}
+	ticketAPI := &ticket.Handler{DB: app.db, Queries: app.queries, Mailer: app.mailer, Alerter: app.alerter}
 	toolAPI := &tool.Handler{DB: app.db, Queries: app.queries, Bucket: app.bucket}
 	userAPI := &user.Handler{DB: app.db, Queries: app.queries, Mailer: app.mailer, Bucket: app.bucket}
 	onboardingAPI := &onboarding.Handler{DB: app.db, Queries: app.queries, Mailer: app.mailer}
-	postAPI := &post.Handler{DB: app.db, Queries: app.queries, Mailer: app.mailer, Bucket: app.bucket}
+	postAPI := &post.Handler{DB: app.db, Queries: app.queries, Mailer: app.mailer, Bucket: app.bucket, Alerter: app.alerter}
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
@@ -162,16 +162,32 @@ func (app *App) routes(tokenAuth *jwtauth.JWTAuth) http.Handler {
 		r.Get("/notifications/unread-count", notificationAPI.GetUnreadNotificationCount)
 		r.Put("/notifications/{id}/read", notificationAPI.MarkNotificationRead)
 		r.Put("/notifications/read-all", notificationAPI.MarkAllNotificationsRead)
+	})
 
-		// Admin routes for tool ticket management
-		r.Route("/admin", func(r chi.Router) {
-			// Tool ticket management
-			r.Get("/tool-tickets", ticketAPI.ListToolTickets)
-			r.Get("/tool-tickets/{id}", ticketAPI.GetToolTicket)
-			r.Post("/tool-tickets/{id}/resolve-existing", ticketAPI.ResolveTicketWithExisting)
-			r.Post("/tool-tickets/{id}/resolve-new", ticketAPI.ResolveTicketWithNew)
-			r.Post("/tool-tickets/{id}/reject", ticketAPI.RejectTicket)
-		})
+	// Admin routes for tool ticket management. They need the admin role (the
+	// admins table), checked in the database on every request by RequireAdmin.
+	//
+	// Two choices here are deliberate, so do not "tidy" them:
+	//   - Their own top-level group, with the private group's four middleware
+	//     copied exactly, so the role check cannot be lost by editing the private
+	//     group, and a route cannot gain /admin by being added to it.
+	//   - Registered FLAT (r.Get("/admin/...")), not r.Route("/admin", ...).
+	//     chi.Walk under-reports the middleware of a mounted sub-router, so
+	//     routes.golden and its tests could not see RequireAdmin on it. Do not
+	//     register any /admin path twice: a later flat registration of the same
+	//     method and path silently replaces the earlier one.
+	r.Group(func(r chi.Router) {
+		r.Use(jwtauth.Verifier(tokenAuth))
+		r.Use(shmiddleware.Authenticator(tokenAuth))
+		r.Use(shmiddleware.OnboardingEnforcer())
+		r.Use(httpx.LimitJSONBody)
+		r.Use(shmiddleware.RequireAdmin(app.adminChecker()))
+
+		r.Get("/admin/tool-tickets", ticketAPI.ListToolTickets)
+		r.Get("/admin/tool-tickets/{id}", ticketAPI.GetToolTicket)
+		r.Post("/admin/tool-tickets/{id}/resolve-existing", ticketAPI.ResolveTicketWithExisting)
+		r.Post("/admin/tool-tickets/{id}/resolve-new", ticketAPI.ResolveTicketWithNew)
+		r.Post("/admin/tool-tickets/{id}/reject", ticketAPI.RejectTicket)
 	})
 
 	// Routes that are different if authenticated

@@ -6,8 +6,26 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
+
+// CleanText makes free text safe to show as a single line: invalid UTF-8,
+// control, format and line/paragraph-separator characters (CR, LF, tab,
+// right-to-left overrides and isolates, zero-width characters, U+2028) become
+// spaces, runs of whitespace collapse to one space, and the ends are trimmed.
+// It does NOT escape anything, and it does not cut: callers that cap length do
+// so afterwards, so an escaped entity is never cut in half.
+func CleanText(s string) string {
+	s = strings.ToValidUTF8(s, " ")
+	s = strings.Map(func(r rune) rune {
+		if unicode.In(r, unicode.Cc, unicode.Cf, unicode.Zl, unicode.Zp) {
+			return ' '
+		}
+		return r
+	}, s)
+	return strings.Join(strings.Fields(s), " ")
+}
 
 // MaxURLLen caps any URL a user submits.
 const MaxURLLen = 2048

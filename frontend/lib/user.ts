@@ -21,6 +21,11 @@ export type User = {
    * request carried a session — anonymous reads leave it undefined.
    */
   is_following?: boolean;
+  /**
+   * Only on GET /me (the viewer's own profile); never on public profiles.
+   * Cosmetic: the backend enforces.
+   */
+  is_admin?: boolean;
 };
 
 export async function getAuthenticatedUser(supabaseClient: SupabaseClient): Promise<User> {

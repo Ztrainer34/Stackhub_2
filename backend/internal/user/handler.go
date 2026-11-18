@@ -23,6 +23,16 @@ import (
 	"stackhub.com/stackhub/pkg/db"
 )
 
+// meResponse is the viewer's own profile plus whether they hold the admin role.
+// The embedded fields stay at the top level of the JSON.
+type meResponse struct {
+	db.GetProfileRow
+	// IsAdmin exists only here, on the viewer's own profile: admin status is
+	// private, so no public profile or other endpoint may return it. It is
+	// cosmetic (it shows or hides the /admin link); RequireAdmin enforces.
+	IsAdmin bool `json:"is_admin"`
+}
+
 func (h *Handler) GetAuthenticatedUser(w http.ResponseWriter, r *http.Request) {
 	userID := httpx.UserID(r)
 
@@ -31,10 +41,19 @@ func (h *Handler) GetAuthenticatedUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Println(err)
 		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	// A failed lookup must not break /me: the viewer is simply shown as not an
+	// admin, and RequireAdmin still decides on the real request.
+	isAdmin, err := h.Queries.IsAdmin(r.Context(), userID)
+	if err != nil {
+		log.Println(err)
+		isAdmin = false
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(user)
+	json.NewEncoder(w).Encode(meResponse{GetProfileRow: user, IsAdmin: isAdmin})
 }
 
 type UpdateProfileForm struct {

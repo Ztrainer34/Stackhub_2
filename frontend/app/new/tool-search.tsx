@@ -226,7 +226,7 @@ export function ToolSearch({
         )}
 
         {view === 'add-tool' && (
-          <div className="flex flex-col max-h-[70vh]">
+          <div className="flex flex-col max-h-[85vh]">
             <div className="p-4 pb-2">
               <DialogHeader>
                 <DialogTitle>Add a new tool</DialogTitle>

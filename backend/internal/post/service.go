@@ -23,7 +23,8 @@ import (
 // post_editing.go and post_social.go only read the request and write the
 // response, so these rules can be exercised against a database without HTTP.
 type postService struct {
-	db pg.TxBeginner
+	db     pg.TxBeginner
+	alerts *ticket.Alerter // nil: no admin alert (tests, or alerts off)
 }
 
 // maxPostTools caps how many tools one post may reference. It replaced a
@@ -207,7 +208,8 @@ func (s postService) setTools(ctx context.Context, authorID, postID uuid.UUID, f
 	if err := q.WithdrawPostTicketsExcept(ctx, db.WithdrawPostTicketsExceptParams{PostID: pg.UUID(postID), Keep: keptTickets}); err != nil {
 		return nil, apperr.Internal("Failed to update tools", err)
 	}
-	if err := ticket.CreatePostTickets(ctx, q, postID, authorID, suggestions); err != nil {
+	ticketIDs, err := ticket.CreatePostTickets(ctx, q, postID, authorID, suggestions)
+	if err != nil {
 		return nil, err
 	}
 
@@ -218,6 +220,8 @@ func (s postService) setTools(ctx context.Context, authorID, postID uuid.UUID, f
 	if err := tx.Commit(ctx); err != nil {
 		return nil, apperr.Internal("Failed to update tools", err)
 	}
+	// Only after the commit: a rolled-back edit alerts nobody.
+	s.alerts.Enqueue(authorID, ticketIDs...)
 	return updated.Tools, nil
 }
 
@@ -265,7 +269,8 @@ func (s postService) create(ctx context.Context, authorID uuid.UUID, form Create
 		}
 	}
 
-	if err := ticket.CreatePostTickets(ctx, q, created.ID, authorID, p.form.SuggestedTools); err != nil {
+	ticketIDs, err := ticket.CreatePostTickets(ctx, q, created.ID, authorID, p.form.SuggestedTools)
+	if err != nil {
 		return db.CreatePostRow{}, err
 	}
 
@@ -274,6 +279,8 @@ func (s postService) create(ctx context.Context, authorID uuid.UUID, form Create
 	if err := tx.Commit(ctx); err != nil {
 		return db.CreatePostRow{}, apperr.Internal("Failed to create post", err)
 	}
+	// Only after the commit: a rolled-back create alerts nobody.
+	s.alerts.Enqueue(authorID, ticketIDs...)
 	return created, nil
 }
 

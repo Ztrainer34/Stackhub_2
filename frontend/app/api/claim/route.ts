@@ -46,6 +46,23 @@ export async function POST(request: Request) {
     ? await admin.auth.admin.getUserById(claim.user_id)
     : { data: null };
 
+  // An admin account is never claimable: redeeming the link replaces its email
+  // and password, which would hand over the admin role. Same wording as any
+  // account in use, so the answer does not say who is an admin.
+  if (claim) {
+    const { data: adminRow } = await admin
+      .from("admins")
+      .select("profile_id")
+      .eq("profile_id", claim.user_id)
+      .maybeSingle();
+    if (adminRow) {
+      return NextResponse.json(
+        { error: "This account is already in use. Ask for a new invite link if you think this is a mistake." },
+        { status: 409 }
+      );
+    }
+  }
+
   const cookieStore = await cookies();
   const rejection = claimRejection({
     claim,

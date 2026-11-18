@@ -161,6 +161,19 @@ export default function ToolTicketDetailPage({ params }: ToolTicketDetailPagePro
             </CardContent>
           </Card>
 
+          {/* Why it was rejected (what the requester was told) */}
+          {ticket.status === "rejected" && ticket.rejection_reason && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Rejection reason</CardTitle>
+                <CardDescription>Sent to the requester</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="leading-relaxed">{ticket.rejection_reason}</p>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Actions */}
           {ticket.status === "pending" && (
             <TicketActions ticket={ticket} />

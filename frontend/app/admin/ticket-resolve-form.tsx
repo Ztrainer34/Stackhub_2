@@ -16,6 +16,12 @@ import {
 } from "@/lib/queries/use-admin";
 import { useCategoryAutocomplete } from "@/lib/queries/use-category-autocomplete";
 import type { Tool } from "@/lib/tool";
+import {
+  REJECT_REASON_MAX,
+  REJECT_REASON_MIN,
+  rejectReasonLength,
+  rejectReasonProblem,
+} from "@/lib/reject-reason";
 
 export interface ToolTicket {
   id: string;
@@ -33,6 +39,9 @@ interface TicketResolveFormProps {
 export function TicketResolveForm({ ticket, onSuccess }: TicketResolveFormProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const rejectProblem = rejectReasonProblem(rejectReason);
+  const rejectLength = rejectReasonLength(rejectReason);
 
   // Category search state
   const [categorySearch, setCategorySearch] = useState("");
@@ -118,9 +127,10 @@ export function TicketResolveForm({ ticket, onSuccess }: TicketResolveFormProps)
   };
 
   const handleReject = () => {
-    if (!confirm("Are you sure you want to reject this ticket?")) return;
+    if (rejectReasonProblem(rejectReason)) return;
+    if (!confirm("Are you sure you want to reject this ticket? The requester will be told your reason.")) return;
 
-    rejectMutation.mutate(ticket.id, {
+    rejectMutation.mutate({ ticketId: ticket.id, reason: rejectReason }, {
       onSuccess: () => {
         onSuccess?.();
       },
@@ -362,12 +372,45 @@ export function TicketResolveForm({ ticket, onSuccess }: TicketResolveFormProps)
         <TabsContent value="reject" className="space-y-4">
           <div className="space-y-4">
             <p className="text-muted-foreground text-sm">
-              Rejecting this ticket will mark it as rejected and notify the requester that their tool request was not approved.
+              Rejecting will notify the requester by email and in-app, including your reason.
             </p>
+
+            <div>
+              <Label htmlFor="reject-reason">
+                Reason (sent to the person who suggested it) *
+              </Label>
+              <Textarea
+                id="reject-reason"
+                className="mt-2"
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="For example: this is already covered by an existing tool, or it is not a marketing tool."
+                rows={4}
+                aria-invalid={rejectReason.length > 0 && rejectProblem !== null}
+                aria-describedby="reject-reason-help"
+              />
+              <div
+                id="reject-reason-help"
+                className="mt-1 flex items-start justify-between gap-2 text-xs"
+              >
+                <span className="text-red-600">
+                  {rejectReason.length > 0 && rejectProblem ? rejectProblem : ""}
+                </span>
+                <span
+                  className={
+                    rejectLength > REJECT_REASON_MAX
+                      ? "text-red-600"
+                      : "text-muted-foreground"
+                  }
+                >
+                  {rejectLength}/{REJECT_REASON_MAX} (min {REJECT_REASON_MIN})
+                </span>
+              </div>
+            </div>
 
             <Button
               onClick={handleReject}
-              disabled={isLoading}
+              disabled={isLoading || rejectProblem !== null}
               variant="destructive"
               className="w-full"
             >

@@ -103,6 +103,9 @@ func (h *Handler) SuggestTool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// After the commit, so a rolled-back suggestion alerts nobody.
+	h.Alerter.Enqueue(userID, ticketID)
+
 	w.WriteHeader(http.StatusCreated)
 }
 
@@ -255,6 +258,30 @@ func (h *Handler) ResolveTicketWithNew(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(tool)
 }
 
+// sendToolRejected emails the requester that their suggested tool was not
+// approved, with the reviewer's reason. Like sendToolApproved it runs after the
+// rejection has committed, in the background. It logs the ticket id and the
+// error only: never the reason, and never the recipient's address.
+func (h *Handler) sendToolRejected(ticketID uuid.UUID, rejection *toolRejection) {
+	if rejection == nil || h.Mailer == nil {
+		return
+	}
+	go func(rid uuid.UUID, toolName, reason string) {
+		email, eerr := h.Queries.GetUserEmail(context.Background(), rid)
+		if eerr != nil || email == "" {
+			log.Println("tool rejected email: could not resolve recipient email, ticket", ticketID, eerr)
+			return
+		}
+		if err := h.Mailer.SendToolRejected(context.Background(), email, toolName, reason); err != nil {
+			log.Println("tool rejected email: ticket", ticketID, err)
+		}
+	}(rejection.requesterID, rejection.toolName, rejection.reason)
+}
+
+type RejectTicketRequest struct {
+	Reason string `json:"reason"`
+}
+
 func (h *Handler) RejectTicket(w http.ResponseWriter, r *http.Request) {
 	userID := httpx.UserID(r)
 
@@ -265,10 +292,18 @@ func (h *Handler) RejectTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := (ticketService{db: h.DB, q: h.Queries}).reject(r.Context(), ticketID, userID); err != nil {
+	var req RejectTicketRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	rejection, err := (ticketService{db: h.DB, q: h.Queries}).reject(r.Context(), ticketID, userID, req.Reason)
+	if err != nil {
 		httpx.WriteError(w, err)
 		return
 	}
+	h.sendToolRejected(ticketID, rejection)
 
 	w.WriteHeader(http.StatusNoContent)
 }

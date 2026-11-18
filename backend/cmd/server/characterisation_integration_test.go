@@ -250,6 +250,10 @@ func TestResolveTicketCharacterisationIntegration(t *testing.T) {
 	ctx := context.Background()
 	q := db.New(tx)
 	requester, resolver := testdb.TwoProfiles(t, tx)
+	testdb.MakeAdmin(t, tx, resolver)
+	// The "resolving your own suggestion" case below acts as the requester, so
+	// the requester has to be an admin too for that request to reach the handler.
+	testdb.MakeAdmin(t, tx, requester)
 	cats := testdb.SomeCategories(t, tx, 2)
 
 	// Each subtest gets its own post, so neither depends on the other's
@@ -393,7 +397,8 @@ func TestResolveTicketCharacterisationIntegration(t *testing.T) {
 		api.expect("bad ticket id", "POST", "/admin/tool-tickets/nope/reject", resolver, "", http.StatusBadRequest, "Invalid ticket ID")
 		ticket := newTicket("Rejected Characterisation Tool", false)
 		path := "/admin/tool-tickets/" + ticket.String() + "/reject"
-		if status, got := api.call("POST", path, resolver, ""); status != http.StatusNoContent || got != "" {
+		const rejectBody = `{"reason":"Not a good fit for the catalogue."}`
+		if status, got := api.call("POST", path, resolver, rejectBody); status != http.StatusNoContent || got != "" {
 			t.Fatalf("reject: %d %q", status, got)
 		}
 		if status, _ := ticketState(ticket); status != "rejected" {
@@ -445,7 +450,7 @@ func TestResolveTicketCharacterisationIntegration(t *testing.T) {
 		if status, _ := api.call("POST", "/admin/tool-tickets/"+ticket.String()+"/resolve-existing", resolver, `{"tool_id":"`+existing.String()+`"}`); status != http.StatusNoContent {
 			t.Fatalf("resolve a rejected ticket: %d", status)
 		}
-		api.expect("reject a resolved ticket", "POST", path, resolver, "", http.StatusConflict, "This ticket has already been resolved")
+		api.expect("reject a resolved ticket", "POST", path, resolver, rejectBody, http.StatusConflict, "This ticket has already been resolved")
 	})
 }
 
