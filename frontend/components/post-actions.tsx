@@ -49,7 +49,7 @@ export function PostActions({ post, variant = "full", isAuthenticated = false }:
           });
         },
         onError: () => {
-          toast.error("Error", {
+          toast.error("Something went wrong", {
             description: "Failed to unstar post. Please try again.",
           });
         },
@@ -62,7 +62,7 @@ export function PostActions({ post, variant = "full", isAuthenticated = false }:
           });
         },
         onError: () => {
-          toast.error("Error", {
+          toast.error("Something went wrong", {
             description: "Failed to star post. Please try again.",
           });
         },

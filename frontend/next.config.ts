@@ -1,11 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  images: {
-    // remotePatterns: [{ protocol: "https", hostname: "images.g2crowd.com", pathname: "**"}],
-    remotePatterns: [{ protocol: "https", hostname: "**", pathname: "**"}],
-  },
+  // No `images.remotePatterns`. Nothing uses next/image, and the previous
+  // wildcard (`hostname: "**"`) let anyone make /_next/image fetch and resize
+  // arbitrary URLs on our Vercel image-optimisation quota. If next/image is
+  // ever introduced for logos, allow-list those hosts explicitly.
 };
 
 export default nextConfig;

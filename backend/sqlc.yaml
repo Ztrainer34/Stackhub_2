@@ -2,7 +2,11 @@ version: "2"
 sql:
   - engine: "postgresql"
     queries: "db/query.sql"
-    schema: "db/migrations"
+    # db/sqlc-stubs declares Supabase-owned tables (auth.users) for the
+    # analyser only. It is never applied anywhere.
+    schema:
+      - "db/migrations"
+      - "db/sqlc-stubs"
     database:
       uri: "env:DB_CONNECTION"
     gen:

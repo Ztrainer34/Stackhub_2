@@ -152,13 +152,13 @@ export default function PostComments({
       
       {!isAuthenticated && (
         <div className="py-4 text-center">
-          <p className="text-sm text-gray-500 mb-2">Sign in to leave a comment</p>
+          <p className="text-sm text-gray-500 mb-2">Login to leave a comment</p>
           <Button
             variant="outline"
             size="sm"
             onClick={() => promptLogin("Sign in to join the conversation.")}
           >
-            Sign In
+            Login
           </Button>
         </div>
       )}

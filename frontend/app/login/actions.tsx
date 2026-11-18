@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 
@@ -47,47 +46,8 @@ export async function sendMagicLink(email: string) {
   return { success: true };
 }
 
-export async function login(formData: FormData) {
-  const supabase = await createClient();
-
-  // Validate email and password inputs
-  const email = formData.get("email");
-  const password = formData.get("password");
-  if (
-    typeof email !== "string" ||
-    typeof password !== "string" ||
-    !email ||
-    !password
-  ) {
-    redirect("/error");
-  }
-
-  const { error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
-
-  if (error) {
-    redirect("/error");
-  }
-
-  revalidatePath("/", "layout");
-  redirect("/");
-}
-
-export async function signup(formData: FormData) {
-  const supabase = await createClient();
-  // FIXME
-  // type-casting here for convenience
-  // in practice, you should validate your inputs
-  const data = {
-    email: formData.get("email") as string,
-    password: formData.get("password") as string,
-  };
-  const { error } = await supabase.auth.signUp(data);
-  if (error) {
-    redirect("/error");
-  }
-  revalidatePath("/", "layout");
-  redirect("/");
-}
+// There is no password login. The UI is magic-link and Google only, and the
+// password `login` and `signup` actions that used to live here were never
+// called — but every export of a "use server" file is a public endpoint, so
+// they let anyone sign in or sign up with a password through this app. (The
+// Supabase password grant itself is a dashboard setting; see the audit notes.)

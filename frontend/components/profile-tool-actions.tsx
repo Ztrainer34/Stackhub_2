@@ -88,7 +88,7 @@ export function ProfileToolActions({
     const mutation = isActive ? remove : add;
     mutation.mutate(tool.id, {
       onSuccess: refreshOwnerLists,
-      onError: () => toast.error("Error", { description: errorMessage }),
+      onError: () => toast.error("Something went wrong", { description: errorMessage }),
     });
   };
 
@@ -129,7 +129,7 @@ export function ProfileToolActions({
             "Failed to update old stack."
           )
         }
-        title={isInOldStack ? "In your Old Stack" : "Move to Old Stack"}
+        title={isInOldStack ? "In your old stack" : "Move to old stack"}
       >
         <Archive className="w-3 h-3" />
       </Button>

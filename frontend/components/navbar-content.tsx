@@ -26,7 +26,6 @@ import {
   Shield,
   Layers,
   BookOpen,
-  Blocks,
   GitCompare,
   Star,
   Wrench,
@@ -41,7 +40,7 @@ import NotificationBell from "./notification-bell";
 interface User {
   id: string;
   username: string;
-  email_hash?: string;
+  is_admin?: boolean;
 }
 
 interface NavBarContentProps {
@@ -108,11 +107,6 @@ export default function NavBarContent({ user }: NavBarContentProps) {
                       <BookOpen /> Playbooks
                     </DropdownMenuItem>
                   </Link>
-                  <Link href={`/${user.username}?tab=combos`}>
-                    <DropdownMenuItem>
-                      <Blocks /> Combos
-                    </DropdownMenuItem>
-                  </Link>
                   <Link href={`/${user.username}?tab=comparisons`}>
                     <DropdownMenuItem>
                       <GitCompare /> Comparisons
@@ -134,11 +128,14 @@ export default function NavBarContent({ user }: NavBarContentProps) {
                       <Settings /> Settings
                     </DropdownMenuItem>
                   </Link>
-                  <Link href={"/admin"}>
-                    <DropdownMenuItem>
-                      <Shield /> Admin
-                    </DropdownMenuItem>
-                  </Link>
+                  {/* Cosmetic: /admin itself 404s for non-admins, and the API refuses them. */}
+                  {user.is_admin && (
+                    <Link href={"/admin"}>
+                      <DropdownMenuItem>
+                        <Shield /> Admin
+                      </DropdownMenuItem>
+                    </Link>
+                  )}
                   <Link href={"/auth/logout"}>
                     <DropdownMenuItem>
                       <LogOut /> Sign out
@@ -149,7 +146,7 @@ export default function NavBarContent({ user }: NavBarContentProps) {
             ) : (
               <Dialog>
                 <DialogTrigger asChild>
-                  <Button variant="outline">Log In</Button>
+                  <Button variant="outline">Login</Button>
                 </DialogTrigger>
                 <DialogContent className="p-10">
                   {!hideDialogTitle && (

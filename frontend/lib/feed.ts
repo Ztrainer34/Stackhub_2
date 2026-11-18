@@ -7,27 +7,45 @@ import { fetchApiAuthenticated } from "./api";
  */
 export type FeedReason =
   | "following_user"
-  | "following_tool"
+  | "stack_tool"
+  | "watchlist_tool"
   | "latest"
   | "post_star"
   | "post_comment"
   | "follow"
-  | "tool_approved";
+  | "tool_approved"
+  | "tool_rejected";
 
 export type FeedKind = "notification" | "post";
 
 export interface FeedItem {
   kind: FeedKind;
+  /** Stable per-row id ("post:<uuid>" or "notification:<uuid>"); unique within a response. */
+  event_key: string;
   reason: FeedReason;
   /**
    * How closely the event concerns the viewer: 0 things about you, 1 people you
-   * follow, 2 tools you follow, 3 discovery filler. The server sorts by this
-   * first, then by recency within the tier.
+   * follow, 2 tools in your stack, 3 other followed tools (watchlist and manual
+   * follows), 4 discovery filler.
+   *
+   * Tier is the *second* sort key, not the first. The server bands events by
+   * age — the last 3 days above everything older — and sorts by tier within
+   * each band. So a fresh tier 3 outranks a stale tier 1, while among today's
+   * events a stack tool still outranks a watchlisted one.
+   *
+   * The list therefore is NOT globally ordered by tier: the same tier appears
+   * twice, once in each band. Do not group rows by tier assuming they are
+   * contiguous.
    */
   tier: number;
   occurred_at: string;
-  actor_id: string;
-  actor_username: string;
+  /**
+   * Who did it. Null for a notification with no actor, such as "your tool was
+   * approved" or "not approved": StackHub itself, so the resolving admin is never named. Show
+   * "StackHub" for those. Post rows always have an actor.
+   */
+  actor_id: string | null;
+  actor_username: string | null;
   post_id: string | null;
   post_name: string | null;
   post_slug: string | null;
@@ -62,4 +80,53 @@ export async function getFeed(
 
   if (!response.ok) throw new Error("Failed to fetch feed");
   return response.json();
+}
+
+/** True when the server holds more feed items than this response carries. */
+export function hasMoreFeed(resp: FeedResponse): boolean {
+  return resp.total_count > resp.items.length;
+}
+
+/** Next page number for an infinite feed, or undefined when there is none. */
+export function nextFeedPage(last: FeedResponse): number | undefined {
+  if (last.items.length === 0) return undefined;
+  return last.page * last.limit < last.total_count ? last.page + 1 : undefined;
+}
+
+/**
+ * Identity of a feed row. Uses the server's event_key, and falls back to a key
+ * built from the row's own fields when it is missing.
+ *
+ * The fallback matters during a deploy: if the frontend is live before the
+ * backend that adds event_key, every row arrives with `event_key` undefined.
+ * Keying on that collapsed the whole infinite feed to its first row.
+ */
+export function feedItemKey(item: FeedItem): string {
+  if (item.event_key) return item.event_key;
+  return [
+    item.kind,
+    item.reason,
+    item.post_id ?? "",
+    item.actor_id,
+    item.occurred_at,
+  ].join(":");
+}
+
+/**
+ * Concatenates pages in order, dropping any item whose event_key was already
+ * seen. Offset paging can repeat a row when new events arrive or one ages
+ * out of the 3-day band between page loads; the first occurrence wins.
+ */
+export function flattenFeedPages(pages: FeedResponse[]): FeedItem[] {
+  const seen = new Set<string>();
+  const out: FeedItem[] = [];
+  for (const page of pages) {
+    for (const item of page.items) {
+      const key = feedItemKey(item);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(item);
+    }
+  }
+  return out;
 }

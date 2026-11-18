@@ -2,7 +2,6 @@
   "users": [
     {
       "email": "alice@example.com",
-      "password": "Password123!",
       "username": "alice",
       "display_name": "Alice Martin",
       "bio": "Growth marketer sharing her stack.",
@@ -10,7 +9,20 @@
       "location": "Paris, France",
       "website": "https://alice.example.com",
       "linkedin": "alice-martin",
-      "twitter": "alice"
+      "twitter": "alice",
+      "stack": [
+        "HubSpot",
+        "Notion"
+      ],
+      "watchlist": [
+        "Clay"
+      ],
+      "old_stack": [
+        "Mailchimp"
+      ],
+      "followed_tools": [
+        "Zapier"
+      ]
     },
     {
       "email": "bob@example.com",
@@ -18,29 +30,35 @@
       "display_name": "Bob Chen"
     }
   ],
-
   "tools": [
     {
       "name": "HubSpot",
       "description": "All-in-one CRM and marketing platform.",
       "website": "https://hubspot.com",
       "logo_url": "",
-      "categories": ["CRM", "Marketing"]
+      "categories": [
+        "CRM",
+        "Marketing"
+      ]
     },
     {
       "name": "Lemlist",
       "description": "Cold email outreach and automation.",
-      "categories": ["Email", "Sales"]
+      "categories": [
+        "Email",
+        "Sales"
+      ]
     }
   ],
-
   "playbooks": [
     {
       "author": "alice",
       "type": "playbook",
       "title": "Identify companies visiting your website with HubSpot",
       "description": "Turn anonymous traffic into named accounts.",
-      "tools": ["HubSpot"],
+      "tools": [
+        "HubSpot"
+      ],
       "published": true,
       "body": [
         "HubSpot can reveal which companies visit your site.",
@@ -50,15 +68,56 @@
     },
     {
       "author": "bob@example.com",
-      "type": "combo",
+      "type": "playbook",
       "title": "Capture visitors in HubSpot and cold email them with Lemlist",
       "description": "A two-tool outbound loop.",
-      "tools": ["HubSpot", "Lemlist"],
+      "tools": [
+        "HubSpot",
+        "Lemlist"
+      ],
       "published": true,
       "body": [
         "Sync identified companies from HubSpot.",
         "Push contacts into a Lemlist campaign.",
         "Personalise with company data and send."
+      ]
+    },
+    {
+      "author": "alice",
+      "type": "playbook",
+      "title": "Rich content example",
+      "description": "Shows a Tiptap node body: headings, lists, images, embeds and links. A body is all strings or all nodes, never a mix.",
+      "tools": ["HubSpot"],
+      "published": false,
+      "body": [
+        { "type": "paragraph", "content": [{ "type": "text", "text": "A body of Tiptap nodes is stored exactly as the editor would save it." }] },
+        { "type": "heading", "attrs": { "level": 2 }, "content": [{ "type": "text", "text": "Step by step" }] },
+        {
+          "type": "orderedList",
+          "attrs": { "start": 1 },
+          "content": [
+            { "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "First step" }] }] },
+            { "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Second step" }] }] }
+          ]
+        },
+        { "type": "image", "attrs": { "src": "https://example.com/screenshot.png", "alt": "Screenshot" } },
+        { "type": "youtube", "attrs": { "src": "https://www.youtube.com/watch?v=dQw4w9WgXcQ" } },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Watch the walkthrough on LinkedIn",
+              "marks": [{ "type": "link", "attrs": { "href": "https://www.linkedin.com/posts/example" } }]
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            { "type": "text", "text": "This article was originally posted on https://example.com/post", "marks": [{ "type": "italic" }] }
+          ]
+        }
       ]
     }
   ]

@@ -1,5 +1,3 @@
-"use server";
-
 import VisitorActions from "./VisitorActions";
 import Link from "next/link";
 import { getPostWithRedirectInfo, getPostContent, getPostDraftContent } from "@/lib/post";
@@ -16,6 +14,9 @@ import ContentViewer from "./ContentViewer";
 import { to } from "@/lib/error-handling";
 import { RenamePostDialog } from "@/components/rename-post-dialog";
 import PostActionsMenu from "@/components/post-actions-menu";
+import { PostTools } from "@/components/post-tools";
+import { Clock } from "lucide-react";
+import { formatUpdatedDate } from "@/lib/format-updated-date";
 import type { Metadata } from "next";
 
 export async function generateMetadata({
@@ -119,6 +120,8 @@ export default async function PlaybookPage({
     }
   }
 
+  const updatedDate = formatUpdatedDate(post.updated_at);
+
   return (
     <div>
       <div className="flex w-full justify-center">
@@ -160,9 +163,17 @@ export default async function PlaybookPage({
             </div>
           </div>
 
-          <div className="flex">
+          <div className="flex items-center gap-3">
             <Badge variant="outline" className="p-2">{post.type}</Badge>
+            {updatedDate && (
+              <span className="flex items-center gap-1 text-sm text-muted-foreground">
+                <Clock className="h-3.5 w-3.5" />
+                Last updated {updatedDate}
+              </span>
+            )}
           </div>
+
+          <PostTools tools={post.tools} type={post.type} />
 
           <Separator />
 

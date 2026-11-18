@@ -11,6 +11,14 @@ import {
   getTool,
 } from "../tool";
 import { createClient } from "@/utils/supabase/client";
+import {
+  applyAddToStack,
+  applyAddToWatchlist,
+  applyAddToOldStack,
+  applyRemoveFromStack,
+  applyRemoveFromWatchlist,
+  applyRemoveFromOldStack,
+} from "@/lib/tool-list-state";
 
 export function useTool(toolId: string) {
   return useQuery({
@@ -38,22 +46,10 @@ export function useAddToStack() {
       // Snapshot the previous value
       const previousTool = queryClient.getQueryData(["tool", toolId]);
       
-      // Optimistically update to the new value.
-      // A tool belongs to at most one list: adding to the stack clears the
-      // watchlist and old stack flags. The server also auto-follows the tool,
-      // so show that straight away instead of waiting for a refetch.
-      queryClient.setQueryData(["tool", toolId], (old: unknown) => {
-        if (old && typeof old === 'object') {
-          return {
-            ...old,
-            is_in_stack: true,
-            is_in_watchlist: false,
-            is_in_old_stack: false,
-            is_followed: true,
-          };
-        }
-        return old;
-      });
+      // Optimistically apply the same rule the Go handler applies.
+      queryClient.setQueryData(["tool", toolId], (old: unknown) =>
+        old && typeof old === "object" ? applyAddToStack(old) : old
+      );
 
       // Return context with the snapshotted value
       return { previousTool };
@@ -82,12 +78,9 @@ export function useRemoveFromStack() {
       await queryClient.cancelQueries({ queryKey: ["tool", toolId] });
       const previousTool = queryClient.getQueryData(["tool", toolId]);
       
-      queryClient.setQueryData(["tool", toolId], (old: unknown) => {
-        if (old && typeof old === 'object') {
-          return { ...old, is_in_stack: false };
-        }
-        return old;
-      });
+      queryClient.setQueryData(["tool", toolId], (old: unknown) =>
+        old && typeof old === "object" ? applyRemoveFromStack(old) : old
+      );
       
       return { previousTool };
     },
@@ -112,19 +105,9 @@ export function useAddToWatchlist() {
       await queryClient.cancelQueries({ queryKey: ["tool", toolId] });
       const previousTool = queryClient.getQueryData(["tool", toolId]);
       
-      // A tool belongs to at most one list: adding to the watchlist clears the
-      // stack and old stack flags.
-      queryClient.setQueryData(["tool", toolId], (old: unknown) => {
-        if (old && typeof old === 'object') {
-          return {
-            ...old,
-            is_in_watchlist: true,
-            is_in_stack: false,
-            is_in_old_stack: false,
-          };
-        }
-        return old;
-      });
+      queryClient.setQueryData(["tool", toolId], (old: unknown) =>
+        old && typeof old === "object" ? applyAddToWatchlist(old) : old
+      );
 
       return { previousTool };
     },
@@ -133,6 +116,8 @@ export function useAddToWatchlist() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["watchlist"] });
+      // Auto-follow means the followed-tools list changed too.
+      queryClient.invalidateQueries({ queryKey: ["followed-tools"] });
     },
   });
 }
@@ -149,12 +134,9 @@ export function useRemoveFromWatchlist() {
       await queryClient.cancelQueries({ queryKey: ["tool", toolId] });
       const previousTool = queryClient.getQueryData(["tool", toolId]);
 
-      queryClient.setQueryData(["tool", toolId], (old: unknown) => {
-        if (old && typeof old === 'object') {
-          return { ...old, is_in_watchlist: false };
-        }
-        return old;
-      });
+      queryClient.setQueryData(["tool", toolId], (old: unknown) =>
+        old && typeof old === "object" ? applyRemoveFromWatchlist(old) : old
+      );
 
       return { previousTool };
     },
@@ -179,18 +161,9 @@ export function useAddToOldStack() {
       await queryClient.cancelQueries({ queryKey: ["tool", toolId] });
       const previousTool = queryClient.getQueryData(["tool", toolId]);
 
-      // Archiving moves the tool out of the active stack and the watchlist.
-      queryClient.setQueryData(["tool", toolId], (old: unknown) => {
-        if (old && typeof old === "object") {
-          return {
-            ...old,
-            is_in_old_stack: true,
-            is_in_stack: false,
-            is_in_watchlist: false,
-          };
-        }
-        return old;
-      });
+      queryClient.setQueryData(["tool", toolId], (old: unknown) =>
+        old && typeof old === "object" ? applyAddToOldStack(old) : old
+      );
 
       return { previousTool };
     },
@@ -201,6 +174,7 @@ export function useAddToOldStack() {
       queryClient.invalidateQueries({ queryKey: ["old-stack"] });
       queryClient.invalidateQueries({ queryKey: ["stack"] });
       queryClient.invalidateQueries({ queryKey: ["watchlist"] });
+      queryClient.invalidateQueries({ queryKey: ["followed-tools"] });
     },
   });
 }
@@ -217,12 +191,9 @@ export function useRemoveFromOldStack() {
       await queryClient.cancelQueries({ queryKey: ["tool", toolId] });
       const previousTool = queryClient.getQueryData(["tool", toolId]);
 
-      queryClient.setQueryData(["tool", toolId], (old: unknown) => {
-        if (old && typeof old === "object") {
-          return { ...old, is_in_old_stack: false };
-        }
-        return old;
-      });
+      queryClient.setQueryData(["tool", toolId], (old: unknown) =>
+        old && typeof old === "object" ? applyRemoveFromOldStack(old) : old
+      );
 
       return { previousTool };
     },

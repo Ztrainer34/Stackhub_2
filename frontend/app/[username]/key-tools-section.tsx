@@ -76,7 +76,7 @@ export default function KeyToolsSection({
   return (
     <section className="mb-8 rounded-lg border bg-card p-6">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-lg font-semibold">Key Tools</h2>
+        <h2 className="text-lg font-semibold">Key tools</h2>
         {isOwnProfile && (
           <button
             onClick={() => setDialogOpen(true)}
@@ -113,7 +113,7 @@ export default function KeyToolsSection({
           href={`/${username}?tab=stack`}
           className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
         >
-          Explore Stack
+          Explore stack
           <ArrowRight className="w-4 h-4" />
         </Link>
       </div>

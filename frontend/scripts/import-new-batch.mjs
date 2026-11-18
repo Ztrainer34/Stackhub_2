@@ -41,6 +41,20 @@ async function allRows(table, cols) {
 const tools = JSON.parse(readFileSync(IN, "utf8"));
 console.log(`Loaded ${tools.length} tools from ${IN}`);
 
+// The website goes straight into href on the public tool page, bypassing the
+// API's validate.WebURL — check it here, before anything is written.
+const isHttp = (s) => {
+  try { return ["http:", "https:"].includes(new URL(s).protocol); } catch { return false; }
+};
+const invalid = tools.filter(
+  (t) => !t.name || (t.website != null && !isHttp(t.website)) || !Array.isArray(t.categories)
+);
+if (invalid.length) {
+  for (const t of invalid) console.error(`  ✗ ${t.name ?? "(no name)"}: needs a name, an http(s) website or null, and a categories array`);
+  console.error(`\n${invalid.length} invalid entr${invalid.length === 1 ? "y" : "ies"}. Nothing was written.`);
+  process.exit(1);
+}
+
 console.log("Loading catalog…");
 const existingNames = new Set((await allRows("tools", "name")).map((t) => norm(t.name)));
 const existingCats = new Map(
@@ -60,6 +74,15 @@ console.log(`Tools to insert  : ${toInsert.length}`);
 console.log(`Skipped (present): ${skipped}`);
 console.log(`Categories used  : ${wantedCats.size}  (${newCats.length} new)`);
 if (newCats.length) console.log(`New categories   : ${newCats.join(", ")}`);
+console.log("");
+for (const t of toInsert) console.log(`  + ${t.name.padEnd(28)} ${(t.website ?? "(no website)").padEnd(45)} ${t.categories.join(", ")}`);
+
+// Enrichment batches must only use categories that already exist; a typo would
+// silently create a new one. ALLOW_NEW_CATEGORIES=1 for a batch that means to.
+if (newCats.length && process.env.ALLOW_NEW_CATEGORIES !== "1") {
+  console.error(`\n${newCats.length} categor${newCats.length === 1 ? "y does" : "ies do"} not exist yet. Fix the file, or set ALLOW_NEW_CATEGORIES=1 to create them. Nothing was written.`);
+  process.exit(1);
+}
 
 if (!APPLY) {
   console.log(`\nDry run only. Re-run with APPLY=1 to insert.`);

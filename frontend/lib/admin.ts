@@ -7,6 +7,8 @@ export interface ToolTicket {
   tool_description: string;
   tool_website: string;
   status: "pending" | "resolved" | "rejected";
+  /** Why a rejected ticket was rejected. Admin-only; null before a rejection. */
+  rejection_reason?: string | null;
   // Null for standalone suggestions submitted from the /tools "Add tool" flow.
   post_id: string | null;
   post_name: string | null;
@@ -43,6 +45,8 @@ export interface Tool {
   description: string;
   logo_url: string;
   categories: Array<{ id: number; name: string }>;
+  /** Hidden from browsing. Resolving a ticket with it links it; it stays hidden. */
+  is_hidden?: boolean;
 }
 
 // Fetch tool tickets with pagination and filtering
@@ -89,7 +93,7 @@ export async function fetchToolTicket(id: string): Promise<ToolTicket> {
   const response = await fetchApiAuthenticated(supabase, `/admin/tool-tickets/${id}`);
   
   if (!response.ok) {
-    throw new Error(`Failed to fetch tool ticket: ${response.statusText}`);
+    throw new Error(`Failed to fetch tool ticket: ${response.status} ${response.statusText}`);
   }
   
   return response.json();
@@ -108,7 +112,7 @@ export async function resolveTicketWithExisting(ticketId: string, toolId: string
   });
   
   if (!response.ok) {
-    throw new Error(`Failed to resolve ticket: ${response.statusText}`);
+    throw new Error(`Failed to resolve ticket: ${response.status} ${response.statusText}`);
   }
 }
 
@@ -130,22 +134,32 @@ export async function resolveTicketWithNew(ticketId: string, toolData: {
   });
   
   if (!response.ok) {
-    throw new Error(`Failed to create tool and resolve ticket: ${response.statusText}`);
+    throw new Error(`Failed to create tool and resolve ticket: ${response.status} ${response.statusText}`);
   }
   
   return response.json();
 }
 
-// Reject a tool ticket
-export async function rejectTicket(ticketId: string): Promise<void> {
+// Reject a tool ticket. The reason is required: the requester is told it, in-app
+// and by email.
+export async function rejectTicket(ticketId: string, reason: string): Promise<void> {
   const supabase = createClient();
-  
+
   const response = await fetchApiAuthenticated(supabase, `/admin/tool-tickets/${ticketId}/reject`, {
     method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ reason }),
   });
-  
+
   if (!response.ok) {
-    throw new Error(`Failed to reject ticket: ${response.statusText}`);
+    // A 400 carries the reason's problem in plain text ("Reason must be at
+    // least 10 characters"); show it rather than a bare status.
+    const detail = response.status === 400
+      ? (await response.text()).trim() || response.statusText
+      : response.statusText;
+    throw new Error(`Failed to reject ticket: ${response.status} ${detail}`);
   }
 }
 
@@ -153,25 +167,29 @@ export async function rejectTicket(ticketId: string): Promise<void> {
 export async function searchTools(query: string, limit: number = 10): Promise<Tool[]> {
   const supabase = createClient();
   
+  // Hidden tools are included, so a suggestion for one is linked to it rather
+  // than duplicated (a new tool with a taken name is refused anyway).
   const searchParams = new URLSearchParams({
     q: query,
     limit: limit.toString(),
+    include_hidden: "1",
   });
-  
+
   const response = await fetchApiAuthenticated(supabase, `/tool/autocomplete?${searchParams.toString()}`);
   
   if (!response.ok) {
-    throw new Error(`Failed to search tools: ${response.statusText}`);
+    throw new Error(`Failed to search tools: ${response.status} ${response.statusText}`);
   }
   
   const results = await response.json();
   
   // Transform the autocomplete results to match our Tool interface
-  return results.map((result: { id: string; name: string; description?: string; logo_url?: string }) => ({
+  return results.map((result: { id: string; name: string; description?: string; logo_url?: string; is_hidden?: boolean }) => ({
     id: result.id,
     name: result.name,
     description: result.description || '',
     logo_url: result.logo_url || '',
+    is_hidden: result.is_hidden === true,
     categories: [], // Autocomplete doesn't include categories, would need separate API call
   }));
 }
@@ -226,7 +244,7 @@ export async function getCategories(): Promise<Array<{ id: number; name: string 
     const response = await fetchApiAuthenticated(supabase, '/homepage/top-categories?limit=100');
     
     if (!response.ok) {
-      throw new Error(`Failed to fetch categories: ${response.statusText}`);
+      throw new Error(`Failed to fetch categories: ${response.status} ${response.statusText}`);
     }
     
     const categories = await response.json();
