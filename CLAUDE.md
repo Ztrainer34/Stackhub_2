@@ -186,6 +186,16 @@ cd frontend && npm run dev | npm run build | npm run lint
 `/ship` (`.claude/commands/ship.md`) runs the code → verify → fix loop, sized to
 the change (Small / Normal / Feature).
 
+## Git: never push on your own
+
+**Never run `git push` (any branch, any remote) unless the user asks for it in
+that message.** Merging, committing and fast-forwarding locally are fine when
+asked; publishing is a separate step the user takes or explicitly requests.
+Pushing `main` triggers a Vercel production build, and a push cannot be quietly
+taken back. "Make everything the same version" or "do it" is not permission to
+push: do the local work, verify, report, then ask. Approval to push once does not
+carry over to the next push.
+
 ## Code style
 
 - **Go:** `log.Println(err)` before returning an error; `defer tx.Rollback(ctx)`
