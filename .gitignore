@@ -8,6 +8,7 @@
 # Only per-developer overrides and scratch state stay local.
 .claude/settings.local.json
 .claude/.state/
+.claude/launch.json
 
 # Playwright MCP scratch output — console logs and page snapshots from browser
 # review runs. Regenerated every run, useful to nobody else.
