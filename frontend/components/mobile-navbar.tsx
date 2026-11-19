@@ -18,6 +18,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { SearchForm } from "./search-form";
+import { StackHubLogo } from "./stackhub-logo";
 import { User } from "@/lib/user";
 
 interface MobileNavbarProps {
@@ -39,7 +40,8 @@ export function MobileNavbar({ user }: MobileNavbarProps) {
           <div className="flex flex-col h-full">
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b">
-              <Link href="/" onClick={() => setIsOpen(false)}>
+              <Link href="/" onClick={() => setIsOpen(false)} className="flex items-center gap-2">
+                <StackHubLogo className="h-7 w-7" />
                 <span className="font-bold text-lg">StackHub</span>
               </Link>
             </div>

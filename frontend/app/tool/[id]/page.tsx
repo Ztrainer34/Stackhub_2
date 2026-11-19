@@ -4,6 +4,7 @@ import { Tool, getTool } from "@/lib/tool";
 import { createClient } from "@/utils/supabase/server";
 import { HydrationBoundary, QueryClient, dehydrate } from "@tanstack/react-query";
 import { notFound } from "next/navigation";
+import { NOT_FOUND_METADATA } from "@/lib/not-found-metadata";
 import { ToolActions } from "@/components/tool-actions";
 import { ClaimPageCta } from "./claim-page-cta";
 import { ToolPageAbout } from "./tool-page-about";
@@ -26,7 +27,7 @@ export async function generateMetadata({
     // A hidden tool keeps its page for old links, but leaves search engines.
     return tool.is_hidden ? { robots: { index: false, follow: true } } : {};
   } catch {
-    return {};
+    return NOT_FOUND_METADATA;
   }
 }
 

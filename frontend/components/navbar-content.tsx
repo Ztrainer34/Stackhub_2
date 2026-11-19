@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { StackHubLogo } from "@/components/stackhub-logo";
 import { UserAvatar } from "@/components/user-avatar";
 import {
   DropdownMenu,
@@ -56,7 +57,8 @@ export default function NavBarContent({ user }: NavBarContentProps) {
         <div className="container flex justify-between h-14 items-center">
           {/* Desktop Logo */}
           <div className="mr-4 hidden md:flex">
-            <Link className="mr-4 flex items-center gap-2 lg:mr-6" href="/">
+            <Link className="mr-4 flex items-center gap-2 lg:mr-6" href="/" aria-label="StackHub home">
+              <StackHubLogo className="h-7 w-7" />
               <span className="hidden font-bold lg:inline-block">StackHub</span>
             </Link>
           </div>
@@ -64,6 +66,7 @@ export default function NavBarContent({ user }: NavBarContentProps) {
           {/* Mobile Logo */}
           <div className="flex md:hidden">
             <Link className="flex items-center gap-2" href="/">
+              <StackHubLogo className="h-7 w-7" />
               <span className="font-bold">StackHub</span>
             </Link>
           </div>
