@@ -38,11 +38,10 @@ export default function AboutPage() {
   return (
     <div className="container mx-auto px-4 py-12 max-w-3xl">
       <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl mb-4">
-        Show and tell for GTM tools
+        Show and tell for GTM professionals
       </h1>
       <p className="text-xl text-muted-foreground mb-12">
-        StackHub is where GTM people show their tool stack and learn from
-        everyone else&apos;s.
+        Share your tool stack and learn from everyone else&apos;s.
       </p>
 
       <section className="mb-12">
