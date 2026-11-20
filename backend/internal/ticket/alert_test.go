@@ -605,3 +605,70 @@ func TestRunStopsWhenCancelled(t *testing.T) {
 		t.Error("Run did not stop")
 	}
 }
+
+// The reported bug: a second suggestion an hour after the first was not
+// announced for ~75 minutes, which looked like a lost alert. The first sends
+// of a day only wait MinInterval.
+func TestFirstSendsOfTheDayOnlyWaitTheMinInterval(t *testing.T) {
+	clk := newClock(9, 0)
+	cfg := testCfg(clk)
+	ld, ch := &fakeLoader{}, &fakeChannel{}
+	a := NewAlerter(ld.Load, []AlertChannel{ch}, cfg)
+
+	for i := 0; i < cfg.Burst; i++ {
+		a.Enqueue(anyone, uuid.New())
+		before := ch.callCount()
+		a.Flush(context.Background())
+		if ch.callCount() != before+1 {
+			t.Fatalf("send %d of the day was held; the first %d only wait %s", i+1, cfg.Burst, cfg.MinInterval)
+		}
+		clk.Add(cfg.MinInterval)
+	}
+}
+
+func TestSendsAfterTheBurstAreSpreadNotImmediate(t *testing.T) {
+	clk := newClock(9, 0)
+	cfg := testCfg(clk)
+	ld, ch := &fakeLoader{}, &fakeChannel{}
+	a := NewAlerter(ld.Load, []AlertChannel{ch}, cfg)
+
+	for i := 0; i < cfg.Burst; i++ {
+		a.Enqueue(anyone, uuid.New())
+		a.Flush(context.Background())
+		clk.Add(cfg.MinInterval)
+	}
+	// The burst is used up: one more ticket right after must now be spread.
+	a.Enqueue(anyone, uuid.New())
+	before := ch.callCount()
+	a.Flush(context.Background())
+	if ch.callCount() != before {
+		t.Error("a send straight after the burst went out; the rest of the allowance should be spread")
+	}
+}
+
+func TestAHeldAlertIsLoggedOnceWithoutAddresses(t *testing.T) {
+	clk := newClock(9, 0)
+	cfg := testCfg(clk)
+	cfg.Burst = 1
+	ld, ch := &fakeLoader{}, &fakeChannel{}
+	a := NewAlerter(ld.Load, []AlertChannel{ch}, cfg)
+	buf := captureLog(t)
+
+	a.Enqueue(anyone, uuid.New())
+	a.Flush(context.Background()) // sent: the burst
+	clk.Add(time.Minute)
+	a.Enqueue(anyone, uuid.New())
+	a.Flush(context.Background()) // held
+	a.Flush(context.Background()) // still held: must not log again
+
+	out := buf.String()
+	if n := strings.Count(out, "next send in about"); n != 1 {
+		t.Errorf("held alert logged %d times, want exactly 1:\n%s", n, out)
+	}
+	if !strings.Contains(out, "1 pending") {
+		t.Errorf("the log should say how many are pending:\n%s", out)
+	}
+	if strings.Contains(out, "@") {
+		t.Errorf("the log contains an address:\n%s", out)
+	}
+}
