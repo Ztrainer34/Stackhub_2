@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"html/template"
 	netmail "net/mail"
+	"net"
 	"net/url"
 	"strings"
 	"unicode"
@@ -351,6 +352,66 @@ func neutraliseLinks(s string) string {
 	return strings.ReplaceAll(s, "@", "[at]")
 }
 
+// hostName is what a link's host must look like to be shown as a clickable
+// link: plain ASCII labels only. A non-ASCII host (a lookalike of a familiar
+// domain) is left defanged instead.
+var hostName = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$`)
+
+// clickableWebsite returns the website as a safe address to link to, or false.
+// The admin is about to review the site anyway, so the one field that is
+// itself an address is worth a real link; everything else stays defanged.
+//
+// It refuses (and the caller falls back to defangURL) unless the stored text is
+// exactly what we would show: nothing was cleaned or cut, it is http(s), it has
+// a plain ASCII host, and it carries no user info. The last rule matters because
+// the link text is the address itself: https://stackhub.me@evil.example would
+// read as a StackHub address while going to evil.example.
+func clickableWebsite(raw string) (string, bool) {
+	s := strings.TrimSpace(raw)
+	if s == "" || sanitize(s, maxWebsiteRunes) != s {
+		return "", false
+	}
+	// url.Parse accepts these inside a path or query, but a link that carries
+	// markup or quoting characters is not one to put in an admin's inbox.
+	if strings.ContainsAny(s, "\"'<>`{}|\\^ ") {
+		return "", false
+	}
+	if checked, ok := validate.WebURL(s); !ok || checked != s {
+		return "", false
+	}
+	u, err := url.Parse(s)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.Opaque != "" {
+		return "", false
+	}
+	if !publicLookingHost(u.Hostname()) {
+		return "", false
+	}
+	return s, true
+}
+
+// publicLookingHost is true for an ordinary registered-looking domain name. It
+// refuses what a click could use against the admin's own machine or network
+// (IP literals in any spelling browsers accept, localhost), and punycode
+// labels, which a browser may display as the Unicode lookalike they encode.
+func publicLookingHost(host string) bool {
+	if !hostName.MatchString(host) || net.ParseIP(host) != nil {
+		return false
+	}
+	labels := strings.Split(strings.ToLower(host), ".")
+	for _, l := range labels {
+		if strings.HasPrefix(l, "xn--") {
+			return false
+		}
+	}
+	if last := labels[len(labels)-1]; last == "localhost" || last == "local" || last == "internal" ||
+		strings.HasPrefix(last, "0x") || strings.Trim(last, "0123456789") == "" {
+		// A numeric last label is an IPv4 address in decimal, octal or hex
+		// form (2130706433, 0x7f.1); no real top-level domain is numeric.
+		return false
+	}
+	return len(labels) >= 2
+}
+
 // digestText is sanitize, then neutralise links, then HTML-escape, in that
 // order: truncating after escaping could cut an entity in half.
 func digestText(s string, maxRunes int) string {
@@ -359,9 +420,10 @@ func digestText(s string, maxRunes int) string {
 
 // BuildNewToolDigest renders the admin email for newly suggested tools. The
 // subject is constant text and a count: it never contains user input, so a
-// suggestion cannot write the subject line. The only link per tool is the
-// Review button, built from siteURL and the ticket id; everything a user wrote
-// is escaped, labelled unverified, and never put in an href.
+// suggestion cannot write the subject line. The links per tool are the
+// Review button, built from siteURL and the ticket id, and the website when it
+// passes clickableWebsite; nothing else a user wrote is ever put in an href.
+// Everything a user wrote is escaped and labelled unverified.
 func BuildNewToolDigest(items []NewToolItem, more int, moreSubmitters int) (subject, html string) {
 	total := len(items) + more
 	if total == 1 {
@@ -385,12 +447,15 @@ func BuildNewToolDigest(items []NewToolItem, more int, moreSubmitters int) (subj
 
 	for _, it := range items {
 		b.WriteString(`<div style="border:1px solid #e6ebf1;border-radius:6px;padding:16px;margin:0 0 16px">`)
-		b.WriteString(`<p style="margin:0 0 8px;font-size:12px;color:#718096">Unverified user input — do not click or trust</p>`)
+		b.WriteString(`<p style="margin:0 0 8px;font-size:12px;color:#718096">Unverified user input — check it before you trust it</p>`)
 		b.WriteString(`<div style="background:#f7fafc;border-radius:4px;padding:10px 12px;margin:0 0 12px">`)
 		if name := digestText(it.ToolName, 200); name != "" {
 			b.WriteString(`<p style="margin:0 0 6px;font-size:16px;color:#000000"><strong>` + name + `</strong></p>`)
 		}
-		if site := defangURL(it.Website); site != "" {
+		if addr, ok := clickableWebsite(it.Website); ok {
+			esc := template.HTMLEscapeString(addr)
+			line(`Website: <a href="` + esc + `" rel="noopener noreferrer" style="color:#2b6cb0">` + esc + `</a>`)
+		} else if site := defangURL(it.Website); site != "" {
 			line("Website: " + template.HTMLEscapeString(site))
 		}
 		if desc := digestText(it.Description, 300); desc != "" {

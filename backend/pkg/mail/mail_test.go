@@ -459,3 +459,125 @@ func TestBuildNewToolDigestFreeTextFieldsAreInert(t *testing.T) {
 		t.Errorf("Review link missing or altered:\n%s", html)
 	}
 }
+
+// A plain website is shown as a real, readable link (the reported bug was the
+// hxxps[:]// form). Everything that could make that link misleading stays
+// defanged instead.
+func TestBuildNewToolDigestWebsiteIsClickable(t *testing.T) {
+	it := item("Tool")
+	it.Website = "https://aixecute.be/3"
+	_, html := BuildNewToolDigest([]NewToolItem{it}, 0, 0)
+
+	want := `<a href="https://aixecute.be/3" rel="noopener noreferrer"`
+	if !strings.Contains(html, want) {
+		t.Errorf("the website is not a link:\n%s", html)
+	}
+	if !strings.Contains(html, ">https://aixecute.be/3</a>") {
+		t.Errorf("the link text must be the address itself:\n%s", html)
+	}
+	if strings.Contains(html, "hxxps") || strings.Contains(html, "[.]") {
+		t.Errorf("a plain website must not be defanged:\n%s", html)
+	}
+	// The Review button and the website: exactly two links.
+	if got := strings.Count(html, "<a "); got != 2 {
+		t.Errorf("want the Review link and the website link, got %d", got)
+	}
+}
+
+func TestBuildNewToolDigestRiskyWebsitesStayDefanged(t *testing.T) {
+	for name, site := range map[string]string{
+		"user info that fakes a StackHub address": "https://stackhub.me@evil.example",
+		"non-ASCII lookalike host":                "https://stаckhub.me/login", // Cyrillic а
+		"a javascript scheme":                     "javascript:alert(1)",
+		"a data scheme":                           "data:text/html,<b>x</b>",
+		"markup in the address":                   `https://a.example/"><img src=x>`,
+		"a control character":                     "https://a.example/\u202Epath",
+	} {
+		it := item("Tool")
+		it.Website = site
+		_, html := BuildNewToolDigest([]NewToolItem{it}, 0, 0)
+
+		if got := strings.Count(html, "<a "); got != 1 {
+			t.Errorf("%s: %d links; only the Review link is allowed:\n%s", name, got, html)
+		}
+		if strings.Contains(html, `href="`+site) || strings.Contains(html, `href="javascript`) {
+			t.Errorf("%s: the website landed in an href", name)
+		}
+		if strings.Contains(html, "<img") {
+			t.Errorf("%s: markup got through", name)
+		}
+	}
+}
+
+func TestClickableWebsiteRefusesAnythingCleaned(t *testing.T) {
+	long := "https://a.example/" + strings.Repeat("x", 400)
+	for name, in := range map[string]string{
+		"empty":                 "",
+		"spaces only":           "   ",
+		"cut because too long":  long,
+		"has an invisible char": "https://a.example/​x",
+		"ftp scheme":            "ftp://a.example/x",
+		"no host":               "https:///path",
+	} {
+		if got, ok := clickableWebsite(in); ok {
+			t.Errorf("%s: %q was accepted as %q", name, in, got)
+		}
+	}
+	if got, ok := clickableWebsite("  https://Example.com/a?b=1&c=2  "); !ok || got != "https://Example.com/a?b=1&c=2" {
+		t.Errorf("a normal address was refused or altered: %q %v", got, ok)
+	}
+}
+
+func TestBuildNewToolDigestWebsiteLinkIsEscaped(t *testing.T) {
+	it := item("Tool")
+	it.Website = "https://a.example/?x=1&y=2"
+	_, html := BuildNewToolDigest([]NewToolItem{it}, 0, 0)
+	if !strings.Contains(html, `href="https://a.example/?x=1&amp;y=2"`) {
+		t.Errorf("the & in the address must be escaped inside the attribute:\n%s", html)
+	}
+}
+
+// What a click could aim at the admin's own network, or a lookalike a browser
+// may redisplay as Unicode, is never linked.
+func TestClickableWebsiteRefusesHostsAClickCouldAbuse(t *testing.T) {
+	for name, in := range map[string]string{
+		"IPv4":                 "http://192.168.1.1/cgi-bin/reboot",
+		"loopback":             "http://127.0.0.1:8080/x",
+		"cloud metadata":       "http://169.254.169.254/latest",
+		"decimal IPv4":         "http://2130706433/",
+		"hex IPv4":             "http://0x7f.1/",
+		"hex last label":       "http://127.0.0.0x1/",
+		"octal IPv4":           "http://0177.0.0.1/",
+		"IPv6":                 "http://[::1]/",
+		"localhost":            "http://localhost:3000/x",
+		"a localhost subdomain": "http://app.localhost/x",
+		"internal name":        "http://router.internal/x",
+		"single label":         "http://intranet/x",
+		"punycode":             "https://xn--stckhub-4wa.example/login",
+		"uppercase punycode":   "https://XN--stckhub-4wa.example/",
+		"trailing dot":         "https://a.example./x",
+		"backslash":            "https://a.example\\@evil.example/",
+		"apostrophe":           "https://a.example/it's",
+		"backtick":             "https://a.example/\x60x",
+		"curly brace":          "https://a.example/{x}",
+	} {
+		if got, ok := clickableWebsite(in); ok {
+			t.Errorf("%s: %q was linked as %q", name, in, got)
+		}
+		// And in the email it must fall back to the defanged text.
+		it := item("Tool")
+		it.Website = in
+		_, html := BuildNewToolDigest([]NewToolItem{it}, 0, 0)
+		if got := strings.Count(html, "<a "); got != 1 {
+			t.Errorf("%s: %d links in the email; only the Review link is allowed", name, got)
+		}
+	}
+	for _, ok := range []string{
+		"https://example.com", "http://sub.example.co.uk/a/b?c=d#e", "https://a-b.example.io/x_y",
+		"https://example.com:8443/x", "https://3d.example.com/",
+	} {
+		if _, linked := clickableWebsite(ok); !linked {
+			t.Errorf("%q is an ordinary address and should be a link", ok)
+		}
+	}
+}
