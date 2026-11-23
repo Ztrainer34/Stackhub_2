@@ -3,26 +3,45 @@
 Run from the `frontend/` folder, once your import JSON is ready
 (format: `scripts/seed-data.example.json`).
 
+## What an import does
+
+An import only **adds**. It never deletes, and it never touches users or
+playbooks that are not in the file.
+
+**Each user needs their own email.** Use an alias of one inbox plus the
+username, e.g. `inbox+alicemartin@example.com`. A file where users share an email
+is refused: they would all be merged into one account.
+
+| The user in the file… | What happens |
+|---|---|
+| matches no account | Account, profile and tool lists are created. |
+| has the **same email and the same username** as an account | Existing user: the profile and tool lists are **left exactly as they are**. The file's playbooks are added to that account. |
+| has an email that already belongs to a **different username** | Skipped, with all their playbooks. Listed in the preview. |
+| has a username already taken by **another account** | Skipped, with all their playbooks. Listed in the preview. |
+
+| The playbook… | What happens |
+|---|---|
+| is new | Created. |
+| has the same author and title as one already on StackHub | Skipped. It is **not updated**: edit existing playbooks on the site. |
+| has a skipped author | Skipped. |
+
 ## Tools that are not on StackHub
 
 Only use tools that already exist on StackHub, named exactly as they appear
-there. The import **never creates tools**: an unknown name is skipped with a line
-like
+there. The import **never creates tools**: an unknown name is shown in the
+preview as
 
 ```
-✗ playbook "Some title" references unknown tool Foobar
+✗ link skipped: unknown tool Foobar
 ```
 
-and the user or playbook is still imported without that tool link.
+and the playbook is still imported without that tool link.
 
-So when a creator's stack or a playbook mentions a tool StackHub does not have,
-**leave it out of the file**.
-
-- If every tool in a playbook would be skipped, leave the whole playbook out. A
-  playbook needs at least one tool (a comparison at least two), and one with
-  none looks broken.
-- If a name is ambiguous (`✗ ... ambiguous tool Gemini`), use the fuller name as
-  shown on the site, or pin the tool by its id (from the tool page's URL):
+- If every tool in a playbook would be skipped (`! no tool at all would be
+  linked`), leave the whole playbook out. A playbook needs at least one tool (a
+  comparison at least two), and one with none looks broken.
+- If a name is ambiguous (`✗ link skipped: ambiguous tool Gemini`), use the
+  fuller name as shown on the site, or pin the tool by its id:
 
   ```json
   { "tool_ids": { "Gemini": "<tool uuid>" }, "users": [ ... ] }
@@ -34,13 +53,10 @@ So when a creator's stack or a playbook mentions a tool StackHub does not have,
 node scripts/seed.mjs --check scripts/my-import.json
 ```
 
-Writes nothing. Confirms usernames are valid (`a-z`, `0-9`, `_`, `-`, 3 to 30
-characters), pinned tool ids look right, no tool sits in two of a user's lists,
-and every playbook body can be stored. It does **not** check tool names against
-the catalog, so unknown tools only show up in step 3.
-
-Fix any `✗` and re-run. Read the list of users and playbook titles carefully:
-this is your only preview.
+Writes nothing and reads no database. Confirms that every user has a valid,
+unique email and a valid unique username (`a-z`, `0-9`, `_`, `-`, 3 to 30
+characters), that pinned tool ids look right, that no tool sits in two of a
+user's lists, and that every playbook body can be shown. Fix any `✗` and re-run.
 
 ## 2. Set the keys
 
@@ -61,25 +77,42 @@ including all accounts. Set it in the terminal only, never in a file in the
 project or in a chat with Claude. If it leaks, rotate it in Supabase (the website
 uses the same key and will need the new one).
 
-## 3. Import
-
-> ⚠ There is no undo and no second preview. Unlike the other scripts in this
-> folder, `seed.mjs` has no `APPLY=1` step: this writes to the live database
-> straight away.
+## 3. Preview (dry run)
 
 ```bash
 node scripts/seed.mjs scripts/my-import.json
 ```
 
+Reads the database and **writes nothing**. It lists every user and playbook
+with what would happen:
+
 | Line | Meaning |
 |---|---|
-| `✓ user @alice` | Account and profile created. |
-| `✓ playbook "..."` | Playbook created. |
-| `✗ ... unknown tool Foobar` | Not on StackHub, link skipped. Everything else still imported. |
-| `✗ ... ambiguous tool Gemini` | Several tools share that name: use the fuller name or pin the id. |
-| `Done.` | Finished. |
+| `+ @alice` | New user, will be created. |
+| `= @alice  existing account, profile not changed` | Same email and username: playbooks will be added. |
+| `✗ @alice  skipped: …` | Will not be imported (reason given), nor will their playbooks. |
+| `+ "Title" by @alice (3 tools)` | Playbook will be created with 3 tool links. |
+| `✗ link skipped: unknown tool Foobar` | Not on StackHub, that link is left out. |
+| `✗ "Title" … skipped: …` | Playbook will not be imported (reason given). |
+| `Hidden tools that would be linked` | These exist but are hidden from listings. |
 
-Running it twice is safe: existing users are reused, not duplicated.
+Read it carefully. Fix the file and preview again until it is what you want.
+
+## 4. Import
+
+> ⚠ There is no undo. This writes to the live database.
+
+```powershell
+$env:APPLY = "1"; node scripts/seed.mjs scripts/my-import.json; Remove-Item Env:APPLY
+```
+
+```bash
+APPLY=1 node scripts/seed.mjs scripts/my-import.json
+```
+
+It prints the same preview, then `✓ user @…` and `✓ playbook "…"` as it writes,
+and `Done.` at the end. Running it again is safe: what now exists is shown as
+existing or skipped, and only what is still missing is added.
 
 Afterwards, clear the keys (or close the terminal):
 
@@ -95,7 +128,10 @@ unset SUPABASE_SERVICE_ROLE_KEY SUPABASE_URL
 
 - **"Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars."** The keys are not
   set in this terminal. Each new terminal needs step 2 again.
+- **"users share one email".** Give each user their own email (see the top).
 - **A tool is in two lists.** Each tool goes in only one of `stack`, `watchlist`
   or `old_stack` per user.
+- **`✗ user @…: profile not saved`.** That user's login was removed again and
+  their playbooks were not imported. Fix and re-run.
 - **Imported something by mistake.** Nothing here deletes anything, so ask your
   developer rather than cleaning up with the key.
