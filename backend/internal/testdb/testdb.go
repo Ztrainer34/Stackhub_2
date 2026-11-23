@@ -122,7 +122,7 @@ func SomeTools(t *testing.T, tx pgx.Tx, n int) []uuid.UUID {
 // SomeCategories returns n existing category ids, or skips.
 func SomeCategories(t *testing.T, tx pgx.Tx, n int) []int32 {
 	t.Helper()
-	cats := IDs[int32](t, tx, `SELECT id FROM categories ORDER BY id LIMIT $1`, n)
+	cats := IDs[int32](t, tx, `SELECT id FROM categories WHERE retired_at IS NULL ORDER BY id LIMIT $1`, n)
 	if len(cats) < n {
 		t.Skipf("need %d categories — seed the database first", n)
 	}

@@ -356,11 +356,18 @@ INSERT INTO tools (
 RETURNING id, name, description, logo_url;
 
 -- name: AssignCategoryToTool :exec
-INSERT INTO tool_categories (
-  tool_id, category_id
-) VALUES (
-  $1, $2
-);
+-- Adds one category after the tool's existing ones. A suggestion made before the
+-- category restructure may name a retired category: it becomes its replacement,
+-- or is dropped when it has none. An unknown id still fails on the foreign key.
+INSERT INTO tool_categories (tool_id, category_id, position)
+SELECT
+  sqlc.arg(tool_id)::uuid,
+  COALESCE(c.replaced_by, sqlc.arg(category_id)::int),
+  (SELECT count(*) FROM tool_categories tc WHERE tc.tool_id = sqlc.arg(tool_id)::uuid)::int
+FROM (SELECT sqlc.arg(category_id)::int AS id) u
+LEFT JOIN categories c ON c.id = u.id
+WHERE c.retired_at IS NULL OR c.replaced_by IS NOT NULL
+ON CONFLICT DO NOTHING;
 
 -- name: GetToolIDBySlug :one
 -- Resolves a URL slug back to a tool id. The slug is the tool name lowercased
@@ -563,19 +570,28 @@ WHERE p.is_published
 
 -- name: GetTopCategories :many
 -- Counts visible tools only, so a category whose tools are all hidden drops out.
+-- parent_* is empty for a category that has no parent.
 SELECT
   c.id,
   c.name,
   c.slug,
-  COUNT(tc.tool_id) AS tool_count
+  COUNT(tc.tool_id) AS tool_count,
+  c.sort_order,
+  COALESCE(p.name, '') AS parent_name,
+  COALESCE(p.slug, '') AS parent_slug,
+  COALESCE(p.sort_order, 0) AS parent_sort_order
 FROM
   categories c
 LEFT JOIN
+  categories p ON p.id = c.parent_id
+LEFT JOIN
   tool_categories tc ON c.id = tc.category_id
     AND EXISTS (SELECT 1 FROM tools t WHERE t.id = tc.tool_id AND t.hidden_at IS NULL)
+WHERE
+  c.retired_at IS NULL
 GROUP BY
-  c.id, c.name, c.slug
-HAVING 
+  c.id, c.name, c.slug, c.sort_order, p.name, p.slug, p.sort_order
+HAVING
   COUNT(tc.tool_id) > 0
 ORDER BY 
   tool_count DESC, c.name ASC
@@ -599,9 +615,19 @@ WHERE NOT EXISTS (SELECT 1 FROM tools th WHERE th.id = twd.id AND th.hidden_at I
     OR EXISTS (
       SELECT 1 FROM tool_categories tc
       JOIN categories c ON tc.category_id = c.id
-      WHERE tc.tool_id = twd.id AND c.slug = sqlc.arg(category_slug)::text
+      LEFT JOIN categories p ON p.id = c.parent_id
+      WHERE tc.tool_id = twd.id
+        AND (
+          c.slug = sqlc.arg(category_slug)::text
+          OR p.slug = sqlc.arg(category_slug)::text
+          -- a link to an old category keeps working
+          OR EXISTS (
+            SELECT 1 FROM categories o
+            WHERE o.slug = sqlc.arg(category_slug)::text AND o.retired_at IS NOT NULL AND o.replaced_by = c.id
+          )
+        )
     )
-  )
+)
 ORDER BY
   CASE WHEN sqlc.arg(sort)::text = 'newest' THEN twd.created_at END DESC,
   CASE WHEN sqlc.arg(sort)::text = 'updated' THEN twd.updated_at END DESC,
@@ -615,18 +641,27 @@ SELECT
 FROM tools_with_details twd
 WHERE EXISTS (
   SELECT 1 
-  FROM tool_categories tc2 
-  JOIN categories c2 ON tc2.category_id = c2.id 
-  WHERE tc2.tool_id = twd.id AND c2.slug = $1
+  FROM tool_categories tc2
+  JOIN categories c2 ON tc2.category_id = c2.id
+  LEFT JOIN categories p2 ON p2.id = c2.parent_id
+  WHERE tc2.tool_id = twd.id AND (c2.slug = $1 OR p2.slug = $1)
 )
-  AND NOT EXISTS (SELECT 1 FROM tools th WHERE th.id = twd.id AND th.hidden_at IS NOT NULL)
+AND NOT EXISTS (SELECT 1 FROM tools th WHERE th.id = twd.id AND th.hidden_at IS NOT NULL)
 ORDER BY name
 LIMIT $2 OFFSET $3;
 
 -- name: GetCategoryBySlug :one
-SELECT id, name, slug
-FROM categories
-WHERE slug = $1;
+-- is_retired with an empty replaced_by_slug means the category went nowhere.
+SELECT
+  c.id, c.name, c.slug,
+  COALESCE(p.name, '') AS parent_name,
+  COALESCE(p.slug, '') AS parent_slug,
+  (c.retired_at IS NOT NULL)::bool AS is_retired,
+  COALESCE(n.slug, '') AS replaced_by_slug
+FROM categories c
+LEFT JOIN categories p ON p.id = c.parent_id
+LEFT JOIN categories n ON n.id = c.replaced_by
+WHERE c.slug = $1;
 
 -- name: GetToolFromTicket :one
 SELECT
@@ -994,6 +1029,7 @@ WHERE EXISTS (SELECT 1 FROM posts WHERE id = $2 AND author_id = $1)
 ON CONFLICT (profile_id, post_id) DO UPDATE SET position = EXCLUDED.position;
 
 -- name: AutocompleteCategory :many
+-- Only categories a tool can be put in: not retired, and not a parent.
 SELECT
   id,
   name,
@@ -1002,7 +1038,9 @@ SELECT
 FROM
   categories
 WHERE
-  name % $1 OR name ILIKE $1 || '%'
+  (name % $1 OR name ILIKE $1 || '%')
+  AND retired_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM categories child WHERE child.parent_id = categories.id)
 ORDER BY
   rank DESC, name ASC
 LIMIT $2;
@@ -1460,8 +1498,17 @@ WHERE id = $1;
 DELETE FROM tool_categories WHERE tool_id = $1;
 
 -- name: AddToolCategories :exec
-INSERT INTO tool_categories (tool_id, category_id)
-SELECT sqlc.arg(tool_id)::uuid, unnest(sqlc.arg(category_ids)::int[])
+-- Keeps the order given: the first id is the tool's main category. A retired
+-- category becomes its replacement, or is dropped when it has none.
+INSERT INTO tool_categories (tool_id, category_id, position)
+SELECT
+  sqlc.arg(tool_id)::uuid,
+  COALESCE(c.replaced_by, u.id),
+  array_position(sqlc.arg(category_ids)::int[], u.id) - 1
+FROM (SELECT unnest(sqlc.arg(category_ids)::int[]) AS id) u
+LEFT JOIN categories c ON c.id = u.id
+WHERE c.retired_at IS NULL OR c.replaced_by IS NOT NULL
+ORDER BY 3
 ON CONFLICT DO NOTHING;
 
 -- name: GetTrendingPlaybooksForUser :many

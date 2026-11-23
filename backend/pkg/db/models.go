@@ -32,9 +32,13 @@ type AuthUser struct {
 }
 
 type Category struct {
-	ID   int32  `json:"id"`
-	Name string `json:"name"`
-	Slug string `json:"slug"`
+	ID         int32              `json:"id"`
+	Name       string             `json:"name"`
+	Slug       string             `json:"slug"`
+	ParentID   pgtype.Int4        `json:"parent_id"`
+	SortOrder  int32              `json:"sort_order"`
+	RetiredAt  pgtype.Timestamptz `json:"retired_at"`
+	ReplacedBy pgtype.Int4        `json:"replaced_by"`
 }
 
 type KeyPlaybook struct {
@@ -201,6 +205,7 @@ type Tool struct {
 type ToolCategory struct {
 	ToolID     uuid.UUID `json:"tool_id"`
 	CategoryID int32     `json:"category_id"`
+	Position   int32     `json:"position"`
 }
 
 type ToolFollow struct {

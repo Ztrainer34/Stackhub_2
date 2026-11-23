@@ -21,8 +21,9 @@ type toolService struct {
 }
 
 // maxToolCategories caps what a page owner can attach, so the categories card
-// stays a short list rather than a keyword dump.
-const maxToolCategories = 12
+// stays a short list rather than a keyword dump. The first one is the tool's
+// main category.
+const maxToolCategories = 3
 
 // validateToolPageUpdate checks an owner's edit and returns it with its URLs
 // normalised. The caller's form is not modified.

@@ -6,6 +6,9 @@ import { apiPath } from "@/lib/api-path";
 export type Category = {
   id: number;
   name: string;
+  slug?: string;
+  /** Name of the parent category, when there is one. */
+  parent?: string | null;
 };
 
 export type Tool = {
