@@ -1,7 +1,8 @@
 // Package ticket handles tool suggestions (tool tickets) and their resolution.
 //
-// /admin has no role check (see CLAUDE.md), so everything here is reachable by
-// any signed-in user. Nothing here may grant more than a ticket resolution.
+// /admin requires the admin role (admins table, RequireAdmin in routes.go).
+// Suggesting a tool needs only a signed-in user. Nothing here may grant more
+// than a ticket resolution.
 package ticket
 
 import (
@@ -16,4 +17,5 @@ type Handler struct {
 	DB      pg.TxBeginner
 	Queries *db.Queries
 	Mailer  *mail.Mailer // nil in tests: emails are skipped
+	Alerter *Alerter     // nil when ADMIN_NOTIFY_EMAILS is unset, and in tests
 }

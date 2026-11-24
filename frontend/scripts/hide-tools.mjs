@@ -21,8 +21,8 @@
  *   UNHIDE_NAMES="Notion,Salesforce Maps" node scripts/hide-tools.mjs            dry run
  *   UNHIDE_NAMES="Notion,Salesforce Maps" APPLY=1 node scripts/hide-tools.mjs    restore
  *
- * Approving a suggestion in /admin never un-hides a tool: /admin has no role
- * check, so un-hiding is only ever done here, with the service-role key.
+ * Approving a suggestion in /admin never un-hides a tool: un-hiding is a
+ * curation decision, so it is only ever done here, with the service-role key.
  *
  *   SUPABASE_URL="..." SUPABASE_SERVICE_ROLE_KEY="..." node scripts/hide-tools.mjs
  */

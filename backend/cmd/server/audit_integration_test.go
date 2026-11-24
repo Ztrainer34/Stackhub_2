@@ -354,7 +354,8 @@ func TestResolvedTicketIsFinalIntegration(t *testing.T) {
 		return n
 	}
 	reject := func() int64 {
-		n, err := q.RejectToolTicket(ctx, db.RejectToolTicketParams{ID: ticket, ResolvedBy: pg.UUID(resolver)})
+		reason := "Not a good fit for the catalogue."
+		n, err := q.RejectToolTicket(ctx, db.RejectToolTicketParams{ID: ticket, ResolvedBy: pg.UUID(resolver), Reason: pg.Text(&reason)})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -44,6 +44,22 @@ if (error || !profile) {
   process.exit(1);
 }
 
+// An admin account must never be claimable: whoever redeems the link replaces
+// its email and password, and would then hold the admin role.
+const { data: adminRow, error: adminError } = await supabase
+  .from("admins")
+  .select("profile_id")
+  .eq("profile_id", profile.id)
+  .maybeSingle();
+if (adminError) {
+  console.error("Could not check the admin list:", adminError.message);
+  process.exit(1);
+}
+if (adminRow) {
+  console.error(`"${username}" is an admin. Refusing to create a claim link for it.`);
+  process.exit(1);
+}
+
 const token = randomBytes(24).toString("base64url");
 const expiresAt = new Date(Date.now() + EXPIRY_DAYS * 864e5).toISOString();
 

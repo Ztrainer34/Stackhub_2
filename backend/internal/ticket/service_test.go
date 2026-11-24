@@ -8,6 +8,56 @@ import (
 	"stackhub.com/stackhub/internal/apperr/apperrtest"
 )
 
+func TestValidateRejectReason(t *testing.T) {
+	tooShort := "Reason must be at least 10 characters"
+	tooLong := "Reason must be at most 500 characters"
+
+	rejected := []struct {
+		name string
+		in   string
+		msg  string
+	}{
+		{"empty", "", "A reason is required"},
+		{"whitespace only", " \t\r\n  ", "A reason is required"},
+		{"only invisible characters", "​‮ ", "A reason is required"},
+		{"9 characters", "123456789", tooShort},
+		{"9 characters padded with whitespace", "   123456789   ", tooShort},
+		{"9 emoji", strings.Repeat("🚫", 9), tooShort},
+		{"501 characters", strings.Repeat("a", 501), tooLong},
+		{"501 emoji", strings.Repeat("🚫", 501), tooLong},
+		{"invalid UTF-8", "valid start \xff\xfe and an invalid end", "Reason must be valid text"},
+		// What invalid bytes become once encoding/json decodes the HTTP body.
+		{"replacement character", "valid start � and the rest of it", "Reason must be valid text"},
+	}
+	for _, c := range rejected {
+		got, err := validateRejectReason(c.in)
+		apperrtest.Want(t, c.name, err, apperr.KindInvalid, c.msg)
+		if got != "" {
+			t.Errorf("%s: returned %q alongside an error", c.name, got)
+		}
+	}
+
+	accepted := []struct{ name, in, want string }{
+		{"exactly 10 characters", "1234567890", "1234567890"},
+		{"exactly 10 multibyte characters", strings.Repeat("é", 10), strings.Repeat("é", 10)},
+		{"exactly 10 emoji", strings.Repeat("🚫", 10), strings.Repeat("🚫", 10)},
+		{"exactly 500 characters", strings.Repeat("a", 500), strings.Repeat("a", 500)},
+		{"exactly 500 emoji", strings.Repeat("🚫", 500), strings.Repeat("🚫", 500)},
+		{"length counts the cleaned text", "  " + strings.Repeat("a", 500) + "  ", strings.Repeat("a", 500)},
+		{"line breaks and tabs become spaces", "Too similar\r\nto\tAirtable", "Too similar to Airtable"},
+		{"bidi override and isolate, zero-width, line separator", "Not‮ a⁦ fit​ for  us", "Not a fit for us"},
+		{"runs collapse and ends are trimmed", "  \n Duplicate    of an existing   tool \t", "Duplicate of an existing tool"},
+		// Returned as typed, not escaped: each place that shows it escapes it.
+		{"markup is kept as text", `Use <b>Notion</b> & "Coda" instead`, `Use <b>Notion</b> & "Coda" instead`},
+	}
+	for _, c := range accepted {
+		got, err := validateRejectReason(c.in)
+		if err != nil || got != c.want {
+			t.Errorf("%s: validateRejectReason = %q, %v; want %q", c.name, got, err, c.want)
+		}
+	}
+}
+
 func TestValidateNewTool(t *testing.T) {
 	rejected := []struct {
 		name string

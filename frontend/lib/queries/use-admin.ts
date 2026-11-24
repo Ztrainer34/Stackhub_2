@@ -8,6 +8,7 @@ import {
   searchTools,
   getCategories
 } from "../admin";
+import { retryAdminQuery } from "../admin-retry";
 
 // Query hooks
 export function useToolTickets(params?: {
@@ -19,13 +20,7 @@ export function useToolTickets(params?: {
     queryKey: ["admin", "tool-tickets", params],
     queryFn: () => fetchToolTickets(params),
     staleTime: 30 * 1000, // 30 seconds
-    retry: (failureCount, error) => {
-      // Don't retry on auth errors
-      if (error.message.includes('Authentication required') || error.message.includes('401')) {
-        return false;
-      }
-      return failureCount < 3;
-    },
+    retry: retryAdminQuery, // no retry on 401/403
   });
 }
 
@@ -35,12 +30,7 @@ export function useToolTicket(id: string) {
     queryFn: () => fetchToolTicket(id),
     enabled: !!id,
     staleTime: 30 * 1000, // 30 seconds
-    retry: (failureCount, error) => {
-      if (error.message.includes('Authentication required') || error.message.includes('401')) {
-        return false;
-      }
-      return failureCount < 3;
-    },
+    retry: retryAdminQuery,
   });
 }
 
@@ -100,10 +90,11 @@ export function useRejectTicket() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (ticketId: string) => rejectTicket(ticketId),
-    onSuccess: (data, ticketId) => {
+    mutationFn: ({ ticketId, reason }: { ticketId: string; reason: string }) =>
+      rejectTicket(ticketId, reason),
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["admin", "tool-tickets"] });
-      queryClient.invalidateQueries({ queryKey: ["admin", "tool-ticket", ticketId] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "tool-ticket", variables.ticketId] });
     },
   });
 }

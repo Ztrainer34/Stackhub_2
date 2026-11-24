@@ -1,0 +1,166 @@
+# End-to-end tests: the full stack on one runner, Playwright in Docker, an
+# Allure report at the end. See frontend/e2e/README.md.
+#
+# Everything runs against a throwaway local Supabase that this job creates, so
+# the job needs no secrets and never touches the hosted database.
+name: E2E
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 3.1.0
+
+      # Database, Auth and the Mailpit mail catcher, in Docker. Migrations in
+      # supabase/migrations apply on start. Services the tests never use are
+      # skipped to save a few minutes.
+      - name: Start Supabase
+        run: supabase start -x studio,realtime,edge-runtime,logflare,vector,imgproxy,postgres-meta,supavisor
+
+      - name: Export local Supabase settings
+        run: |
+          supabase status -o env > "$RUNNER_TEMP/supabase.env"
+          set -a; . "$RUNNER_TEMP/supabase.env"; set +a
+          for v in API_URL ANON_KEY DB_URL JWT_SECRET; do
+            if [ -z "${!v:-}" ]; then echo "::error::supabase status did not print $v"; exit 1; fi
+          done
+          {
+            echo "DB_CONNECTION=$DB_URL"
+            echo "JWT_SECRET=$JWT_SECRET"
+            echo "SUPABASE_PROJECT_REF=local"
+            echo "S3_ENDPOINT=$API_URL/storage/v1/s3"
+            echo "S3_REGION=local"
+            echo "S3_ACCESS_KEY=${S3_PROTOCOL_ACCESS_KEY_ID:-local}"
+            echo "S3_SECRET_ACCESS_KEY=${S3_PROTOCOL_ACCESS_KEY_SECRET:-local}"
+            echo "S3_BUCKET_NAME=images"
+            echo "RESEND_API_KEY=re_dummy_value_not_used_locally"
+            echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY"
+            echo "NEXT_PUBLIC_API_URL=http://localhost:8080"
+            echo "MAILPIT_URL=${MAILPIT_URL:-http://127.0.0.1:54324}"
+          } >> "$GITHUB_ENV"
+
+      - name: Start the API
+        working-directory: backend
+        run: |
+          go build -o "$RUNNER_TEMP/server" ./cmd/server
+          nohup "$RUNNER_TEMP/server" > "$RUNNER_TEMP/backend.log" 2>&1 &
+          # Any HTTP answer (401 without a token) means it is up.
+          curl -s -o /dev/null --retry 30 --retry-connrefused --retry-delay 1 http://localhost:8080/me
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      # `next dev`, not `next start`: app/login/actions.tsx points magic links at
+      # localhost:3000 only when NODE_ENV is development. A production build
+      # sends them to stackhub.me, and login cannot complete locally.
+      - name: Start the website and compile the routes the tests visit
+        working-directory: frontend
+        run: |
+          nohup pnpm dev > "$RUNNER_TEMP/frontend.log" 2>&1 &
+          curl -s -o /dev/null --retry 60 --retry-connrefused --retry-delay 2 http://localhost:3000/login
+          for path in / /login /new "/auth/callback?code=warmup" /auth/auth-code-error /auth/logout; do
+            curl -s -o /dev/null --max-time 180 -w "%{http_code} $path\n" "http://localhost:3000$path"
+          done
+
+      # The official Playwright image carries the browsers and their system
+      # libraries, so the run is identical wherever it happens. Host networking
+      # lets it reach localhost:3000, which magic links redirect to.
+      - name: Run Playwright in Docker
+        working-directory: frontend
+        run: |
+          PW_VERSION=$(node -p "require('@playwright/test/package.json').version")
+          docker run --rm --network host --ipc host \
+            --user "$(id -u):$(id -g)" -e HOME=/tmp -e CI=true -e MAILPIT_URL \
+            -v "$PWD:/work" -w /work \
+            "mcr.microsoft.com/playwright:v${PW_VERSION}-noble" \
+            npx playwright test
+
+      - name: Build the Allure report
+        if: ${{ !cancelled() }}
+        working-directory: frontend
+        run: pnpm exec allure generate allure-results -o allure-report
+
+      - name: Upload the Allure report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report
+          path: frontend/allure-report
+          retention-days: 14
+
+      - name: Upload Playwright traces
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report
+          retention-days: 14
+
+      - name: Upload server logs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-logs
+          path: |
+            ${{ runner.temp }}/backend.log
+            ${{ runner.temp }}/frontend.log
+          retention-days: 7
+
+      # Publishing to GitHub Pages is opt-in: set the repository variable
+      # ALLURE_PAGES=true and choose "GitHub Actions" as the Pages source. The
+      # repo is public, so the report is too; it holds only throwaway test data.
+      - name: Package the report for GitHub Pages
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && vars.ALLURE_PAGES == 'true' }}
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/allure-report
+
+  publish-report:
+    needs: e2e
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && vars.ALLURE_PAGES == 'true' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

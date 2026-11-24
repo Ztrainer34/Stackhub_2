@@ -36,7 +36,11 @@ var updateRoutes = flag.Bool("update-routes", false, "rewrite testdata/routes.go
 //   - The middleware chain is what chi.Walk reports. It distinguishes optional
 //     from public routes, but it UNDER-REPORTS for sub-routers mounted with
 //     r.Route(...): the enclosing group's auth is baked into the mount handler,
-//     so /admin/* lists no auth middleware even though it has it.
+//     so such a route would list no auth middleware even though it has it.
+//     That is why the /admin routes are registered flat in their own group:
+//     their chain, ending in RequireAdmin, is fully visible here.
+//     admin_routes_test.go checks that, and sends a signed non-admin token
+//     through the real router to measure the 403.
 //   - "anon" is measured, not read: an anonymous request is sent through the real
 //     router, and a 401 means the route refuses it. That is ground truth for
 //     whether a route requires a signed-in user, mounted or not.

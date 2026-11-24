@@ -12,6 +12,12 @@
 
 # testing
 /coverage
+# Playwright and Allure output (e2e/), regenerated every run
+/test-results/
+/playwright-report/
+/blob-report/
+/allure-results/
+/allure-report/
 
 # next.js
 /.next/

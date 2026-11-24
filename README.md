@@ -191,10 +191,11 @@ The project uses a monorepo structure with separate frontend and backend applica
 
 - **Authentication**: JWT tokens with secure HTTP-only cookies
 - **Authorization**: Ownership checks per resource (only an author may edit
-  their post; only a tool's owner may edit its page). There is **no admin
-  role**: the `/admin` tool-ticket pages are a UI convention open to any
-  signed-in user, so no privileged action belongs behind them. Anything
-  privileged runs out of band via a service-role script in `frontend/scripts/`.
+  their post; only a tool's owner may edit its page). The `/admin` tool-ticket
+  pages and API routes require the **admin role** (the `admins` table, enforced
+  in the backend by `RequireAdmin`). Admins are granted only out of band with
+  `frontend/scripts/grant-admin.mjs`; no HTTP endpoint hands out the role.
+  Other privileged work also runs via a service-role script in `frontend/scripts/`.
 - **Input Validation**: Zod schemas for type safety
 - **SQL Injection Prevention**: SQLC parameterized queries
 - **CORS Configuration**: Restricted cross-origin access
