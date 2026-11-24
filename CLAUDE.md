@@ -179,6 +179,10 @@ has at most 3 subcategories (`maxToolCategories`), ordered by
   migration must be applied before the backend that reads it.
 - The ranking categories come from the database (`/homepage/top-categories`), not
   a hard-coded tree. Pure ranking logic is `frontend/lib/rankings/ranking.ts`.
+- Their look (off-white, Inter + Space Grotesk, blue `brand`) is scoped in
+  `globals.css`: `.public-theme` themes an element, `.public-page` inside a page
+  themes it whole. The signed-in app keeps the default tokens, so use `brand`,
+  `ink-2` and `line-soft` only inside that scope (they are undefined outside it).
 - `SHOW_STACKS_LINKS` (`lib/home/config.ts`) is false until a `/stacks` page
   exists: it hides the "Stacks" nav link and "Explore stacks" button and turns the
   rankings' "in stacks" numbers and "+N" into plain text.

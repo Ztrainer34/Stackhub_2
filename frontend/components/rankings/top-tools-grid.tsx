@@ -12,14 +12,14 @@ export function TopToolsGrid({ title, intro, groups }: Props) {
   if (groups.length === 0) return null;
   return (
     <section className="mt-14">
-      <h2 className="text-2xl font-bold">{title}</h2>
+      <h2 className="font-heading text-[28px] font-bold leading-[1.2] tracking-[-0.02em]">{title}</h2>
       <p className="mt-1.5 text-muted-foreground">
         {intro} <span className="md:hidden">Swipe to see more.</span>
       </p>
       {/* Phone: one swipe row (cards at 84% width). Desktop: grid. */}
       <div className="-mx-4 mt-5 flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-px-4 px-4 pb-2 md:mx-0 md:grid md:grid-cols-[repeat(auto-fill,minmax(300px,1fr))] md:gap-5 md:overflow-visible md:px-0 md:pb-0">
         {groups.map((g) => (
-          <div key={g.href} className="flex w-[84%] shrink-0 snap-start flex-col rounded-lg border bg-card p-5 shadow-sm md:w-auto">
+          <div key={g.href} className="flex w-[84%] shrink-0 snap-start flex-col rounded-2xl border bg-card p-5 md:w-auto">
             <h3 className="mb-2 text-lg font-bold">
               <Link href={g.href} className="hover:underline">
                 {g.name}

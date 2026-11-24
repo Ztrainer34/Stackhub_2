@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { UserAvatar } from "@/components/user-avatar";
 import { SHOW_STACKS_LINKS } from "@/lib/home/config";
+import { pastelFor, personInitials } from "@/lib/monogram";
 import { ROUTES } from "@/lib/rankings/config";
 import type { UsedByUser } from "@/lib/rankings/types";
 
@@ -18,11 +19,13 @@ export function UsedBy({ users, totalStacks, toolName, toolId }: Props) {
           href={ROUTES.profile(u.username)}
           title={name(u)}
           aria-label={`Open ${name(u)}'s profile`}
-          className={`inline-flex shrink-0 rounded-full border-2 border-background ${i > 0 ? "-ml-2" : ""}`}
+          className={`inline-flex shrink-0 rounded-full border-2 border-card ${i > 0 ? "-ml-2" : ""}`}
         >
           <UserAvatar
             user={{ username: u.username, avatar_url: u.avatar_url }}
             className="h-8 w-8 text-[11px] font-semibold"
+            initials={personInitials(name(u))}
+            fallbackColor={pastelFor(u.username)}
           />
         </Link>
       ))}

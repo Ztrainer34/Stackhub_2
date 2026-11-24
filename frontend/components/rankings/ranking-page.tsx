@@ -37,7 +37,8 @@ function jsonLdString(data: unknown): string {
 
 /**
  * Shared layout of the 3 ranking pages. The site header, footer and <main> come
- * from the app layout.
+ * from the app layout. `public-page` gives the whole page, footer included, the
+ * public look (globals.css).
  */
 export function RankingPage(p: Props) {
   const showCta = showStackBanner(p.viewer);
@@ -57,7 +58,8 @@ export function RankingPage(p: Props) {
   };
 
   return (
-    <div className="mx-auto max-w-[1200px] px-4 pb-20 pt-8 sm:px-8">
+    <div className="public-page public-theme bg-background">
+    <div className="mx-auto max-w-[1280px] px-4 pb-20 pt-8 min-[901px]:px-10">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdString(jsonLd) }} />
 
       <nav aria-label="Breadcrumb" className="flex flex-wrap gap-2 text-sm text-muted-foreground">
@@ -77,7 +79,7 @@ export function RankingPage(p: Props) {
         ))}
       </nav>
 
-      <h1 className="mt-4 text-[28px] font-bold leading-tight tracking-tight md:text-[44px]">{p.title}</h1>
+      <h1 className="mt-4 font-heading text-[32px] font-bold leading-[1.05] tracking-[-0.03em] md:text-[48px]">{p.title}</h1>
       <p className="mt-2.5 text-muted-foreground">
         {p.intro} Based on {p.result.totalStacks.toLocaleString("en-US")} active stacks · Updated{" "}
         {formatDate(p.result.updatedAt)}
@@ -94,7 +96,7 @@ export function RankingPage(p: Props) {
             className={
               c.current
                 ? "shrink-0 whitespace-nowrap rounded-full border border-primary bg-primary px-3.5 py-2.5 text-sm font-semibold text-primary-foreground"
-                : "shrink-0 whitespace-nowrap rounded-full border px-3.5 py-2.5 text-sm text-muted-foreground hover:text-foreground"
+                : "shrink-0 whitespace-nowrap rounded-full border bg-card px-3.5 py-2.5 text-sm text-ink-2 hover:border-foreground"
             }
           >
             {c.name}
@@ -108,16 +110,17 @@ export function RankingPage(p: Props) {
       {p.top && <TopToolsGrid title={p.top.title} intro={p.top.intro} groups={p.top.groups} />}
 
       {showCta && (
-        <section className="mt-12 flex flex-col gap-4 rounded-lg bg-muted/50 p-6 md:flex-row md:flex-wrap md:items-center md:justify-between md:p-7">
-          <h2 className="text-xl font-bold">Every stack counts. Is yours there?</h2>
+        <section className="mt-12 flex flex-col gap-4 rounded-2xl border bg-card p-6 md:flex-row md:flex-wrap md:items-center md:justify-between md:p-7">
+          <h2 className="font-heading text-xl font-bold tracking-[-0.02em]">Every stack counts. Is yours there?</h2>
           <Link
             href={stackBannerHref(p.viewer)}
-            className="rounded-lg bg-primary px-5 py-3.5 text-center text-[15px] font-semibold text-primary-foreground hover:bg-primary/90"
+            className="rounded-[10px] bg-primary px-5 py-3.5 text-center text-sm font-semibold text-primary-foreground hover:bg-primary/90"
           >
             Add your stack
           </Link>
         </section>
       )}
+    </div>
     </div>
   );
 }

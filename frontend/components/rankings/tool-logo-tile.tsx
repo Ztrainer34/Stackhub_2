@@ -1,15 +1,27 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { pastelFor, toolMonogram } from "@/lib/monogram";
+import { cn } from "@/lib/utils";
 
-type Props = { name: string; logoUrl: string | null; size?: "sm" | "md" };
+const SIZES = {
+  /** A chip under the search bar. */
+  chip: "h-6 w-6 rounded-full text-[10.5px]",
+  /** A playbook card. */
+  post: "h-7 w-7 rounded-full text-[11px]",
+  /** Stack cards and top 3 rows. */
+  sm: "h-[34px] w-[34px] rounded-[9px] text-xs",
+  /** The rankings table. */
+  md: "h-9 w-9 rounded-[9px] text-[13px]",
+} as const;
+
+type Props = { name: string; logoUrl: string | null; size?: keyof typeof SIZES };
 
 /**
- * Tool logo in a small white tile. Falls back to the first letter when there is
- * no logo, or when the logo does not load.
+ * Tool logo on a small white tile. Without a logo, or when it does not load, two
+ * letters on a pastel that is always the same for the same tool.
  */
 export function ToolLogoTile({ name, logoUrl, size = "md" }: Props) {
-  const box = size === "sm" ? "h-8 w-8 text-xs" : "h-9 w-9 text-sm";
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const imageRef = useRef<HTMLImageElement>(null);
 
@@ -22,6 +34,7 @@ export function ToolLogoTile({ name, logoUrl, size = "md" }: Props) {
   }, [logoUrl]);
 
   if (logoUrl && failedUrl !== logoUrl) {
+    const square = size === "sm" || size === "md";
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
@@ -29,7 +42,7 @@ export function ToolLogoTile({ name, logoUrl, size = "md" }: Props) {
         src={logoUrl}
         alt=""
         aria-hidden="true"
-        className={`${box} shrink-0 rounded-md border bg-white object-contain p-1`}
+        className={cn(SIZES[size], "shrink-0 bg-white object-contain", square && "border p-1")}
         loading="lazy"
         onError={() => setFailedUrl(logoUrl)}
       />
@@ -38,9 +51,10 @@ export function ToolLogoTile({ name, logoUrl, size = "md" }: Props) {
   return (
     <span
       aria-hidden="true"
-      className={`${box} inline-flex shrink-0 items-center justify-center rounded-md bg-muted font-semibold text-foreground`}
+      className={cn(SIZES[size], "inline-flex shrink-0 items-center justify-center font-bold text-[#15161A]")}
+      style={{ backgroundColor: pastelFor(name) }}
     >
-      {name.charAt(0).toUpperCase()}
+      {toolMonogram(name)}
     </span>
   );
 }

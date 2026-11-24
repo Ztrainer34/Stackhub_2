@@ -62,6 +62,66 @@
   }
 }
 
+/* The public look: the logged-out homepage, the rankings and the logged-out
+   header. Scoped, so the signed-in app keeps its own colours and fonts.
+   - .public-theme on an element themes that element.
+   - A page that contains .public-page is themed whole, footer and dialogs
+     included (they render outside the page's own element). */
+.public-theme,
+body:has(.public-page) {
+  --background: 60 14.3% 95.9%;
+  --foreground: 228 10.6% 9.2%;
+  --card: 0 0% 100%;
+  --card-foreground: 228 10.6% 9.2%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 228 10.6% 9.2%;
+  --primary: 228 10.6% 9.2%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 60 11.8% 93.3%;
+  --secondary-foreground: 223 10.1% 27.1%;
+  --muted: 60 11.8% 93.3%;
+  --muted-foreground: 225 8.1% 38.8%;
+  --accent: 60 11.8% 93.3%;
+  --accent-foreground: 228 10.6% 9.2%;
+  --border: 60 8.2% 88%;
+  --input: 60 8.2% 88%;
+  --ring: 228.2 86.5% 56.27%;
+  /* Only the public look has these. */
+  --brand: 228.2 86.5% 56.27%;
+  --ink-2: 223 10.1% 27.1%;
+  --line-soft: 60 10.5% 92.5%;
+  font-family: var(--font-inter), system-ui, sans-serif;
+  color: hsl(var(--foreground));
+}
+
+body:has(.public-page) {
+  background: hsl(var(--background));
+}
+
+/* Tailwind's default border is a cool grey. :where() so any border-* class wins. */
+@layer base {
+  :where(.public-theme, .public-theme *),
+  :where(body:has(.public-page)) * {
+    border-color: hsl(var(--border));
+  }
+}
+
+/* Lines the footer up with the page above it. */
+body:has(.public-page) [data-site-footer] > div {
+  max-width: 1280px;
+  padding: 28px 16px;
+  font-size: 13px;
+}
+body:has(.public-page) [data-site-footer] a {
+  color: hsl(var(--ink-2));
+}
+@media (min-width: 901px) {
+  body:has(.public-page) [data-site-footer] > div {
+    padding-left: 40px;
+    padding-right: 40px;
+  }
+}
+
 /* Sonner toast styling for better contrast */
 @layer components {
   [data-sonner-toast] [data-description] {

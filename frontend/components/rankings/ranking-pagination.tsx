@@ -23,7 +23,7 @@ function pageList(cur: number, total: number, narrow: boolean): (number | "gap")
 }
 
 const box =
-  "inline-flex h-11 min-w-11 items-center justify-center rounded-lg border px-2.5 text-sm font-medium";
+  "inline-flex h-11 min-w-11 items-center justify-center rounded-[10px] border bg-card px-2.5 text-sm font-medium";
 
 function PageNav({ cur, total, href, narrow }: { cur: number; total: number; href: (p: number) => string; narrow: boolean }) {
   const label = (text: string) => (narrow ? <span aria-hidden="true">{text.startsWith("←") ? "‹" : "›"}</span> : text);
