@@ -106,6 +106,64 @@ body:has(.public-page) {
   }
 }
 
+/* The homepage's tool chips: two copies of one list, both sliding right by one
+   list width. Each copy is at least as wide as the box, so it never shows a gap.
+   clip, not hidden: focusing a chip must not scroll the box. */
+.chip-marquee {
+  display: flex;
+  overflow-x: clip;
+  mask-image: linear-gradient(to right, transparent, #000 48px, #000 calc(100% - 48px), transparent);
+}
+.chip-marquee > ul {
+  display: flex;
+  flex-shrink: 0;
+  min-width: 100%;
+  justify-content: space-around;
+  gap: 8px;
+  padding-right: 8px;
+  animation: chip-marquee 32s linear infinite;
+}
+.chip-marquee:hover > ul {
+  animation-play-state: paused;
+}
+@keyframes chip-marquee {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+/* A still, wrapped list with every chip in view. */
+@media (prefers-reduced-motion: reduce) {
+  .chip-marquee {
+    mask-image: none;
+  }
+  .chip-marquee > ul {
+    flex-shrink: 1;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding-right: 0;
+    animation: none;
+  }
+  .chip-marquee > ul[aria-hidden] {
+    display: none;
+  }
+}
+.chip-marquee:has(a:focus-visible) {
+  mask-image: none;
+}
+.chip-marquee:has(a:focus-visible) > ul {
+  flex-shrink: 1;
+  flex-wrap: wrap;
+  justify-content: center;
+  padding-right: 0;
+  animation: none;
+}
+.chip-marquee:has(a:focus-visible) > ul[aria-hidden] {
+  display: none;
+}
+
 /* Lines the footer up with the page above it. */
 body:has(.public-page) [data-site-footer] > div {
   max-width: 1280px;

@@ -1,14 +1,12 @@
-import Link from "next/link";
 import { Search } from "lucide-react";
 
-import { ToolLogoTile } from "@/components/rankings/tool-logo-tile";
 import { HOME_ROUTES } from "@/lib/home/config";
 import type { ChipTool } from "@/lib/home/types";
+import { ToolChips } from "./tool-chips";
 
 /**
  * Hero: headline and subline, a search form (plain GET to /search, works without
- * JS) and a row of tool chips. Chips wrap on desktop and become one swipeable
- * row on phones.
+ * JS) and the moving row of tool chips.
  */
 export function HomeHero({ chips }: { chips: ChipTool[] }) {
   return (
@@ -48,24 +46,7 @@ export function HomeHero({ chips }: { chips: ChipTool[] }) {
           </div>
         </form>
 
-        {chips.length > 0 && (
-          <ul
-            aria-label="Popular tools"
-            className="-mx-4 mt-2.5 flex w-[calc(100%+2rem)] max-w-none gap-2 overflow-x-auto px-4 pb-1 min-[641px]:mx-0 min-[641px]:w-full min-[641px]:max-w-[760px] min-[641px]:flex-wrap min-[641px]:justify-center min-[641px]:overflow-visible min-[641px]:px-0 min-[641px]:pb-0"
-          >
-            {chips.map((c) => (
-              <li key={c.slug} className="shrink-0">
-                <Link
-                  href={HOME_ROUTES.tool(c.slug)}
-                  className="inline-flex min-h-9 items-center gap-2 rounded-full border bg-card pl-1.5 pr-3.5 text-[13px] font-medium transition-colors hover:border-foreground"
-                >
-                  <ToolLogoTile name={c.name} logoUrl={c.logoUrl} size="chip" />
-                  {c.name}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
+        <ToolChips chips={chips} />
       </div>
     </section>
   );
