@@ -150,6 +150,22 @@ keep pointing at hidden tools.
   Approving a ticket with a hidden tool links it but leaves it hidden; resolve-new
   refuses a name whose URL slug is already taken.
 
+## Tool categories
+
+Two levels: a parent (`categories.parent_id` NULL) and its subcategories. A tool
+has at most 3 subcategories (`maxToolCategories`), ordered by
+`tool_categories.position`; 0 is the main one and shows first.
+
+- **Old categories are retired, never deleted** (`retired_at`): hidden tools and
+  old tickets point at them. `replaced_by` is where their page redirects (NULL =
+  `/tools`). Anything offering categories to pick must filter `retired_at IS NULL`
+  and leave parents out, as `AutocompleteCategory` does.
+- Listing by a parent's slug includes its subcategories' tools.
+- The structure and each tool's categories come from
+  `frontend/scripts/import-categories.mjs` (dry run, `APPLY=1`, `UNDO=<backup>`).
+- Onboarding matches category **names** by keyword (`focusAreaKeywords`): a renamed
+  subcategory must still pass `TestFocusAreaKeywords`.
+
 ## Frontend
 
 - Pre-flight before calling work done: `npx tsc --noEmit`, `npx next lint`,
@@ -185,6 +201,16 @@ cd frontend && npm run dev | npm run build | npm run lint
 
 `/ship` (`.claude/commands/ship.md`) runs the code → verify → fix loop, sized to
 the change (Small / Normal / Feature).
+
+## Git: never push on your own
+
+**Never run `git push` (any branch, any remote) unless the user asks for it in
+that message.** Merging, committing and fast-forwarding locally are fine when
+asked; publishing is a separate step the user takes or explicitly requests.
+Pushing `main` triggers a Vercel production build, and a push cannot be quietly
+taken back. "Make everything the same version" or "do it" is not permission to
+push: do the local work, verify, report, then ask. Approval to push once does not
+carry over to the next push.
 
 ## Code style
 

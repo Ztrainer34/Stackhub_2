@@ -26,7 +26,11 @@ async function LandingPage() {
       <section className="relative flex-1 flex items-center justify-center py-16 md:py-24">
         <div className="container px-4 md:px-6">
           <div className="flex flex-col items-center text-center space-y-8 max-w-4xl mx-auto">
-            <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight">
+            {/* e2e/login.spec.ts finds this by data-testid, so the headline copy can change freely. Keep the attribute. */}
+            <h1
+              data-testid="landing-hero"
+              className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight"
+            >
               Find the GTM tools and playbooks you need
             </h1>
 

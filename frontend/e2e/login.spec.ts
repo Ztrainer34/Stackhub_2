@@ -11,8 +11,9 @@ import { uniqueEmail, waitForMagicLink } from "./helpers/mailpit";
 const loginButton = (page: Page) =>
   page.getByRole("button", { name: "Login", exact: true });
 
-const landingHero = (page: Page) =>
-  page.getByRole("heading", { name: "Discover the best GTM tools and playbooks" });
+// A test id, not the headline words: the copy gets reworded often, and what
+// these tests care about is that the logged-out landing page rendered.
+const landingHero = (page: Page) => page.getByTestId("landing-hero");
 
 /** Requests a magic link from /login and returns the link from the email. */
 async function requestMagicLink(page: Page, email: string): Promise<string> {

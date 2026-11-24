@@ -118,8 +118,15 @@ func (q *Queries) AddToWatchlist(ctx context.Context, arg AddToWatchlistParams) 
 }
 
 const addToolCategories = `-- name: AddToolCategories :exec
-INSERT INTO tool_categories (tool_id, category_id)
-SELECT $1::uuid, unnest($2::int[])
+INSERT INTO tool_categories (tool_id, category_id, position)
+SELECT
+  $1::uuid,
+  COALESCE(c.replaced_by, u.id),
+  array_position($2::int[], u.id) - 1
+FROM (SELECT unnest($2::int[]) AS id) u
+LEFT JOIN categories c ON c.id = u.id
+WHERE c.retired_at IS NULL OR c.replaced_by IS NOT NULL
+ORDER BY 3
 ON CONFLICT DO NOTHING
 `
 
@@ -128,6 +135,8 @@ type AddToolCategoriesParams struct {
 	CategoryIds []int32   `json:"category_ids"`
 }
 
+// Keeps the order given: the first id is the tool's main category. A retired
+// category becomes its replacement, or is dropped when it has none.
 func (q *Queries) AddToolCategories(ctx context.Context, arg AddToolCategoriesParams) error {
 	_, err := q.db.Exec(ctx, addToolCategories, arg.ToolID, arg.CategoryIds)
 	return err
@@ -139,11 +148,15 @@ type AddToolTicketCategoriesParams struct {
 }
 
 const assignCategoryToTool = `-- name: AssignCategoryToTool :exec
-INSERT INTO tool_categories (
-  tool_id, category_id
-) VALUES (
-  $1, $2
-)
+INSERT INTO tool_categories (tool_id, category_id, position)
+SELECT
+  $1::uuid,
+  COALESCE(c.replaced_by, $2::int),
+  (SELECT count(*) FROM tool_categories tc WHERE tc.tool_id = $1::uuid)::int
+FROM (SELECT $2::int AS id) u
+LEFT JOIN categories c ON c.id = u.id
+WHERE c.retired_at IS NULL OR c.replaced_by IS NOT NULL
+ON CONFLICT DO NOTHING
 `
 
 type AssignCategoryToToolParams struct {
@@ -151,6 +164,9 @@ type AssignCategoryToToolParams struct {
 	CategoryID int32     `json:"category_id"`
 }
 
+// Adds one category after the tool's existing ones. A suggestion made before the
+// category restructure may name a retired category: it becomes its replacement,
+// or is dropped when it has none. An unknown id still fails on the foreign key.
 func (q *Queries) AssignCategoryToTool(ctx context.Context, arg AssignCategoryToToolParams) error {
 	_, err := q.db.Exec(ctx, assignCategoryToTool, arg.ToolID, arg.CategoryID)
 	return err
@@ -165,7 +181,9 @@ SELECT
 FROM
   categories
 WHERE
-  name % $1 OR name ILIKE $1 || '%'
+  (name % $1 OR name ILIKE $1 || '%')
+  AND retired_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM categories child WHERE child.parent_id = categories.id)
 ORDER BY
   rank DESC, name ASC
 LIMIT $2
@@ -183,6 +201,7 @@ type AutocompleteCategoryRow struct {
 	Rank interface{} `json:"rank"`
 }
 
+// Only categories a tool can be put in: not retired, and not a parent.
 func (q *Queries) AutocompleteCategory(ctx context.Context, arg AutocompleteCategoryParams) ([]AutocompleteCategoryRow, error) {
 	rows, err := q.db.Query(ctx, autocompleteCategory, arg.Similarity, arg.Limit)
 	if err != nil {
@@ -305,13 +324,21 @@ INSERT INTO categories (
 )
 ON CONFLICT(name) DO UPDATE
 SET name = categories.name
-RETURNING id, name, slug
+RETURNING id, name, slug, parent_id, sort_order, retired_at, replaced_by
 `
 
 func (q *Queries) CreateCategoryIfNotExist(ctx context.Context, name string) (Category, error) {
 	row := q.db.QueryRow(ctx, createCategoryIfNotExist, name)
 	var i Category
-	err := row.Scan(&i.ID, &i.Name, &i.Slug)
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.ParentID,
+		&i.SortOrder,
+		&i.RetiredAt,
+		&i.ReplacedBy,
+	)
 	return i, err
 }
 
@@ -664,15 +691,41 @@ func (q *Queries) FollowUser(ctx context.Context, arg FollowUserParams) (int64, 
 }
 
 const getCategoryBySlug = `-- name: GetCategoryBySlug :one
-SELECT id, name, slug
-FROM categories
-WHERE slug = $1
+SELECT
+  c.id, c.name, c.slug,
+  COALESCE(p.name, '') AS parent_name,
+  COALESCE(p.slug, '') AS parent_slug,
+  (c.retired_at IS NOT NULL)::bool AS is_retired,
+  COALESCE(n.slug, '') AS replaced_by_slug
+FROM categories c
+LEFT JOIN categories p ON p.id = c.parent_id
+LEFT JOIN categories n ON n.id = c.replaced_by
+WHERE c.slug = $1
 `
 
-func (q *Queries) GetCategoryBySlug(ctx context.Context, slug string) (Category, error) {
+type GetCategoryBySlugRow struct {
+	ID             int32  `json:"id"`
+	Name           string `json:"name"`
+	Slug           string `json:"slug"`
+	ParentName     string `json:"parent_name"`
+	ParentSlug     string `json:"parent_slug"`
+	IsRetired      bool   `json:"is_retired"`
+	ReplacedBySlug string `json:"replaced_by_slug"`
+}
+
+// is_retired with an empty replaced_by_slug means the category went nowhere.
+func (q *Queries) GetCategoryBySlug(ctx context.Context, slug string) (GetCategoryBySlugRow, error) {
 	row := q.db.QueryRow(ctx, getCategoryBySlug, slug)
-	var i Category
-	err := row.Scan(&i.ID, &i.Name, &i.Slug)
+	var i GetCategoryBySlugRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.ParentName,
+		&i.ParentSlug,
+		&i.IsRetired,
+		&i.ReplacedBySlug,
+	)
 	return i, err
 }
 
@@ -1467,11 +1520,12 @@ SELECT
 FROM tools_with_details twd
 WHERE EXISTS (
   SELECT 1 
-  FROM tool_categories tc2 
-  JOIN categories c2 ON tc2.category_id = c2.id 
-  WHERE tc2.tool_id = twd.id AND c2.slug = $1
+  FROM tool_categories tc2
+  JOIN categories c2 ON tc2.category_id = c2.id
+  LEFT JOIN categories p2 ON p2.id = c2.parent_id
+  WHERE tc2.tool_id = twd.id AND (c2.slug = $1 OR p2.slug = $1)
 )
-  AND NOT EXISTS (SELECT 1 FROM tools th WHERE th.id = twd.id AND th.hidden_at IS NOT NULL)
+AND NOT EXISTS (SELECT 1 FROM tools th WHERE th.id = twd.id AND th.hidden_at IS NOT NULL)
 ORDER BY name
 LIMIT $2 OFFSET $3
 `
@@ -1613,15 +1667,23 @@ SELECT
   c.id,
   c.name,
   c.slug,
-  COUNT(tc.tool_id) AS tool_count
+  COUNT(tc.tool_id) AS tool_count,
+  c.sort_order,
+  COALESCE(p.name, '') AS parent_name,
+  COALESCE(p.slug, '') AS parent_slug,
+  COALESCE(p.sort_order, 0) AS parent_sort_order
 FROM
   categories c
 LEFT JOIN
+  categories p ON p.id = c.parent_id
+LEFT JOIN
   tool_categories tc ON c.id = tc.category_id
     AND EXISTS (SELECT 1 FROM tools t WHERE t.id = tc.tool_id AND t.hidden_at IS NULL)
+WHERE
+  c.retired_at IS NULL
 GROUP BY
-  c.id, c.name, c.slug
-HAVING 
+  c.id, c.name, c.slug, c.sort_order, p.name, p.slug, p.sort_order
+HAVING
   COUNT(tc.tool_id) > 0
 ORDER BY 
   tool_count DESC, c.name ASC
@@ -1629,13 +1691,18 @@ LIMIT $1
 `
 
 type GetTopCategoriesRow struct {
-	ID        int32  `json:"id"`
-	Name      string `json:"name"`
-	Slug      string `json:"slug"`
-	ToolCount int64  `json:"tool_count"`
+	ID              int32  `json:"id"`
+	Name            string `json:"name"`
+	Slug            string `json:"slug"`
+	ToolCount       int64  `json:"tool_count"`
+	SortOrder       int32  `json:"sort_order"`
+	ParentName      string `json:"parent_name"`
+	ParentSlug      string `json:"parent_slug"`
+	ParentSortOrder int32  `json:"parent_sort_order"`
 }
 
 // Counts visible tools only, so a category whose tools are all hidden drops out.
+// parent_* is empty for a category that has no parent.
 func (q *Queries) GetTopCategories(ctx context.Context, limit int32) ([]GetTopCategoriesRow, error) {
 	rows, err := q.db.Query(ctx, getTopCategories, limit)
 	if err != nil {
@@ -1650,6 +1717,10 @@ func (q *Queries) GetTopCategories(ctx context.Context, limit int32) ([]GetTopCa
 			&i.Name,
 			&i.Slug,
 			&i.ToolCount,
+			&i.SortOrder,
+			&i.ParentName,
+			&i.ParentSlug,
+			&i.ParentSortOrder,
 		); err != nil {
 			return nil, err
 		}
@@ -3357,9 +3428,19 @@ WHERE NOT EXISTS (SELECT 1 FROM tools th WHERE th.id = twd.id AND th.hidden_at I
     OR EXISTS (
       SELECT 1 FROM tool_categories tc
       JOIN categories c ON tc.category_id = c.id
-      WHERE tc.tool_id = twd.id AND c.slug = $4::text
+      LEFT JOIN categories p ON p.id = c.parent_id
+      WHERE tc.tool_id = twd.id
+        AND (
+          c.slug = $4::text
+          OR p.slug = $4::text
+          -- a link to an old category keeps working
+          OR EXISTS (
+            SELECT 1 FROM categories o
+            WHERE o.slug = $4::text AND o.retired_at IS NOT NULL AND o.replaced_by = c.id
+          )
+        )
     )
-  )
+)
 ORDER BY
   CASE WHEN $5::text = 'newest' THEN twd.created_at END DESC,
   CASE WHEN $5::text = 'updated' THEN twd.updated_at END DESC,

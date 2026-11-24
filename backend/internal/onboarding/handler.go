@@ -83,16 +83,17 @@ var onboardingToolNames = []string{
 }
 
 // focusAreaKeywords maps each curated focus area to loose patterns matched
-// against the (very granular, ~1700-strong) category names in the catalog.
+// against category names. They cover both the two-level categories (68
+// subcategories, see TestFocusAreaKeywords) and the older flat ones.
 // Deliberately broad: the goal is "show me tools in roughly this space", not a
 // precise taxonomy.
 var focusAreaKeywords = map[string][]string{
 	"Website Visitor De-Anonymization":        {"visitor", "deanonym", "de-anonym", "website intelligence"},
 	"Intent Signal Monitoring":                {"intent", "buyer signal", "signal"},
-	"Prospecting Databases & TAM Sourcing":    {"prospect", "database", "data provider", "lead intelligence", "lead generation"},
+	"Prospecting Databases & TAM Sourcing":    {"prospecting", "contact data", "lead research", "firmographics", "data provider", "lead intelligence", "lead generation"},
 	"Social & Community Intelligence":         {"social", "community"},
-	"Technographic & Job Intelligence":        {"technograph", "job", "hiring", "recruit"},
-	"Waterfall Contact Enrichment":            {"enrich", "contact data", "email finder", "phone"},
+	"Technographic & Job Intelligence":        {"technograph", "job change", "hiring"},
+	"Waterfall Contact Enrichment":            {"enrich", "contact data", "email finder", "phone verif"},
 	"Email Verification & Scrubbing":          {"email verif", "email validation", "verification"},
 	"Web Scraping & Custom Data Extraction":   {"scrap", "crawl", "extraction", "web data"},
 	"Account-Based Marketing (ABM) Platforms": {"account-based", "abm", "account research", "account intelligence"},
@@ -100,17 +101,17 @@ var focusAreaKeywords = map[string][]string{
 	"Cold Email Sequencing":                   {"cold email", "email outreach", "sequenc", "email campaign"},
 	"Email Deliverability & Infrastructure":   {"deliverab", "inbox", "warmup", "warm-up", "smtp"},
 	"LinkedIn Outreach Automation":            {"linkedin"},
-	"Multichannel Sales Engagement":           {"sales engagement", "multichannel", "multi-channel", "outreach"},
-	"Personalized Video Outreach":             {"video", "personaliz"},
+	"Multichannel Sales Engagement":           {"sales engagement", "multichannel", "multi-channel", "outreach", "sequencers", "linkedin automation"},
+	"Personalized Video Outreach":             {"video & direct mail", "video prospect", "video email", "personaliz"},
 	"AI Sales Copy Generators":                {"copywriting", "content writing", "copy generat"},
 	"AI-Powered CRMs":                         {"crm"},
 	"Inbound Lead Routing & Scheduling":       {"routing", "scheduling", "calendar", "appointment", "inbound"},
-	"RevOps & Data Warehousing":               {"revops", "revenue operations", "warehouse", "data ops", "etl"},
+	"RevOps & Data Warehousing":               {"revops", "revenue operations", "data hygiene", "data pipelines", "warehouse", "data ops", "etl tools", "reverse etl"},
 	"GTM Workflow Automation & Middleware":    {"workflow", "automation", "integration", "orchestrat"},
 	"Conversation Intelligence":               {"conversation", "call record", "call track", "revenue intelligence"},
-	"AI Sales Co-Pilots & Meeting Assistants": {"copilot", "co-pilot", "meeting", "assistant", "notetak", "notes"},
+	"AI Sales Co-Pilots & Meeting Assistants": {"copilot", "co-pilot", "meeting", "sales assistant", "notetak"},
 	"Digital Sales Rooms (DSR)":               {"sales room", "proposal", "enablement", "deal room"},
-	"Deal Intelligence & Risk Inspection":     {"deal", "pipeline", "risk"},
+	"Deal Intelligence & Risk Inspection":     {"deal", "revenue intelligence"},
 	"AI Revenue Forecasting":                  {"forecast", "revenue"},
 	"Product-Led Growth (PLG) & Product Data": {"product analytics", "product-led", "product led", "product data"},
 	"Customer Success & Churn Management":     {"customer success", "churn", "retention", "customer support"},

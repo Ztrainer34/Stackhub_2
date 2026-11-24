@@ -6,6 +6,8 @@ import { SupabaseClient } from "@supabase/supabase-js";
 
 export interface TopCategory extends Category {
   tool_count: number;
+  sort_order?: number;
+  parent_sort_order?: number;
 }
 
 export async function getRecommendedTopPosts(limit: number = 10, supabaseClient: SupabaseClient): Promise<Post[]> {

@@ -19,19 +19,19 @@ func TestValidateToolPageUpdate(t *testing.T) {
 		form UpdateToolPageRequest
 		msg  string
 	}{
-		{"thirteen categories", UpdateToolPageRequest{CategoryIDs: cats(13)}, "A tool can have at most 12 categories"},
+		{"four categories", UpdateToolPageRequest{CategoryIDs: cats(4)}, "A tool can have at most 3 categories"},
 		{"script logo", UpdateToolPageRequest{LogoURL: ptr("javascript:alert(1)")}, "Logo URL must be an http or https address"},
 		{"script website", UpdateToolPageRequest{Vendor: &ToolVendorInput{Website: "javascript:alert(1)"}}, "Website must be an http or https address"},
 		{"script linkedin", UpdateToolPageRequest{Vendor: &ToolVendorInput{LinkedinProfile: "data:text/html,x"}}, "LinkedIn profile must be an http or https address"},
-		{"categories are checked first", UpdateToolPageRequest{CategoryIDs: cats(13), LogoURL: ptr("javascript:x")}, "A tool can have at most 12 categories"},
+		{"categories are checked first", UpdateToolPageRequest{CategoryIDs: cats(4), LogoURL: ptr("javascript:x")}, "A tool can have at most 3 categories"},
 	}
 	for _, c := range rejected {
 		_, err := validateToolPageUpdate(c.form)
 		apperrtest.Want(t, c.name, err, apperr.KindInvalid, c.msg)
 	}
 
-	if _, err := validateToolPageUpdate(UpdateToolPageRequest{CategoryIDs: cats(12)}); err != nil {
-		t.Errorf("twelve categories rejected: %v", err)
+	if _, err := validateToolPageUpdate(UpdateToolPageRequest{CategoryIDs: cats(3)}); err != nil {
+		t.Errorf("three categories rejected: %v", err)
 	}
 	if _, err := validateToolPageUpdate(UpdateToolPageRequest{}); err != nil {
 		t.Errorf("an empty edit rejected: %v", err)

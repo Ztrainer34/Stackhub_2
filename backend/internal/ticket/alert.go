@@ -65,6 +65,7 @@ type AlertLoader func(ctx context.Context, ids []uuid.UUID) ([]NewToolAlert, err
 // production; tests shrink them.
 type AlerterConfig struct {
 	MinInterval         time.Duration // floor between sends
+	Burst               int           // sends per UTC day that need only MinInterval between them; the rest are spread
 	MaxPerDay           int           // sends per UTC day
 	MaxDeliveriesPerDay int           // recipient-deliveries per UTC day: a send costs Recipients
 	Recipients          int           // recipients per send, to cost a send
@@ -79,6 +80,11 @@ type AlerterConfig struct {
 func DefaultAlerterConfig() AlerterConfig {
 	return AlerterConfig{
 		MinInterval: 10 * time.Minute,
+		// The first few sends of a day only wait MinInterval, so two
+		// suggestions an hour apart are both announced promptly. Only after
+		// that is the rest of the allowance spread over what is left of the
+		// day, which is what stops one account using it all up early.
+		Burst: 3,
 		MaxPerDay:   24,
 		// The Resend plan is unknown. Each recipient of a send counts as a
 		// delivery, so this keeps a day's mail well under a 100/day free tier
@@ -116,6 +122,7 @@ type Alerter struct {
 	sendsToday      int
 	deliveriesToday int
 	lastSend        time.Time
+	heldNoted       bool // "held for spacing" already logged since the last send
 }
 
 // NewAlerter builds an Alerter. Zero values in cfg that would break it fall
@@ -197,6 +204,9 @@ func (a *Alerter) makeRoomFor(requester uuid.UUID) bool {
 // burst of tickets early in the day cannot use the whole allowance and leave
 // the evening unannounced. Caller holds mu and has checked a send is allowed.
 func (a *Alerter) minGap(now time.Time) time.Duration {
+	if a.sendsToday < a.cfg.Burst {
+		return a.cfg.MinInterval
+	}
 	sendsLeft := a.cfg.MaxPerDay - a.sendsToday
 	if byDeliveries := (a.cfg.MaxDeliveriesPerDay - a.deliveriesToday) / a.cfg.Recipients; byDeliveries < sendsLeft {
 		sendsLeft = byDeliveries
@@ -228,8 +238,16 @@ func (a *Alerter) take(now time.Time) (ids []uuid.UUID, overflow int, ok bool) {
 	if a.sendsToday >= a.cfg.MaxPerDay || a.deliveriesToday+a.cfg.Recipients > a.cfg.MaxDeliveriesPerDay {
 		return nil, 0, false
 	}
-	if !a.lastSend.IsZero() && now.Sub(a.lastSend) < a.minGap(now) {
-		return nil, 0, false
+	if !a.lastSend.IsZero() {
+		if wait := a.minGap(now) - now.Sub(a.lastSend); wait > 0 {
+			// Say so once per hold: without this a held alert looks like a
+			// lost one. Counts and a duration only, never an address.
+			if !a.heldNoted {
+				a.heldNoted = true
+				log.Printf("admin tool alert: %d pending, next send in about %s", len(a.pending), wait.Round(time.Minute))
+			}
+			return nil, 0, false
+		}
 	}
 
 	ids = make([]uuid.UUID, len(a.pending))
@@ -249,6 +267,7 @@ func (a *Alerter) spend(now time.Time) {
 	a.sendsToday++
 	a.deliveriesToday += a.cfg.Recipients
 	a.lastSend = now
+	a.heldNoted = false
 }
 
 // Flush sends a digest of what is pending, if the caps and spacing allow, and

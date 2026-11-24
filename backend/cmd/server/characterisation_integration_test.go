@@ -475,7 +475,7 @@ func TestUpdateToolPageCharacterisationIntegration(t *testing.T) {
 	api.expect("not the owner", "PUT", path, other, `{}`, http.StatusForbidden, "You do not have edit rights on this tool's page")
 	api.expect("unknown tool", "PUT", "/tool/no-such-tool-characterisation/page", owner, `{}`, http.StatusNotFound, "Tool not found")
 	api.expect("malformed body", "PUT", path, owner, `{`, http.StatusBadRequest, "Malformed request")
-	api.expect("thirteen categories", "PUT", path, owner, `{"category_ids":[1,2,3,4,5,6,7,8,9,10,11,12,13]}`, http.StatusBadRequest, "A tool can have at most 12 categories")
+	api.expect("four categories", "PUT", path, owner, `{"category_ids":[1,2,3,4]}`, http.StatusBadRequest, "A tool can have at most 3 categories")
 	api.expect("script logo", "PUT", path, owner, `{"logo_url":"javascript:alert(1)"}`, http.StatusBadRequest, "Logo URL must be an http or https address")
 	api.expect("script website", "PUT", path, owner, `{"vendor":{"website":"javascript:alert(1)"}}`, http.StatusBadRequest, "Website must be an http or https address")
 	api.expect("script linkedin", "PUT", path, owner, `{"vendor":{"linkedin_profile":"data:text/html,x"}}`, http.StatusBadRequest, "LinkedIn profile must be an http or https address")

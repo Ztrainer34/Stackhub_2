@@ -27,6 +27,7 @@ import { ToolActions } from "@/components/tool-actions";
 import { toolHref, BrowseTool } from "@/lib/tool";
 import { AddToolDialog } from "@/components/add-tool-dialog";
 import { useBrowseTools, useToolCategories } from "@/lib/queries/use-browse-tools";
+import { filterCategories, groupCategories } from "@/lib/category-groups";
 import { cn } from "@/lib/utils";
 
 const SORT_OPTIONS = [
@@ -110,18 +111,17 @@ export default function ToolsPage() {
   });
   // The sidebar list is scrollable and filterable, so it can hold far more than
   // the six that fitted in the old horizontal tab strip. 100 is the backend's
-  // cap, and the catalogue has well over a thousand categories — the filter box
-  // is how you reach the rest.
+  // cap, and the 68 subcategories fit in it.
   const { data: categories } = useToolCategories(100);
 
   const tools = data?.tools ?? [];
   const totalCount = data?.total_count ?? 0;
   const totalPages = data?.total_pages ?? 0;
 
-  const filteredCategories = (categories ?? []).filter((c) =>
-    c.name.toLowerCase().includes(categorySearch.toLowerCase())
-  );
-  const activeCategory = (categories ?? []).find((c) => c.slug === currentCategory);
+  const categoryGroups = groupCategories(filterCategories(categories ?? [], categorySearch));
+  const activeCategoryName =
+    (categories ?? []).find((c) => c.slug === currentCategory)?.name ??
+    (categories ?? []).find((c) => c.parent_slug === currentCategory)?.parent_name;
 
   const updateUrl = (params: Record<string, string>) => {
     const newParams = new URLSearchParams(searchParams.toString());
@@ -199,12 +199,29 @@ export default function ToolsPage() {
                     </Badge>
                   </button>
 
-                  {filteredCategories.length === 0 ? (
+                  {categoryGroups.length === 0 ? (
                     <p className="px-3 py-3 text-xs text-muted-foreground">
                       No categories match “{categorySearch}”
                     </p>
                   ) : (
-                    filteredCategories.map((category) => {
+                    categoryGroups.map((group) => (
+                      <div key={group.slug} className="divide-y">
+                        {group.name && (
+                          <button
+                            onClick={() =>
+                              updateUrl({
+                                category: currentCategory === group.slug ? '' : group.slug,
+                              })
+                            }
+                            className={cn(
+                              "w-full px-3 py-2 text-left text-sm font-semibold transition-colors hover:bg-muted/60",
+                              currentCategory === group.slug && "bg-muted"
+                            )}
+                          >
+                            {group.name}
+                          </button>
+                        )}
+                        {group.categories.map((category) => {
                       const active = currentCategory === category.slug;
                       return (
                         <button
@@ -227,7 +244,9 @@ export default function ToolsPage() {
                           </Badge>
                         </button>
                       );
-                    })
+                        })}
+                      </div>
+                    ))
                   )}
                 </div>
               </div>
@@ -273,13 +292,13 @@ export default function ToolsPage() {
             <span className="text-sm text-muted-foreground">
               {totalCount.toLocaleString()} tools
             </span>
-            {activeCategory && (
+            {activeCategoryName && (
               <Badge
                 variant="outline"
                 className="gap-1 cursor-pointer"
                 onClick={() => updateUrl({ category: '' })}
               >
-                Category: {activeCategory.name}
+                Category: {activeCategoryName}
                 <X className="w-3 h-3" />
               </Badge>
             )}
