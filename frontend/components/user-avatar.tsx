@@ -3,8 +3,11 @@ import { User } from "@/lib/user";
 import { apiPath } from "@/lib/api-path";
 import { cn } from "@/lib/utils";
 
+// Only these two are read, so a list row that has no full profile can use it too.
+type AvatarUser = Pick<User, "username" | "avatar_url">;
+
 interface UserAvatarProps {
-  user: User;
+  user: AvatarUser;
   className?: string;
   size?: "sm" | "md" | "lg" | "xl";
 }
@@ -25,7 +28,7 @@ const gravatarSizes = {
 // URL needs the email hash, and an unsalted SHA-256 of an email is reversible
 // for any address in a breach list — so the backend fetches the image and the
 // hash never reaches the browser.
-function getUserAvatarUrl(user: User, size: "sm" | "md" | "lg" | "xl"): string {
+function getUserAvatarUrl(user: AvatarUser, size: "sm" | "md" | "lg" | "xl"): string {
   if (user.avatar_url) return user.avatar_url;
 
   return `${process.env.NEXT_PUBLIC_API_URL!}${apiPath`/user/${user.username}/gravatar`}?s=${gravatarSizes[size]}`;

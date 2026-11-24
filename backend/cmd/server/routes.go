@@ -214,6 +214,10 @@ func (app *App) routes(tokenAuth *jwtauth.JWTAuth) http.Handler {
 		// viewer additionally gets is_following for the Follow button.
 		r.Get("/user/{slug}", userAPI.GetUser)
 
+		// The order of the avatars depends on who is asking (people the viewer
+		// follows come first), so the answer is private for a signed-in viewer.
+		r.Get("/rankings/used-by", toolAPI.GetRankingUsedBy)
+
 		r.Get("/search", searchAPI.Search)
 	})
 
@@ -242,6 +246,12 @@ func (app *App) routes(tokenAuth *jwtauth.JWTAuth) http.Handler {
 		// Public browse listing for /playbooks
 		r.Get("/posts", postAPI.ListPublishedPosts)
 		r.Get("/posts/tool-facets", toolAPI.GetPublishedPostToolFacets)
+		r.Get("/posts/trending", postAPI.GetTrendingPosts)
+
+		// Rankings and the logged-out homepage. The counts leave out test accounts
+		// (curation.ExcludedUsernames).
+		r.Get("/rankings/tools", toolAPI.GetRankingTools)
+		r.Get("/stacks/featured", stackAPI.GetFeaturedStacks)
 
 		// Homepage routes
 		r.Get("/homepage/top-categories", categoryAPI.GetTopCategories)

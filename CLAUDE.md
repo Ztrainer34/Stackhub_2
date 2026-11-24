@@ -166,6 +166,23 @@ has at most 3 subcategories (`maxToolCategories`), ordered by
 - Onboarding matches category **names** by keyword (`focusAreaKeywords`): a renamed
   subcategory must still pass `TestFocusAreaKeywords`.
 
+## Rankings and logged-out homepage
+
+- Four **public** endpoints feed them: `GET /rankings/tools`, `GET /rankings/used-by`
+  (optional auth, private for a signed-in viewer, never shared-cached),
+  `GET /stacks/featured`, `GET /posts/trending`.
+- `curation.ExcludedUsernames()` lists test accounts. Every one of those queries
+  leaves them out (as author, stack owner, saver, starrer). Pass it as `excluded`;
+  it must never be NULL (`x <> ALL(NULL)` drops every row).
+- `post_stars.created_at` is NULL for stars made before migration
+  `20261124120000`: undated stars never count as "recent" in trending. That
+  migration must be applied before the backend that reads it.
+- The ranking categories come from the database (`/homepage/top-categories`), not
+  a hard-coded tree. Pure ranking logic is `frontend/lib/rankings/ranking.ts`.
+- `SHOW_STACKS_LINKS` (`lib/home/config.ts`) is false until a `/stacks` page
+  exists: it hides the "Stacks" nav link and "Explore stacks" button and turns the
+  rankings' "in stacks" numbers and "+N" into plain text.
+
 ## Frontend
 
 - Pre-flight before calling work done: `npx tsc --noEmit`, `npx next lint`,

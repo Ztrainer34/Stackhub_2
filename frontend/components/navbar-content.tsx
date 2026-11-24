@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { UserAvatar } from "@/components/user-avatar";
 import {
@@ -11,13 +10,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import {
   LogOut,
   Plus,
@@ -34,8 +26,8 @@ import { Button } from "@/components/ui/button";
 import { SearchForm } from "./search-form";
 import { MobileNavbar } from "./mobile-navbar";
 import { useNavbarTabs } from "./navbar-tabs-context";
-import LoginForm from "@/app/login/LoginForm";
 import NotificationBell from "./notification-bell";
+import { PublicNav } from "./site/public-nav";
 
 interface User {
   id: string;
@@ -49,11 +41,20 @@ interface NavBarContentProps {
 
 export default function NavBarContent({ user }: NavBarContentProps) {
   const { tabsContent } = useNavbarTabs();
-  const [hideDialogTitle, setHideDialogTitle] = useState(false);
 
   return (
-    <header className="border-grid px-4 w-full border-b">
+    // relative: the logged-out mobile menu drops down under the header.
+    <header className="relative border-grid px-4 w-full border-b">
       <div className="container-wrapper">
+        {!user && (
+          <div className="mx-auto flex h-14 max-w-7xl items-center">
+            <Link className="mr-4 flex items-center gap-2 lg:mr-6" href="/">
+              <span className="font-bold">StackHub</span>
+            </Link>
+            <PublicNav />
+          </div>
+        )}
+        {user && (
         <div className="container flex justify-between h-14 items-center">
           {/* Desktop Logo */}
           <div className="mr-4 hidden md:flex">
@@ -80,9 +81,8 @@ export default function NavBarContent({ user }: NavBarContentProps) {
                 <Plus />
               </Button>
             </Link>
-            {user && <NotificationBell />}
-            {user ? (
-              <DropdownMenu>
+            <NotificationBell />
+            <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <div className="cursor-pointer">
                     <UserAvatar user={user} />
@@ -143,26 +143,10 @@ export default function NavBarContent({ user }: NavBarContentProps) {
                   </Link>
                 </DropdownMenuContent>
               </DropdownMenu>
-            ) : (
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button variant="outline">Login</Button>
-                </DialogTrigger>
-                <DialogContent className="p-10">
-                  {!hideDialogTitle && (
-                    <DialogHeader>
-                      <DialogTitle className="sm:text-center text-2xl">
-                        Welcome back
-                      </DialogTitle>
-                    </DialogHeader>
-                  )}
-                  <LoginForm onHideTitle={setHideDialogTitle} />
-                </DialogContent>
-              </Dialog>
-            )}
           </div>
         </div>
-        
+        )}
+
         {/* Profile tabs section */}
         {tabsContent && (
           <div>

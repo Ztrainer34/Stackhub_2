@@ -109,6 +109,51 @@ func ensureAdminTable(t *testing.T, tx pgx.Tx) {
 	}
 }
 
+// NewProfile creates a profile with the given username for the rest of the
+// test's transaction (a row in auth.users first, as the real sign-up does). If a
+// real profile already holds the username it is renamed inside the transaction,
+// so a test can use any username, including the ones in curation.
+func NewProfile(t *testing.T, tx pgx.Tx, username string) uuid.UUID {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := tx.Exec(ctx, `UPDATE profiles SET username = 'renamed-' || substr(id::text, 1, 8) WHERE username = $1`, username); err != nil {
+		t.Fatalf("free the username %s: %v", username, err)
+	}
+	id := uuid.New()
+	if _, err := tx.Exec(ctx, `INSERT INTO auth.users (id) VALUES ($1)`, id); err != nil {
+		t.Fatalf("insert auth user: %v", err)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO profiles (id, display_name, username) VALUES ($1, $2, $2)`, id, username); err != nil {
+		t.Fatalf("insert profile %s: %v", username, err)
+	}
+	return id
+}
+
+// ApplyMigration runs the Up section of a migration file inside the test's
+// transaction (the rollback undoes it). The migration must be idempotent.
+func ApplyMigration(t *testing.T, tx pgx.Tx, name string) {
+	t.Helper()
+	if _, err := tx.Exec(context.Background(), MigrationUp(t, name)); err != nil {
+		t.Fatalf("apply %s: %v", name, err)
+	}
+}
+
+// NewTool creates a tool, hidden or not.
+func NewTool(t *testing.T, tx pgx.Tx, name string, hidden bool) uuid.UUID {
+	t.Helper()
+	return Scalar[uuid.UUID](t, tx,
+		`INSERT INTO tools (name, logo_url, hidden_at) VALUES ($1, 'https://example.com/l.png', CASE WHEN $2::bool THEN now() END) RETURNING id`,
+		name, hidden)
+}
+
+// Exec runs a statement and fails the test on error.
+func Exec(t *testing.T, tx pgx.Tx, sql string, args ...any) {
+	t.Helper()
+	if _, err := tx.Exec(context.Background(), sql, args...); err != nil {
+		t.Fatalf("%s: %v", sql, err)
+	}
+}
+
 // SomeTools returns n existing tools, or skips.
 func SomeTools(t *testing.T, tx pgx.Tx, n int) []uuid.UUID {
 	t.Helper()

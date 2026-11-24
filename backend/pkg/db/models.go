@@ -119,8 +119,9 @@ type PostSlugHistory struct {
 }
 
 type PostStar struct {
-	PostID  uuid.UUID `json:"post_id"`
-	LikerID uuid.UUID `json:"liker_id"`
+	PostID    uuid.UUID          `json:"post_id"`
+	LikerID   uuid.UUID          `json:"liker_id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
 type PostTool struct {
