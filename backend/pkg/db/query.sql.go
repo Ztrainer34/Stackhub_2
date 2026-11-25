@@ -13,6 +13,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const addAffiliateLinkRequest = `-- name: AddAffiliateLinkRequest :exec
+INSERT INTO affiliate_link_requests (profile_id, tool_id)
+VALUES ($1, $2)
+ON CONFLICT (profile_id, tool_id) DO NOTHING
+`
+
+type AddAffiliateLinkRequestParams struct {
+	ProfileID uuid.UUID `json:"profile_id"`
+	ToolID    uuid.UUID `json:"tool_id"`
+}
+
+func (q *Queries) AddAffiliateLinkRequest(ctx context.Context, arg AddAffiliateLinkRequestParams) error {
+	_, err := q.db.Exec(ctx, addAffiliateLinkRequest, arg.ProfileID, arg.ToolID)
+	return err
+}
+
 const addKeyPlaybook = `-- name: AddKeyPlaybook :exec
 INSERT INTO key_playbooks (profile_id, post_id, position)
 SELECT $1, $2, $3
@@ -1325,12 +1341,29 @@ SELECT
   COUNT(*) FILTER (WHERE p.type = 'playbook')::int AS playbook_count,
   COUNT(*) FILTER (WHERE p.type = 'comparison')::int AS comparison_count
 FROM posts p
+JOIN profiles au ON au.id = p.author_id
 WHERE p.is_published
+  AND au.username <> ALL($1::text[])
   AND NOT EXISTS (
     SELECT 1 FROM tool_tickets tt
     WHERE tt.post_id = p.id AND tt.status IN ('pending', 'rejected')
   )
+  -- Same tool filter as ListPublishedPosts, so the chip counts match the list
+  -- on /playbooks?tool= and on a tool page.
+  AND (
+    $2::boolean = false
+    OR EXISTS (
+      SELECT 1 FROM post_tools pt
+      WHERE pt.post_id = p.id AND pt.tool_id = $3::uuid
+    )
+  )
 `
+
+type GetPublishedPostTypeCountsParams struct {
+	Excluded      []string  `json:"excluded"`
+	UseToolFilter bool      `json:"use_tool_filter"`
+	ToolFilter    uuid.UUID `json:"tool_filter"`
+}
 
 type GetPublishedPostTypeCountsRow struct {
 	AllCount        int32 `json:"all_count"`
@@ -1341,8 +1374,8 @@ type GetPublishedPostTypeCountsRow struct {
 // Counts for the /playbooks filter chips. There is no combo_count any more:
 // the type was folded into 'playbook', so a combo column would now always
 // read zero.
-func (q *Queries) GetPublishedPostTypeCounts(ctx context.Context) (GetPublishedPostTypeCountsRow, error) {
-	row := q.db.QueryRow(ctx, getPublishedPostTypeCounts)
+func (q *Queries) GetPublishedPostTypeCounts(ctx context.Context, arg GetPublishedPostTypeCountsParams) (GetPublishedPostTypeCountsRow, error) {
+	row := q.db.QueryRow(ctx, getPublishedPostTypeCounts, arg.Excluded, arg.UseToolFilter, arg.ToolFilter)
 	var i GetPublishedPostTypeCountsRow
 	err := row.Scan(&i.AllCount, &i.PlaybookCount, &i.ComparisonCount)
 	return i, err
@@ -1620,29 +1653,42 @@ const getTool = `-- name: GetTool :one
 SELECT
   twd.id, twd.name, twd.description, twd.logo_url, twd.created_at, twd.updated_at, twd.categories, twd.vendor, twd.description_rich,
   EXISTS(SELECT 1 FROM tool_owners tow WHERE tow.tool_id = twd.id) AS is_claimed,
-  EXISTS(SELECT 1 FROM tools th WHERE th.id = twd.id AND th.hidden_at IS NOT NULL) AS is_hidden
+  EXISTS(SELECT 1 FROM tools th WHERE th.id = twd.id AND th.hidden_at IS NOT NULL) AS is_hidden,
+  -- Tool page "In X active stacks" card. Active stack only, and without the
+  -- excluded accounts: the same rule as the rankings, so the numbers match.
+  (
+    SELECT COUNT(*) FROM stack_items sc
+    JOIN profiles scp ON scp.id = sc.profile_id
+    WHERE sc.tool_id = twd.id AND scp.username <> ALL($1::text[])
+  )::int AS active_stack_count
 FROM tools_with_details twd
-WHERE twd.id = $1
+WHERE twd.id = $2
 `
 
+type GetToolParams struct {
+	Excluded []string  `json:"excluded"`
+	ID       uuid.UUID `json:"id"`
+}
+
 type GetToolRow struct {
-	ID              uuid.UUID          `json:"id"`
-	Name            string             `json:"name"`
-	Description     pgtype.Text        `json:"description"`
-	LogoUrl         pgtype.Text        `json:"logo_url"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-	Categories      interface{}        `json:"categories"`
-	Vendor          json.RawMessage    `json:"vendor"`
-	DescriptionRich pgtype.Text        `json:"description_rich"`
-	IsClaimed       bool               `json:"is_claimed"`
-	IsHidden        bool               `json:"is_hidden"`
+	ID               uuid.UUID          `json:"id"`
+	Name             string             `json:"name"`
+	Description      pgtype.Text        `json:"description"`
+	LogoUrl          pgtype.Text        `json:"logo_url"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	Categories       interface{}        `json:"categories"`
+	Vendor           json.RawMessage    `json:"vendor"`
+	DescriptionRich  pgtype.Text        `json:"description_rich"`
+	IsClaimed        bool               `json:"is_claimed"`
+	IsHidden         bool               `json:"is_hidden"`
+	ActiveStackCount int32              `json:"active_stack_count"`
 }
 
 // A hidden tool's page still loads; is_hidden tells the page to ask search
 // engines not to index it.
-func (q *Queries) GetTool(ctx context.Context, id uuid.UUID) (GetToolRow, error) {
-	row := q.db.QueryRow(ctx, getTool, id)
+func (q *Queries) GetTool(ctx context.Context, arg GetToolParams) (GetToolRow, error) {
+	row := q.db.QueryRow(ctx, getTool, arg.Excluded, arg.ID)
 	var i GetToolRow
 	err := row.Scan(
 		&i.ID,
@@ -1656,6 +1702,7 @@ func (q *Queries) GetTool(ctx context.Context, id uuid.UUID) (GetToolRow, error)
 		&i.DescriptionRich,
 		&i.IsClaimed,
 		&i.IsHidden,
+		&i.ActiveStackCount,
 	)
 	return i, err
 }
@@ -1664,45 +1711,55 @@ const getToolAuthenticated = `-- name: GetToolAuthenticated :one
 SELECT
   id, name, description, logo_url, created_at, updated_at, categories, vendor, description_rich,
   -- User status
-  EXISTS(SELECT 1 FROM stack_items si WHERE si.profile_id = $2 AND si.tool_id = twd.id) AS is_in_stack,
-  EXISTS(SELECT 1 FROM watchlist_items wi WHERE wi.profile_id = $2 AND wi.tool_id = twd.id) AS is_in_watchlist,
-  EXISTS(SELECT 1 FROM old_stack_items oi WHERE oi.profile_id = $2 AND oi.tool_id = twd.id) AS is_in_old_stack,
-  EXISTS(SELECT 1 FROM tool_follows tf WHERE tf.profile_id = $2 AND tf.tool_id = twd.id) AS is_followed,
+  EXISTS(SELECT 1 FROM stack_items si WHERE si.profile_id = $1 AND si.tool_id = twd.id) AS is_in_stack,
+  EXISTS(SELECT 1 FROM watchlist_items wi WHERE wi.profile_id = $1 AND wi.tool_id = twd.id) AS is_in_watchlist,
+  EXISTS(SELECT 1 FROM old_stack_items oi WHERE oi.profile_id = $1 AND oi.tool_id = twd.id) AS is_in_old_stack,
+  EXISTS(SELECT 1 FROM tool_follows tf WHERE tf.profile_id = $1 AND tf.tool_id = twd.id) AS is_followed,
   -- Page ownership: is_owner unlocks the inline editors, is_claimed hides the
   -- "Claim this page" call to action once somebody has taken the page over.
-  EXISTS(SELECT 1 FROM tool_owners tow WHERE tow.profile_id = $2 AND tow.tool_id = twd.id) AS is_owner,
+  EXISTS(SELECT 1 FROM tool_owners tow WHERE tow.profile_id = $1 AND tow.tool_id = twd.id) AS is_owner,
   EXISTS(SELECT 1 FROM tool_owners tow2 WHERE tow2.tool_id = twd.id) AS is_claimed,
-  EXISTS(SELECT 1 FROM tools th WHERE th.id = twd.id AND th.hidden_at IS NOT NULL) AS is_hidden
+  EXISTS(SELECT 1 FROM tools th WHERE th.id = twd.id AND th.hidden_at IS NOT NULL) AS is_hidden,
+  (
+    SELECT COUNT(*) FROM stack_items sc
+    JOIN profiles scp ON scp.id = sc.profile_id
+    WHERE sc.tool_id = twd.id AND scp.username <> ALL($2::text[])
+  )::int AS active_stack_count,
+  -- The viewer already asked for an affiliate link for this tool.
+  EXISTS(SELECT 1 FROM affiliate_link_requests ar WHERE ar.profile_id = $1 AND ar.tool_id = twd.id) AS is_affiliate_requested
 FROM tools_with_details twd
-WHERE twd.id = $1
+WHERE twd.id = $3
 `
 
 type GetToolAuthenticatedParams struct {
-	ID        uuid.UUID `json:"id"`
 	ProfileID uuid.UUID `json:"profile_id"`
+	Excluded  []string  `json:"excluded"`
+	ID        uuid.UUID `json:"id"`
 }
 
 type GetToolAuthenticatedRow struct {
-	ID              uuid.UUID          `json:"id"`
-	Name            string             `json:"name"`
-	Description     pgtype.Text        `json:"description"`
-	LogoUrl         pgtype.Text        `json:"logo_url"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-	Categories      interface{}        `json:"categories"`
-	Vendor          json.RawMessage    `json:"vendor"`
-	DescriptionRich pgtype.Text        `json:"description_rich"`
-	IsInStack       bool               `json:"is_in_stack"`
-	IsInWatchlist   bool               `json:"is_in_watchlist"`
-	IsInOldStack    bool               `json:"is_in_old_stack"`
-	IsFollowed      bool               `json:"is_followed"`
-	IsOwner         bool               `json:"is_owner"`
-	IsClaimed       bool               `json:"is_claimed"`
-	IsHidden        bool               `json:"is_hidden"`
+	ID                   uuid.UUID          `json:"id"`
+	Name                 string             `json:"name"`
+	Description          pgtype.Text        `json:"description"`
+	LogoUrl              pgtype.Text        `json:"logo_url"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	Categories           interface{}        `json:"categories"`
+	Vendor               json.RawMessage    `json:"vendor"`
+	DescriptionRich      pgtype.Text        `json:"description_rich"`
+	IsInStack            bool               `json:"is_in_stack"`
+	IsInWatchlist        bool               `json:"is_in_watchlist"`
+	IsInOldStack         bool               `json:"is_in_old_stack"`
+	IsFollowed           bool               `json:"is_followed"`
+	IsOwner              bool               `json:"is_owner"`
+	IsClaimed            bool               `json:"is_claimed"`
+	IsHidden             bool               `json:"is_hidden"`
+	ActiveStackCount     int32              `json:"active_stack_count"`
+	IsAffiliateRequested bool               `json:"is_affiliate_requested"`
 }
 
 func (q *Queries) GetToolAuthenticated(ctx context.Context, arg GetToolAuthenticatedParams) (GetToolAuthenticatedRow, error) {
-	row := q.db.QueryRow(ctx, getToolAuthenticated, arg.ID, arg.ProfileID)
+	row := q.db.QueryRow(ctx, getToolAuthenticated, arg.ProfileID, arg.Excluded, arg.ID)
 	var i GetToolAuthenticatedRow
 	err := row.Scan(
 		&i.ID,
@@ -1721,6 +1778,8 @@ func (q *Queries) GetToolAuthenticated(ctx context.Context, arg GetToolAuthentic
 		&i.IsOwner,
 		&i.IsClaimed,
 		&i.IsHidden,
+		&i.ActiveStackCount,
+		&i.IsAffiliateRequested,
 	)
 	return i, err
 }
@@ -3571,10 +3630,12 @@ WHERE pwt.is_published
     SELECT 1 FROM tool_tickets tt
     WHERE tt.post_id = pwt.id AND tt.status IN ('pending', 'rejected')
   )
+  -- Empty unless the caller asks for the showcase (no test accounts).
+  AND pwt.author_username <> ALL($8::text[])
 ORDER BY
-  CASE WHEN $8::text = 'name' THEN pwt.name END ASC,
-  CASE WHEN $8::text = 'created' THEN pwt.created_at END DESC,
-  CASE WHEN $8::text = 'stars'
+  CASE WHEN $9::text = 'name' THEN pwt.name END ASC,
+  CASE WHEN $9::text = 'created' THEN pwt.created_at END DESC,
+  CASE WHEN $9::text = 'stars'
     THEN (SELECT COUNT(*) FROM post_stars ps WHERE ps.post_id = pwt.id) END DESC,
   pwt.updated_at DESC
 LIMIT $1 OFFSET $2
@@ -3588,6 +3649,7 @@ type ListPublishedPostsParams struct {
 	Search        string    `json:"search"`
 	UseToolFilter bool      `json:"use_tool_filter"`
 	ToolFilter    uuid.UUID `json:"tool_filter"`
+	Excluded      []string  `json:"excluded"`
 	Sort          string    `json:"sort"`
 }
 
@@ -3620,6 +3682,7 @@ func (q *Queries) ListPublishedPosts(ctx context.Context, arg ListPublishedPosts
 		arg.Search,
 		arg.UseToolFilter,
 		arg.ToolFilter,
+		arg.Excluded,
 		arg.Sort,
 	)
 	if err != nil {
@@ -3686,6 +3749,105 @@ func (q *Queries) ListToolOwners(ctx context.Context, toolID uuid.UUID) ([]ListT
 			&i.DisplayName,
 			&i.AvatarUrl,
 			&i.GrantedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listToolStacks = `-- name: ListToolStacks :many
+WITH people AS (
+  SELECT
+    p.id, p.username, p.display_name, p.bio, p.avatar_url,
+    EXISTS(
+      SELECT 1 FROM posts po
+      JOIN post_tools pt ON pt.post_id = po.id
+      WHERE po.author_id = p.id AND po.is_published AND pt.tool_id = $1::uuid
+        AND NOT EXISTS (
+          SELECT 1 FROM tool_tickets tt
+          WHERE tt.post_id = po.id AND tt.status IN ('pending', 'rejected')
+        )
+    ) AS has_post,
+    (
+      SELECT COUNT(*) FROM stack_items s3
+      JOIN tools t3 ON t3.id = s3.tool_id
+      WHERE s3.profile_id = p.id AND (t3.hidden_at IS NULL OR t3.id = $1::uuid)
+    )::int AS tool_count,
+    COUNT(*) OVER() AS total_count
+  FROM stack_items si
+  JOIN profiles p ON p.id = si.profile_id
+  WHERE si.tool_id = $1::uuid
+    AND p.username <> ALL($2::text[])
+  ORDER BY has_post DESC, tool_count DESC, p.username
+  LIMIT $3
+)
+SELECT
+  pe.id, pe.username, pe.display_name, pe.bio, pe.avatar_url, pe.tool_count,
+  COALESCE((
+    SELECT jsonb_agg(
+      jsonb_build_object('id', x.id, 'name', x.name, 'logo_url', x.logo_url)
+      ORDER BY (x.id = $1::uuid) DESC, x.name
+    )
+    FROM (
+      SELECT t.id, t.name, t.logo_url
+      FROM stack_items si2
+      JOIN tools t ON t.id = si2.tool_id
+      WHERE si2.profile_id = pe.id
+        AND (t.hidden_at IS NULL OR t.id = $1::uuid)
+      ORDER BY (t.id = $1::uuid) DESC, t.name
+      LIMIT 6
+    ) x
+  ), '[]'::jsonb)::jsonb AS tools,
+  pe.total_count
+FROM people pe
+ORDER BY pe.has_post DESC, pe.tool_count DESC, pe.username
+`
+
+type ListToolStacksParams struct {
+	ToolID   uuid.UUID `json:"tool_id"`
+	Excluded []string  `json:"excluded"`
+	RowLimit int32     `json:"row_limit"`
+}
+
+type ListToolStacksRow struct {
+	ID          uuid.UUID       `json:"id"`
+	Username    string          `json:"username"`
+	DisplayName string          `json:"display_name"`
+	Bio         pgtype.Text     `json:"bio"`
+	AvatarUrl   pgtype.Text     `json:"avatar_url"`
+	ToolCount   int32           `json:"tool_count"`
+	Tools       json.RawMessage `json:"tools"`
+	TotalCount  int64           `json:"total_count"`
+}
+
+// People with the tool in their ACTIVE stack, for the "Stacks with {tool}"
+// block on the tool page, without the excluded accounts. People who published a
+// post using the tool come first, then the biggest stacks. `tools` is the start
+// of the person's active stack (visible tools only, plus this tool even if
+// hidden), this tool first; tool_count is how many there are in all.
+func (q *Queries) ListToolStacks(ctx context.Context, arg ListToolStacksParams) ([]ListToolStacksRow, error) {
+	rows, err := q.db.Query(ctx, listToolStacks, arg.ToolID, arg.Excluded, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListToolStacksRow
+	for rows.Next() {
+		var i ListToolStacksRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.DisplayName,
+			&i.Bio,
+			&i.AvatarUrl,
+			&i.ToolCount,
+			&i.Tools,
+			&i.TotalCount,
 		); err != nil {
 			return nil, err
 		}
@@ -4638,6 +4800,21 @@ func (q *Queries) RejectToolTicket(ctx context.Context, arg RejectToolTicketPara
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const removeAffiliateLinkRequest = `-- name: RemoveAffiliateLinkRequest :exec
+DELETE FROM affiliate_link_requests
+WHERE profile_id = $1 AND tool_id = $2
+`
+
+type RemoveAffiliateLinkRequestParams struct {
+	ProfileID uuid.UUID `json:"profile_id"`
+	ToolID    uuid.UUID `json:"tool_id"`
+}
+
+func (q *Queries) RemoveAffiliateLinkRequest(ctx context.Context, arg RemoveAffiliateLinkRequestParams) error {
+	_, err := q.db.Exec(ctx, removeAffiliateLinkRequest, arg.ProfileID, arg.ToolID)
+	return err
 }
 
 const removeAllKeyPlaybooks = `-- name: RemoveAllKeyPlaybooks :exec

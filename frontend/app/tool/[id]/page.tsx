@@ -7,8 +7,12 @@ import { notFound } from "next/navigation";
 import { ToolActions } from "@/components/tool-actions";
 import { ClaimPageCta } from "./claim-page-cta";
 import { ToolPageAbout } from "./tool-page-about";
+import { ToolPageAffiliate } from "./tool-page-affiliate";
 import { ToolPageCategories } from "./tool-page-categories";
+import { ToolPageHighlights } from "./tool-page-highlights";
 import { ToolPageLogo } from "./tool-page-logo";
+import { ToolPagePlaybooks } from "./tool-page-playbooks";
+import { ToolPageStacks } from "./tool-page-stacks";
 import { ToolPageTitle } from "./tool-page-title";
 import { ToolPageVendor } from "./tool-page-vendor";
 
@@ -57,24 +61,33 @@ export default async function ToolPage({
   return (
     <HydrationBoundary state={dehydrate(queryClient)}>
       <div className="min-h-screen bg-background">
-        <div className="container mx-auto px-4 py-8 max-w-4xl">
+        <div className="container mx-auto px-4 py-8 max-w-6xl">
           {/* Header Section */}
-          <div className="flex items-start gap-6 mb-8">
+          <div className="flex flex-col sm:flex-row items-start gap-6 mb-8">
             <ToolPageLogo tool={tool} />
             <ToolPageTitle tool={tool} />
             <ToolActions tool={tool} />
           </div>
 
+          {/* Two numbers: active stacks and playbooks */}
+          <ToolPageHighlights tool={tool} />
+
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Main Content */}
-            <div className="lg:col-span-2 space-y-6">
+            <div className="lg:col-span-2 space-y-10">
               <ToolPageAbout tool={tool} />
+              <ToolPagePlaybooks tool={tool} />
+              <ToolPageStacks tool={tool} />
             </div>
 
             {/* Sidebar */}
             <div className="space-y-6">
+              <ToolPageAffiliate tool={tool} />
+              {/* Hidden once the page is claimed (owners see a note instead). */}
               <ClaimPageCta tool={tool} />
+              {/* Company details, under the claim block. */}
               <ToolPageVendor tool={tool} />
+              {/* Owner-only: where the owner edits the categories. */}
               <ToolPageCategories tool={tool} />
             </div>
           </div>

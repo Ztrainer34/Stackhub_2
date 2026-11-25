@@ -1,8 +1,11 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
+  cancelAffiliateLinkRequest,
+  listToolStacks,
+  requestAffiliateLink,
   Tool,
   ToolPageUpdate,
   toolSlug,
@@ -62,6 +65,45 @@ export function useUploadToolLogo(toolId: string) {
     },
     onError: (error: Error) => {
       toast.error("Could not upload the logo", { description: error.message });
+    },
+  });
+}
+
+/** People with the tool in their active stack, for the tool page. */
+export function useToolStacks(toolId: string, limit: number = 6) {
+  return useQuery({
+    queryKey: ["tool-stacks", toolId, limit],
+    queryFn: () => listToolStacks(toolId, limit),
+    enabled: !!toolId,
+    staleTime: 60_000,
+  });
+}
+
+/**
+ * Ask for, or cancel, a personal affiliate link. Optimistic on the tool's
+ * `is_affiliate_requested`, rolled back if the server call fails.
+ */
+export function useAffiliateRequest(toolId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (requested: boolean) =>
+      requested
+        ? requestAffiliateLink(createClient(), toolId)
+        : cancelAffiliateLinkRequest(createClient(), toolId),
+    onMutate: async (requested) => {
+      await queryClient.cancelQueries({ queryKey: ["tool", toolId] });
+      const previousTool = queryClient.getQueryData(["tool", toolId]);
+      queryClient.setQueryData(["tool", toolId], (old: Tool | undefined) =>
+        old ? { ...old, is_affiliate_requested: requested } : old
+      );
+      return { previousTool };
+    },
+    onError: (_err, _requested, context) => {
+      queryClient.setQueryData(["tool", toolId], context?.previousTool);
+      toast.error("Something went wrong", {
+        description: "Your request was not saved. Please try again.",
+      });
     },
   });
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/google/uuid"
+	"stackhub.com/stackhub/internal/curation"
 	"stackhub.com/stackhub/internal/httpx"
 	"stackhub.com/stackhub/pkg/db"
 )
@@ -297,6 +298,13 @@ func (h *Handler) ListPublishedPosts(w http.ResponseWriter, r *http.Request) {
 		Offset: int32(offset),
 		Search: r.URL.Query().Get("q"),
 		Sort:   sort,
+		// Never nil: x <> ALL(NULL) would filter every post out.
+		Excluded: []string{},
+	}
+
+	// Curated blocks (the tool page) leave the test accounts out.
+	if r.URL.Query().Get("showcase") == "1" {
+		params.Excluded = curation.ExcludedUsernames()
 	}
 
 	if typeStr := r.URL.Query().Get("type"); typeStr != "" && typeStr != "all" {
@@ -322,7 +330,11 @@ func (h *Handler) ListPublishedPosts(w http.ResponseWriter, r *http.Request) {
 		res = []db.ListPublishedPostsRow{}
 	}
 
-	counts, err := h.Queries.GetPublishedPostTypeCounts(r.Context())
+	counts, err := h.Queries.GetPublishedPostTypeCounts(r.Context(), db.GetPublishedPostTypeCountsParams{
+		UseToolFilter: params.UseToolFilter,
+		ToolFilter:    params.ToolFilter,
+		Excluded:      params.Excluded,
+	})
 	if err != nil {
 		log.Println(err)
 		http.Error(w, "Failed to get post counts", http.StatusInternalServerError)

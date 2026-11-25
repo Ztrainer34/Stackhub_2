@@ -73,6 +73,10 @@ export function ToolPageCategories({ tool }: { tool: Tool }) {
     (category) => !selected.some((c) => c.id === category.id)
   );
 
+  // Visitors see the categories as chips under the tool name, so this card
+  // only exists for the owner, who edits the categories here.
+  if (!current.is_owner) return null;
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-start justify-between space-y-0">

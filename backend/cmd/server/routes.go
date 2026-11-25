@@ -145,6 +145,8 @@ func (app *App) routes(tokenAuth *jwtauth.JWTAuth) http.Handler {
 		r.Delete("/user/old-stack/{tool_id}", stackAPI.RemoveFromOldStack)
 		r.Put("/user/followed-tools/{tool_id}", toolAPI.FollowTool)
 		r.Delete("/user/followed-tools/{tool_id}", toolAPI.UnfollowTool)
+		r.Put("/user/affiliate-requests/{tool_id}", toolAPI.RequestAffiliateLink)
+		r.Delete("/user/affiliate-requests/{tool_id}", toolAPI.CancelAffiliateLinkRequest)
 
 		r.Put("/user/key-tools", toolAPI.SetKeyTools)
 		r.Put("/user/key-playbooks", postAPI.SetKeyPlaybooks)
@@ -229,6 +231,7 @@ func (app *App) routes(tokenAuth *jwtauth.JWTAuth) http.Handler {
 		r.Get("/tools", toolAPI.ListTools)
 		r.Get("/tool/autocomplete", toolAPI.AutocompleteTool)
 		r.Get("/tools/category/{categorySlug}", toolAPI.GetToolsByCategory)
+		r.Get("/tool/{id}/stacks", toolAPI.ListToolStacks)
 		r.Get("/category/{categorySlug}", categoryAPI.GetCategoryBySlug)
 		r.Get("/category/autocomplete", categoryAPI.AutocompleteCategory)
 

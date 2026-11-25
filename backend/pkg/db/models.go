@@ -26,6 +26,12 @@ type Admin struct {
 	GrantedAt pgtype.Timestamptz `json:"granted_at"`
 }
 
+type AffiliateLinkRequest struct {
+	ProfileID uuid.UUID          `json:"profile_id"`
+	ToolID    uuid.UUID          `json:"tool_id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type AuthUser struct {
 	ID    uuid.UUID   `json:"id"`
 	Email pgtype.Text `json:"email"`

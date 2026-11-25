@@ -174,6 +174,10 @@ has at most 3 subcategories (`maxToolCategories`), ordered by
 - `curation.ExcludedUsernames()` lists test accounts. Every one of those queries
   leaves them out (as author, stack owner, saver, starrer). Pass it as `excluded`;
   it must never be NULL (`x <> ALL(NULL)` drops every row).
+- The tool page uses the same rule: `GetTool`, `GetToolAuthenticated` and
+  `ListToolStacks` take `excluded`, and its playbooks call `/posts?showcase=1`
+  (`/playbooks` itself still lists everyone). `affiliate_link_requests` (migration
+  `20261125120000`) is read by every signed-in tool page: apply it before the backend.
 - `post_stars.created_at` is NULL for stars made before migration
   `20261124120000`: undated stars never count as "recent" in trending. That
   migration must be applied before the backend that reads it.

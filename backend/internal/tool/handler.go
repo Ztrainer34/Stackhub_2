@@ -3,6 +3,7 @@ package tool
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"strconv"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
+	"stackhub.com/stackhub/internal/curation"
 	"stackhub.com/stackhub/internal/httpx"
 	"stackhub.com/stackhub/pkg/db"
 )
@@ -102,9 +105,11 @@ func (h *Handler) GetTool(w http.ResponseWriter, r *http.Request) {
 		params := db.GetToolAuthenticatedParams{
 			ID:        id,
 			ProfileID: userID,
+			Excluded:  curation.ExcludedUsernames(),
 		}
 		tool, err := h.Queries.GetToolAuthenticated(r.Context(), params)
 		if err != nil {
+			log.Println(err)
 			http.Error(w, "Could not get tool", http.StatusInternalServerError)
 			return
 		}
@@ -112,8 +117,12 @@ func (h *Handler) GetTool(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(tool)
 	} else {
 		// Use regular version without status
-		tool, err := h.Queries.GetTool(r.Context(), id)
+		tool, err := h.Queries.GetTool(r.Context(), db.GetToolParams{
+			ID:       id,
+			Excluded: curation.ExcludedUsernames(),
+		})
 		if err != nil {
+			log.Println(err)
 			http.Error(w, "Could not get tool", http.StatusInternalServerError)
 			return
 		}
@@ -470,6 +479,103 @@ func (h *Handler) SetKeyTools(w http.ResponseWriter, r *http.Request) {
 	if err := tx.Commit(r.Context()); err != nil {
 		log.Println(err)
 		http.Error(w, "Failed to commit", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+// ListToolStacks powers the "Stacks with {tool}" block on the tool page: the
+// people who have the tool in their active stack, each with the start of it.
+// ?limit= caps the rows (default 6, max 24); total_count is the full number.
+func (h *Handler) ListToolStacks(w http.ResponseWriter, r *http.Request) {
+	id, err := h.resolveToolID(r.Context(), chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "Tool not found", http.StatusNotFound)
+		return
+	}
+
+	limit := 6
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 24 {
+			limit = l
+		}
+	}
+
+	rows, err := h.Queries.ListToolStacks(r.Context(), db.ListToolStacksParams{
+		ToolID:   id,
+		RowLimit: int32(limit),
+		Excluded: curation.ExcludedUsernames(),
+	})
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to list stacks", http.StatusInternalServerError)
+		return
+	}
+	if rows == nil {
+		rows = []db.ListToolStacksRow{}
+	}
+
+	var total int64
+	if len(rows) > 0 {
+		total = rows[0].TotalCount
+	}
+
+	// The same for everyone.
+	httpx.CachePublic(w, 60, 300)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(struct {
+		Stacks     []db.ListToolStacksRow `json:"stacks"`
+		TotalCount int64                  `json:"total_count"`
+	}{Stacks: rows, TotalCount: total})
+}
+
+// RequestAffiliateLink records that the signed-in user wants a personal
+// affiliate link for the tool. Asking twice is a no-op.
+func (h *Handler) RequestAffiliateLink(w http.ResponseWriter, r *http.Request) {
+	userID := httpx.UserID(r)
+
+	toolID, err := uuid.Parse(chi.URLParam(r, "tool_id"))
+	if err != nil {
+		http.Error(w, "Malformed id", http.StatusBadRequest)
+		return
+	}
+
+	err = h.Queries.AddAffiliateLinkRequest(r.Context(), db.AddAffiliateLinkRequestParams{
+		ProfileID: userID,
+		ToolID:    toolID,
+	})
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23503" { // no such tool
+		http.Error(w, "Tool not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to save the request", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+// CancelAffiliateLinkRequest takes the signed-in user off a tool's list.
+func (h *Handler) CancelAffiliateLinkRequest(w http.ResponseWriter, r *http.Request) {
+	userID := httpx.UserID(r)
+
+	toolID, err := uuid.Parse(chi.URLParam(r, "tool_id"))
+	if err != nil {
+		http.Error(w, "Malformed id", http.StatusBadRequest)
+		return
+	}
+
+	err = h.Queries.RemoveAffiliateLinkRequest(r.Context(), db.RemoveAffiliateLinkRequestParams{
+		ProfileID: userID,
+		ToolID:    toolID,
+	})
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Failed to cancel the request", http.StatusInternalServerError)
 		return
 	}
 

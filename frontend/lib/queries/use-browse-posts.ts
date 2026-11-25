@@ -8,6 +8,8 @@ export function useBrowsePosts(params: {
   tool: string;
   page: number;
   limit?: number;
+  /** Without the test accounts, for curated blocks. */
+  showcase?: boolean;
 }) {
   return useQuery({
     queryKey: [
@@ -18,6 +20,7 @@ export function useBrowsePosts(params: {
       params.tool,
       params.page,
       params.limit ?? 20,
+      params.showcase ?? false,
     ],
     queryFn: () => listPublishedPosts(params),
     staleTime: 30_000,

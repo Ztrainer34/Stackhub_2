@@ -71,12 +71,15 @@ export async function listPublishedPosts(params: {
   tool?: string;
   page?: number;
   limit?: number;
+  /** Without the test accounts, for curated blocks. */
+  showcase?: boolean;
 }): Promise<BrowsePostsResponse> {
   const search = new URLSearchParams();
   if (params.type && params.type !== "all") search.set("type", params.type);
   if (params.q) search.set("q", params.q);
   if (params.sort) search.set("sort", params.sort);
   if (params.tool) search.set("tool", params.tool);
+  if (params.showcase) search.set("showcase", "1");
   search.set("page", String(params.page ?? 1));
   search.set("limit", String(params.limit ?? 20));
 
