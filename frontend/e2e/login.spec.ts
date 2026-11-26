@@ -8,8 +8,9 @@ import { uniqueEmail, waitForMagicLink } from "./helpers/mailpit";
  * Go API decides (via /me) whether the account still needs onboarding.
  */
 
+// A link, not a button: the logged-out header's "Log in" goes to /login.
 const loginButton = (page: Page) =>
-  page.getByRole("button", { name: "Login", exact: true });
+  page.getByRole("link", { name: "Log in", exact: true });
 
 // A test id, not the headline words: the copy gets reworded often, and what
 // these tests care about is that the logged-out landing page rendered.

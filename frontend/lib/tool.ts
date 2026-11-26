@@ -40,8 +40,66 @@ export type Tool = {
    * for old links but asks search engines not to index it.
    */
   is_hidden?: boolean;
+  /** People with the tool in their ACTIVE stack (old stacks, watchlists and test accounts excluded). */
+  active_stack_count?: number;
+  /** The signed-in viewer asked for a personal affiliate link for this tool. */
+  is_affiliate_requested?: boolean;
   added_at?: string;
 };
+
+/** One person in the "Stacks with {tool}" block of a tool page. */
+export type ToolStackOwner = {
+  id: string;
+  username: string;
+  display_name: string;
+  bio: string | null;
+  avatar_url: string | null;
+  /** The start of their active stack (6 at most), the page's tool first. */
+  tools: { id: string; name: string; logo_url: string | null }[];
+  /** How many tools their active stack holds in all. */
+  tool_count: number;
+};
+
+export type ToolStacksResponse = {
+  stacks: ToolStackOwner[];
+  total_count: number;
+};
+
+/** People with the tool in their active stack (public). */
+export async function listToolStacks(
+  toolId: string,
+  limit: number = 6
+): Promise<ToolStacksResponse> {
+  const resp = await fetchApi(`${apiPath`/tool/${toolId}/stacks`}?limit=${limit}`);
+  if (!resp.ok) throw new Error("Failed to list stacks");
+  return (await resp.json()) as ToolStacksResponse;
+}
+
+/** Record that the signed-in user wants a personal affiliate link. */
+export async function requestAffiliateLink(
+  supabaseClient: SupabaseClient,
+  toolId: string
+): Promise<void> {
+  const response = await fetchApiAuthenticated(
+    supabaseClient,
+    apiPath`/user/affiliate-requests/${toolId}`,
+    { method: "PUT" }
+  );
+  if (!response.ok) throw new Error("Failed to save the request");
+}
+
+/** Take the signed-in user off the tool's affiliate list. */
+export async function cancelAffiliateLinkRequest(
+  supabaseClient: SupabaseClient,
+  toolId: string
+): Promise<void> {
+  const response = await fetchApiAuthenticated(
+    supabaseClient,
+    apiPath`/user/affiliate-requests/${toolId}`,
+    { method: "DELETE" }
+  );
+  if (!response.ok) throw new Error("Failed to cancel the request");
+}
 
 export type PaginatedToolsResponse = {
   data: Tool[];

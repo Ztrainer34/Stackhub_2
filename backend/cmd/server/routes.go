@@ -145,6 +145,8 @@ func (app *App) routes(tokenAuth *jwtauth.JWTAuth) http.Handler {
 		r.Delete("/user/old-stack/{tool_id}", stackAPI.RemoveFromOldStack)
 		r.Put("/user/followed-tools/{tool_id}", toolAPI.FollowTool)
 		r.Delete("/user/followed-tools/{tool_id}", toolAPI.UnfollowTool)
+		r.Put("/user/affiliate-requests/{tool_id}", toolAPI.RequestAffiliateLink)
+		r.Delete("/user/affiliate-requests/{tool_id}", toolAPI.CancelAffiliateLinkRequest)
 
 		r.Put("/user/key-tools", toolAPI.SetKeyTools)
 		r.Put("/user/key-playbooks", postAPI.SetKeyPlaybooks)
@@ -214,6 +216,10 @@ func (app *App) routes(tokenAuth *jwtauth.JWTAuth) http.Handler {
 		// viewer additionally gets is_following for the Follow button.
 		r.Get("/user/{slug}", userAPI.GetUser)
 
+		// The order of the avatars depends on who is asking (people the viewer
+		// follows come first), so the answer is private for a signed-in viewer.
+		r.Get("/rankings/used-by", toolAPI.GetRankingUsedBy)
+
 		r.Get("/search", searchAPI.Search)
 	})
 
@@ -225,6 +231,7 @@ func (app *App) routes(tokenAuth *jwtauth.JWTAuth) http.Handler {
 		r.Get("/tools", toolAPI.ListTools)
 		r.Get("/tool/autocomplete", toolAPI.AutocompleteTool)
 		r.Get("/tools/category/{categorySlug}", toolAPI.GetToolsByCategory)
+		r.Get("/tool/{id}/stacks", toolAPI.ListToolStacks)
 		r.Get("/category/{categorySlug}", categoryAPI.GetCategoryBySlug)
 		r.Get("/category/autocomplete", categoryAPI.AutocompleteCategory)
 
@@ -242,6 +249,12 @@ func (app *App) routes(tokenAuth *jwtauth.JWTAuth) http.Handler {
 		// Public browse listing for /playbooks
 		r.Get("/posts", postAPI.ListPublishedPosts)
 		r.Get("/posts/tool-facets", toolAPI.GetPublishedPostToolFacets)
+		r.Get("/posts/trending", postAPI.GetTrendingPosts)
+
+		// Rankings and the logged-out homepage. The counts leave out test accounts
+		// (curation.ExcludedUsernames).
+		r.Get("/rankings/tools", toolAPI.GetRankingTools)
+		r.Get("/stacks/featured", stackAPI.GetFeaturedStacks)
 
 		// Homepage routes
 		r.Get("/homepage/top-categories", categoryAPI.GetTopCategories)

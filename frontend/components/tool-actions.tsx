@@ -221,15 +221,17 @@ export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
   }
 
   return (
-    <div className="flex flex-col gap-3 w-48">
+    // Phones: 4 buttons side by side, icon above the label. From sm up: the
+    // usual column of full-width buttons next to the tool name.
+    <div className="grid w-full grid-cols-4 gap-2 sm:flex sm:w-48 sm:flex-col sm:gap-3">
       <Button 
         size="default" 
         onClick={handleStackToggle}
         disabled={isStackPending}
         variant={isInStack ? "default" : "outline"}
-        className="w-full justify-start"
+        className="h-auto min-h-16 w-full whitespace-normal px-1.5 py-2 text-xs sm:h-9 sm:min-h-0 sm:justify-start sm:px-4 sm:py-2 sm:text-sm"
       >
-        <div className="flex items-center gap-2 w-full">
+        <div className="flex w-full flex-col items-center gap-1.5 text-center leading-tight sm:flex-row sm:gap-2 sm:text-left">
           {isInStack ? <Check className="w-4 h-4" /> : <Layers className="w-4 h-4" />}
           <span>
             {isInStack ? "In stack" : "Add to stack"}
@@ -241,9 +243,9 @@ export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
         onClick={handleOldStackToggle}
         disabled={isOldStackPending}
         variant={isInOldStack ? "default" : "outline"}
-        className="w-full justify-start"
+        className="h-auto min-h-16 w-full whitespace-normal px-1.5 py-2 text-xs sm:h-9 sm:min-h-0 sm:justify-start sm:px-4 sm:py-2 sm:text-sm"
       >
-        <div className="flex items-center gap-2 w-full">
+        <div className="flex w-full flex-col items-center gap-1.5 text-center leading-tight sm:flex-row sm:gap-2 sm:text-left">
           {isInOldStack ? <Check className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
           <span>{isInOldStack ? "In old stack" : "Move to old stack"}</span>
         </div>
@@ -253,9 +255,9 @@ export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
         onClick={handleWatchlistToggle}
         disabled={isWatchlistPending}
         variant={isInWatchlist ? "default" : "outline"}
-        className="w-full justify-start"
+        className="h-auto min-h-16 w-full whitespace-normal px-1.5 py-2 text-xs sm:h-9 sm:min-h-0 sm:justify-start sm:px-4 sm:py-2 sm:text-sm"
       >
-        <div className="flex items-center gap-2 w-full">
+        <div className="flex w-full flex-col items-center gap-1.5 text-center leading-tight sm:flex-row sm:gap-2 sm:text-left">
           {isInWatchlist ? <Check className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}
           <span>
             {isInWatchlist ? "Saved for later" : "Save for later"}
@@ -267,9 +269,9 @@ export function ToolActions({ tool, variant = "full" }: ToolActionsProps) {
         onClick={handleFollowToggle}
         disabled={isFollowPending}
         variant={isFollowed ? "default" : "outline"}
-        className="w-full justify-start"
+        className="h-auto min-h-16 w-full whitespace-normal px-1.5 py-2 text-xs sm:h-9 sm:min-h-0 sm:justify-start sm:px-4 sm:py-2 sm:text-sm"
       >
-        <div className="flex items-center gap-2 w-full">
+        <div className="flex w-full flex-col items-center gap-1.5 text-center leading-tight sm:flex-row sm:gap-2 sm:text-left">
           {isFollowed ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
           <span>{isFollowed ? "Following" : "Follow"}</span>
         </div>

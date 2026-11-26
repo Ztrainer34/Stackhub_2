@@ -457,6 +457,7 @@ func TestResolveTicketCharacterisationIntegration(t *testing.T) {
 func TestUpdateToolPageCharacterisationIntegration(t *testing.T) {
 	conn := testdb.Open(t)
 	tx := testdb.Begin(t, conn)
+	testdb.ApplyMigration(t, tx, affiliateMigration)
 	api := newTestAPI(t, tx)
 	ctx := context.Background()
 	owner, other := testdb.TwoProfiles(t, tx)

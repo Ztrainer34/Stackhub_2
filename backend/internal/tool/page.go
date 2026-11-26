@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"stackhub.com/stackhub/internal/curation"
 	"stackhub.com/stackhub/internal/httpx"
 	"stackhub.com/stackhub/internal/storage"
 	"stackhub.com/stackhub/pkg/db"
@@ -86,6 +87,7 @@ func (h *Handler) UpdateToolPage(w http.ResponseWriter, r *http.Request) {
 	tool, err := h.Queries.GetToolAuthenticated(r.Context(), db.GetToolAuthenticatedParams{
 		ID:        toolID,
 		ProfileID: httpx.UserID(r),
+		Excluded:  curation.ExcludedUsernames(),
 	})
 	if err != nil {
 		log.Println(err)

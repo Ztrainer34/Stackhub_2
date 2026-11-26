@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { StackHubLogo } from "@/components/stackhub-logo";
 import { UserAvatar } from "@/components/user-avatar";
@@ -12,13 +11,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import {
   LogOut,
   Plus,
@@ -35,8 +27,8 @@ import { Button } from "@/components/ui/button";
 import { SearchForm } from "./search-form";
 import { MobileNavbar } from "./mobile-navbar";
 import { useNavbarTabs } from "./navbar-tabs-context";
-import LoginForm from "@/app/login/LoginForm";
 import NotificationBell from "./notification-bell";
+import { PublicHeader } from "./site/public-header";
 
 interface User {
   id: string;
@@ -50,7 +42,21 @@ interface NavBarContentProps {
 
 export default function NavBarContent({ user }: NavBarContentProps) {
   const { tabsContent } = useNavbarTabs();
-  const [hideDialogTitle, setHideDialogTitle] = useState(false);
+
+  // A visitor gets the public header. A profile's tabs sit below it, not inside,
+  // so only the header itself sticks to the top.
+  if (!user) {
+    return (
+      <>
+        <PublicHeader />
+        {tabsContent && (
+          <div className="border-grid w-full border-b px-4 pt-3">
+            <div className="container">{tabsContent}</div>
+          </div>
+        )}
+      </>
+    );
+  }
 
   return (
     <header className="border-grid px-4 w-full border-b">
@@ -83,9 +89,8 @@ export default function NavBarContent({ user }: NavBarContentProps) {
                 <Plus />
               </Button>
             </Link>
-            {user && <NotificationBell />}
-            {user ? (
-              <DropdownMenu>
+            <NotificationBell />
+            <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <div className="cursor-pointer">
                     <UserAvatar user={user} />
@@ -146,26 +151,9 @@ export default function NavBarContent({ user }: NavBarContentProps) {
                   </Link>
                 </DropdownMenuContent>
               </DropdownMenu>
-            ) : (
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button variant="outline">Login</Button>
-                </DialogTrigger>
-                <DialogContent className="p-10">
-                  {!hideDialogTitle && (
-                    <DialogHeader>
-                      <DialogTitle className="sm:text-center text-2xl">
-                        Welcome back
-                      </DialogTitle>
-                    </DialogHeader>
-                  )}
-                  <LoginForm onHideTitle={setHideDialogTitle} />
-                </DialogContent>
-              </Dialog>
-            )}
           </div>
         </div>
-        
+
         {/* Profile tabs section */}
         {tabsContent && (
           <div>

@@ -6,9 +6,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"stackhub.com/stackhub/internal/curation"
 	"stackhub.com/stackhub/internal/testdb"
 	"stackhub.com/stackhub/pkg/db"
 )
+
+// GetToolAuthenticated reads this table.
+const affiliateMigration = "20261125120000_affiliate_link_requests.sql"
 
 // hiddenFixture creates a visible and a hidden tool that share a made-up word
 // (so search finds both), a logo, and a category of their own, plus a second
@@ -199,23 +203,24 @@ func TestAutocompleteIncludeHiddenIntegration(t *testing.T) {
 // visible one.
 func TestHiddenToolPageIntegration(t *testing.T) {
 	tx := testdb.Rollback(t)
+	testdb.ApplyMigration(t, tx, affiliateMigration)
 	ctx := context.Background()
 	q := db.New(tx)
 	f := newHiddenFixture(t, tx)
 
-	hidden, err := q.GetTool(ctx, f.hidden)
+	hidden, err := q.GetTool(ctx, db.GetToolParams{ID: f.hidden, Excluded: curation.ExcludedUsernames()})
 	if err != nil {
 		t.Fatalf("hidden tool page: %v; want it to load", err)
 	}
 	if !hidden.IsHidden {
 		t.Error("hidden tool page: is_hidden = false")
 	}
-	visible, err := q.GetTool(ctx, f.visible)
+	visible, err := q.GetTool(ctx, db.GetToolParams{ID: f.visible, Excluded: curation.ExcludedUsernames()})
 	if err != nil || visible.IsHidden {
 		t.Errorf("visible tool page: is_hidden %v, err %v; want false, nil", visible.IsHidden, err)
 	}
 	profile, _ := testdb.TwoProfiles(t, tx)
-	authed, err := q.GetToolAuthenticated(ctx, db.GetToolAuthenticatedParams{ID: f.hidden, ProfileID: profile})
+	authed, err := q.GetToolAuthenticated(ctx, db.GetToolAuthenticatedParams{ID: f.hidden, ProfileID: profile, Excluded: curation.ExcludedUsernames()})
 	if err != nil || !authed.IsHidden {
 		t.Errorf("signed-in hidden tool page: is_hidden %v, err %v; want true, nil", authed.IsHidden, err)
 	}

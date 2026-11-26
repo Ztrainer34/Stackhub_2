@@ -153,17 +153,17 @@ func item(name string) NewToolItem {
 }
 
 func TestBuildNewToolDigestSubject(t *testing.T) {
-	subject, _ := BuildNewToolDigest([]NewToolItem{item("One")}, 0, 0)
+	subject, _ := digestWithoutHeader(t, []NewToolItem{item("One")}, 0, 0)
 	if subject != "New tool suggestion on StackHub" {
 		t.Errorf("one item: subject = %q", subject)
 	}
-	subject, _ = BuildNewToolDigest([]NewToolItem{item("One"), item("Two")}, 1, 1)
+	subject, _ = digestWithoutHeader(t, []NewToolItem{item("One"), item("Two")}, 1, 1)
 	if subject != "New tool suggestions on StackHub (3)" {
 		t.Errorf("two items and one more: subject = %q", subject)
 	}
 
 	hostile := "X\r\nBcc: a@b"
-	subject, _ = BuildNewToolDigest([]NewToolItem{item(hostile)}, 0, 0)
+	subject, _ = digestWithoutHeader(t, []NewToolItem{item(hostile)}, 0, 0)
 	if strings.Contains(subject, "X") && strings.Contains(subject, "Bcc") || strings.ContainsAny(subject, "\r\n") {
 		t.Errorf("the subject carries user text: %q", subject)
 	}
@@ -175,7 +175,7 @@ func TestBuildNewToolDigestSubject(t *testing.T) {
 func TestBuildNewToolDigestEscapesUserText(t *testing.T) {
 	it := item("<script>alert(1)</script>")
 	it.Description = `"><a href="https://evil.example">`
-	_, html := BuildNewToolDigest([]NewToolItem{it}, 0, 0)
+	_, html := digestWithoutHeader(t, []NewToolItem{it}, 0, 0)
 
 	if strings.Contains(html, "<script") {
 		t.Errorf("script tag survived:\n%s", html)
@@ -190,7 +190,7 @@ func TestBuildNewToolDigestEscapesUserText(t *testing.T) {
 
 func TestBuildNewToolDigestHostileName(t *testing.T) {
 	name := "<a href=x>\"><img src=y>\r\nBcc: z‮  end"
-	_, html := BuildNewToolDigest([]NewToolItem{item(name)}, 0, 0)
+	_, html := digestWithoutHeader(t, []NewToolItem{item(name)}, 0, 0)
 
 	if strings.Count(html, "<a ") != 1 {
 		t.Errorf("an extra link got through:\n%s", html)
@@ -208,7 +208,7 @@ func TestBuildNewToolDigestHostileName(t *testing.T) {
 func TestBuildNewToolDigestWebsiteIsInertText(t *testing.T) {
 	it := item("Tool")
 	it.Website = "https://stackhub.me@evil.example"
-	_, html := BuildNewToolDigest([]NewToolItem{it}, 0, 0)
+	_, html := digestWithoutHeader(t, []NewToolItem{it}, 0, 0)
 
 	if strings.Contains(html, "evil.example") || strings.Contains(html, "@evil") {
 		t.Errorf("the website is readable as a real address:\n%s", html)
@@ -226,7 +226,7 @@ func TestBuildNewToolDigestWebsiteIsInertText(t *testing.T) {
 }
 
 func TestBuildNewToolDigestReviewLink(t *testing.T) {
-	_, html := BuildNewToolDigest([]NewToolItem{item("Tool")}, 0, 0)
+	_, html := digestWithoutHeader(t, []NewToolItem{item("Tool")}, 0, 0)
 	want := `href="` + siteURL + `/admin/tool-tickets/` + testTicketID + `"`
 	if !strings.Contains(html, want) {
 		t.Errorf("missing %s in:\n%s", want, html)
@@ -241,7 +241,7 @@ func TestBuildNewToolDigestReviewLink(t *testing.T) {
 
 func TestBuildNewToolDigestLinksPerItem(t *testing.T) {
 	items := []NewToolItem{item("A"), item("B"), item("C")}
-	_, html := BuildNewToolDigest(items, 0, 0)
+	_, html := digestWithoutHeader(t, items, 0, 0)
 	if got := strings.Count(html, "<a "); got != 3 {
 		t.Errorf("3 items, no more: %d links; want 3", got)
 	}
@@ -249,7 +249,7 @@ func TestBuildNewToolDigestLinksPerItem(t *testing.T) {
 		t.Error("more=0 must not mention unlisted tools")
 	}
 
-	_, html = BuildNewToolDigest(items, 4, 2)
+	_, html = digestWithoutHeader(t, items, 4, 2)
 	if got := strings.Count(html, "<a "); got != 4 {
 		t.Errorf("3 items and more: %d links; want 3 plus the queue link", got)
 	}
@@ -264,7 +264,7 @@ func TestBuildNewToolDigestLinksPerItem(t *testing.T) {
 func TestBuildNewToolDigestCutsLongText(t *testing.T) {
 	it := item("Tool")
 	it.Description = strings.Repeat("a", 1000)
-	_, html := BuildNewToolDigest([]NewToolItem{it}, 0, 0)
+	_, html := digestWithoutHeader(t, []NewToolItem{it}, 0, 0)
 	if !strings.Contains(html, strings.Repeat("a", 300)+"…") {
 		t.Error("a long description is not cut to 300 characters and an ellipsis")
 	}
@@ -276,7 +276,7 @@ func TestBuildNewToolDigestCutsLongText(t *testing.T) {
 func TestBuildNewToolDigestNeverCutsAnEntity(t *testing.T) {
 	it := item("Tool")
 	it.Description = strings.Repeat("&<", 500)
-	_, html := BuildNewToolDigest([]NewToolItem{it}, 0, 0)
+	_, html := digestWithoutHeader(t, []NewToolItem{it}, 0, 0)
 
 	left := regexp.MustCompile(`&amp;|&lt;|&gt;|&#34;|&#39;`).ReplaceAllString(html, "")
 	if strings.Contains(left, "&") {
@@ -288,7 +288,7 @@ func TestBuildNewToolDigestFlattensWhitespace(t *testing.T) {
 	it := item("a\r\n\tb")
 	it.RequesterUsername = "x\ty"
 	it.Categories = []string{"c\nd", "e"}
-	_, html := BuildNewToolDigest([]NewToolItem{it}, 0, 0)
+	_, html := digestWithoutHeader(t, []NewToolItem{it}, 0, 0)
 
 	for _, want := range []string{"<strong>a b</strong>", "Suggested by @x y", "Categories: c d, e"} {
 		if !strings.Contains(html, want) {
@@ -301,7 +301,7 @@ func TestBuildNewToolDigestFlattensWhitespace(t *testing.T) {
 }
 
 func TestBuildNewToolDigestOmitsEmptyFields(t *testing.T) {
-	_, html := BuildNewToolDigest([]NewToolItem{item("Tool")}, 0, 0)
+	_, html := digestWithoutHeader(t, []NewToolItem{item("Tool")}, 0, 0)
 	for _, label := range []string{"Website:", "Description:", "Categories:", "From playbook:"} {
 		if strings.Contains(html, label) {
 			t.Errorf("%q rendered for an empty field", label)
@@ -313,7 +313,7 @@ func TestBuildNewToolDigestOmitsEmptyFields(t *testing.T) {
 	it.Website = "https://example.com"
 	it.Description = "Does things"
 	it.Categories = []string{"CRM"}
-	_, html = BuildNewToolDigest([]NewToolItem{it}, 0, 0)
+	_, html = digestWithoutHeader(t, []NewToolItem{it}, 0, 0)
 	for _, label := range []string{"Website:", "Description:", "Categories:", "From playbook: My playbook"} {
 		if !strings.Contains(html, label) {
 			t.Errorf("%q missing for a filled field", label)
@@ -327,7 +327,7 @@ func TestBuildNewToolDigestOmitsEmptyFields(t *testing.T) {
 // own domain: it must be inert text, whatever it contains.
 func TestBuildToolRejectedReasonIsInertText(t *testing.T) {
 	reason := `<a href="https://evil.example/x">go</a> & visit www.evil.example or a@b.co`
-	subject, html := BuildToolRejected("Notion", reason)
+	subject, html := rejectedWithoutHeader(t, "Notion", reason)
 
 	for _, leaked := range []string{`href="https://evil`, "https://evil.example", "www.evil.example", "a@b.co", "evil.example/x"} {
 		if strings.Contains(html, leaked) {
@@ -355,7 +355,7 @@ func TestBuildToolRejectedReasonIsInertText(t *testing.T) {
 }
 
 func TestBuildToolRejectedKeepsEntitiesIntact(t *testing.T) {
-	_, html := BuildToolRejected("Notion", "Too similar to Airtable &")
+	_, html := rejectedWithoutHeader(t, "Notion", "Too similar to Airtable &")
 	if !strings.Contains(html, "Airtable &amp;</div>") {
 		t.Errorf("a trailing & must come out as an intact &amp;:\n%s", html)
 	}
@@ -365,9 +365,9 @@ func TestBuildToolRejectedKeepsEntitiesIntact(t *testing.T) {
 }
 
 func TestBuildToolRejectedSubjectIsConstant(t *testing.T) {
-	want, _ := BuildToolRejected("Notion", "Duplicate")
+	want, _ := rejectedWithoutHeader(t, "Notion", "Duplicate")
 	for _, name := range []string{"Notion\r\nBcc: attacker@evil.example", "Subject: pwned", strings.Repeat("x", 5000)} {
-		subject, html := BuildToolRejected(name, "Duplicate")
+		subject, html := rejectedWithoutHeader(t, name, "Duplicate")
 		if subject != want {
 			t.Errorf("tool name %q changed the subject to %q", name, subject)
 		}
@@ -381,7 +381,7 @@ func TestBuildToolRejectedSubjectIsConstant(t *testing.T) {
 }
 
 func TestBuildToolRejectedDropsInvisibleCharacters(t *testing.T) {
-	_, html := BuildToolRejected("No\u202Etion\u200B", "bad\u202Ereason\u200Bwith\u2028breaks\r\nand\ttabs")
+	_, html := rejectedWithoutHeader(t, "No\u202Etion\u200B", "bad\u202Ereason\u200Bwith\u2028breaks\r\nand\ttabs")
 	for _, r := range []rune{'\u202E', '\u200B', '\u2028'} {
 		if strings.ContainsRune(html, r) {
 			t.Errorf("U+%04X reached the email", r)
@@ -393,7 +393,7 @@ func TestBuildToolRejectedDropsInvisibleCharacters(t *testing.T) {
 }
 
 func TestBuildToolRejectedEscapesToolName(t *testing.T) {
-	_, html := BuildToolRejected(`<img src=x onerror=alert(1)> evil.example`, "Duplicate")
+	_, html := rejectedWithoutHeader(t, `<img src=x onerror=alert(1)> evil.example`, "Duplicate")
 	for _, bad := range []string{"<img", "evil.example"} {
 		if strings.Contains(html, bad) {
 			t.Errorf("%q in the tool name reached the email as is:\n%s", bad, html)
@@ -441,7 +441,7 @@ func TestBuildNewToolDigestFreeTextFieldsAreInert(t *testing.T) {
 		Categories:        []string{"cat.evil-category.example"},
 		RequesterUsername: "alice",
 	}
-	_, html := BuildNewToolDigest([]NewToolItem{it}, 0, 0)
+	_, html := digestWithoutHeader(t, []NewToolItem{it}, 0, 0)
 
 	for _, leaked := range []string{
 		"evil-name.example", "stackhub-admin-verify.com", "evil-playbook.example",
@@ -466,7 +466,7 @@ func TestBuildNewToolDigestFreeTextFieldsAreInert(t *testing.T) {
 func TestBuildNewToolDigestWebsiteIsClickable(t *testing.T) {
 	it := item("Tool")
 	it.Website = "https://aixecute.be/3"
-	_, html := BuildNewToolDigest([]NewToolItem{it}, 0, 0)
+	_, html := digestWithoutHeader(t, []NewToolItem{it}, 0, 0)
 
 	want := `<a href="https://aixecute.be/3" rel="noopener noreferrer"`
 	if !strings.Contains(html, want) {
@@ -495,7 +495,7 @@ func TestBuildNewToolDigestRiskyWebsitesStayDefanged(t *testing.T) {
 	} {
 		it := item("Tool")
 		it.Website = site
-		_, html := BuildNewToolDigest([]NewToolItem{it}, 0, 0)
+		_, html := digestWithoutHeader(t, []NewToolItem{it}, 0, 0)
 
 		if got := strings.Count(html, "<a "); got != 1 {
 			t.Errorf("%s: %d links; only the Review link is allowed:\n%s", name, got, html)
@@ -531,7 +531,7 @@ func TestClickableWebsiteRefusesAnythingCleaned(t *testing.T) {
 func TestBuildNewToolDigestWebsiteLinkIsEscaped(t *testing.T) {
 	it := item("Tool")
 	it.Website = "https://a.example/?x=1&y=2"
-	_, html := BuildNewToolDigest([]NewToolItem{it}, 0, 0)
+	_, html := digestWithoutHeader(t, []NewToolItem{it}, 0, 0)
 	if !strings.Contains(html, `href="https://a.example/?x=1&amp;y=2"`) {
 		t.Errorf("the & in the address must be escaped inside the attribute:\n%s", html)
 	}
@@ -567,7 +567,7 @@ func TestClickableWebsiteRefusesHostsAClickCouldAbuse(t *testing.T) {
 		// And in the email it must fall back to the defanged text.
 		it := item("Tool")
 		it.Website = in
-		_, html := BuildNewToolDigest([]NewToolItem{it}, 0, 0)
+		_, html := digestWithoutHeader(t, []NewToolItem{it}, 0, 0)
 		if got := strings.Count(html, "<a "); got != 1 {
 			t.Errorf("%s: %d links in the email; only the Review link is allowed", name, got)
 		}
@@ -579,5 +579,43 @@ func TestClickableWebsiteRefusesHostsAClickCouldAbuse(t *testing.T) {
 		if _, linked := clickableWebsite(ok); !linked {
 			t.Errorf("%q is an ordinary address and should be a link", ok)
 		}
+	}
+}
+
+// The header's logo link is in every email. These tests are about what the rest
+// of the email links to, so they set aside exactly that fixed text: anything
+// else that gets in, in the header's place or out of it, is still counted.
+func withoutHeader(t *testing.T, html string) string {
+	t.Helper()
+	if n := strings.Count(html, emailHeader); n != 1 {
+		t.Fatalf("want the fixed email header exactly once, got %d:\n%s", n, html)
+	}
+	return strings.Replace(html, emailHeader, "", 1)
+}
+
+func digestWithoutHeader(t *testing.T, items []NewToolItem, more, moreSubmitters int) (string, string) {
+	t.Helper()
+	subject, html := BuildNewToolDigest(items, more, moreSubmitters)
+	return subject, withoutHeader(t, html)
+}
+
+func rejectedWithoutHeader(t *testing.T, toolName, reason string) (string, string) {
+	t.Helper()
+	subject, html := BuildToolRejected(toolName, reason)
+	return subject, withoutHeader(t, html)
+}
+
+func TestEmailHeaderLinksOnlyToTheSite(t *testing.T) {
+	if got := strings.Count(emailHeader, "<a "); got != 1 {
+		t.Fatalf("want one link in the header, got %d", got)
+	}
+	if !strings.Contains(emailHeader, `<a href="https://stackhub.me" `) {
+		t.Errorf("the header link must go to the site:\n%s", emailHeader)
+	}
+	if !strings.Contains(emailHeader, `<img src="https://stackhub.me/email-logo.png" `) {
+		t.Errorf("the logo must load from the site:\n%s", emailHeader)
+	}
+	if got := strings.Count(emailHeader, "://"); got != 2 {
+		t.Errorf("want two URLs in the header, got %d", got)
 	}
 }

@@ -50,16 +50,21 @@ func emailShell(body string) string {
 		`<body style="margin:0;background:#f6f9fc;font-family:Inter,Arial,sans-serif">` +
 		`<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f6f9fc;padding:24px 0"><tr><td align="center">` +
 		`<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;background:#ffffff;border:1px solid #e6ebf1;border-radius:8px;overflow:hidden">` +
-		`<tr><td style="background:#000000;padding:28px 40px;text-align:center">` +
-		`<a href="` + siteURL + `" style="text-decoration:none">` +
-		`<img src="` + siteURL + `/email-logo.png" width="48" height="48" alt="" style="display:block;margin:0 auto 10px;border:0"/>` +
-		`<h1 style="color:#ffffff;font-size:24px;margin:0">StackHub</h1></a></td></tr>` +
+		emailHeader +
 		`<tr><td style="padding:36px 40px;color:#000000;font-size:16px;line-height:1.6">` + body + `</td></tr>` +
 		`</table></td></tr></table></body></html>`
 }
 
 // siteURL is the public site origin, used to build links inside emails.
 const siteURL = "https://stackhub.me"
+
+// emailHeader is the logo row of every email, linking to the site. It is fixed
+// text: never build any of it from user input, because the link-safety tests
+// set it aside before counting the links in an email.
+const emailHeader = `<tr><td style="background:#000000;padding:28px 40px;text-align:center">` +
+	`<a href="` + siteURL + `" style="text-decoration:none">` +
+	`<img src="` + siteURL + `/email-logo.png" width="48" height="48" alt="" style="display:block;margin:0 auto 10px;border:0"/>` +
+	`<h1 style="color:#ffffff;font-size:24px;margin:0">StackHub</h1></a></td></tr>`
 
 // nameLink renders the actor's display name as a link to their profile (falls
 // back to bold text when the username is unknown).

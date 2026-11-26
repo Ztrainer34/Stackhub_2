@@ -3,10 +3,18 @@ import { User } from "@/lib/user";
 import { apiPath } from "@/lib/api-path";
 import { cn } from "@/lib/utils";
 
+// Only these two are read, so a list row that has no full profile can use it too.
+type AvatarUser = Pick<User, "username" | "avatar_url">;
+
 interface UserAvatarProps {
-  user: User;
+  user: AvatarUser;
   className?: string;
   size?: "sm" | "md" | "lg" | "xl";
+  /** Shown without a picture. Default: the first letter of the username. */
+  initials?: string;
+  fallbackClassName?: string;
+  /** Background of the initials, e.g. a pastel. */
+  fallbackColor?: string;
 }
 
 // Map size to Gravatar pixel dimensions
@@ -25,7 +33,7 @@ const gravatarSizes = {
 // URL needs the email hash, and an unsalted SHA-256 of an email is reversible
 // for any address in a breach list — so the backend fetches the image and the
 // hash never reaches the browser.
-function getUserAvatarUrl(user: User, size: "sm" | "md" | "lg" | "xl"): string {
+function getUserAvatarUrl(user: AvatarUser, size: "sm" | "md" | "lg" | "xl"): string {
   if (user.avatar_url) return user.avatar_url;
 
   return `${process.env.NEXT_PUBLIC_API_URL!}${apiPath`/user/${user.username}/gravatar`}?s=${gravatarSizes[size]}`;
@@ -38,14 +46,24 @@ const sizeClasses = {
   xl: "h-32 w-32 text-4xl",
 };
 
-export function UserAvatar({ user, className, size = "md" }: UserAvatarProps) {
+export function UserAvatar({
+  user,
+  className,
+  size = "md",
+  initials,
+  fallbackClassName,
+  fallbackColor,
+}: UserAvatarProps) {
   const avatarUrl = getUserAvatarUrl(user, size);
 
   return (
     <Avatar className={cn(sizeClasses[size], className)}>
       <AvatarImage src={avatarUrl} alt={`${user.username}'s avatar`} />
-      <AvatarFallback>
-        {user.username[0]?.toUpperCase() || "?"}
+      <AvatarFallback
+        className={fallbackClassName}
+        style={fallbackColor ? { backgroundColor: fallbackColor } : undefined}
+      >
+        {initials || user.username[0]?.toUpperCase() || "?"}
       </AvatarFallback>
     </Avatar>
   );

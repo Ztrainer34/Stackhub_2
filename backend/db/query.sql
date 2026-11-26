@@ -472,25 +472,100 @@ LIMIT $2 OFFSET $3;
 SELECT
   twd.*,
   EXISTS(SELECT 1 FROM tool_owners tow WHERE tow.tool_id = twd.id) AS is_claimed,
-  EXISTS(SELECT 1 FROM tools th WHERE th.id = twd.id AND th.hidden_at IS NOT NULL) AS is_hidden
+  EXISTS(SELECT 1 FROM tools th WHERE th.id = twd.id AND th.hidden_at IS NOT NULL) AS is_hidden,
+  -- Tool page "In X active stacks" card. Active stack only, and without the
+  -- excluded accounts: the same rule as the rankings, so the numbers match.
+  (
+    SELECT COUNT(*) FROM stack_items sc
+    JOIN profiles scp ON scp.id = sc.profile_id
+    WHERE sc.tool_id = twd.id AND scp.username <> ALL(sqlc.arg(excluded)::text[])
+  )::int AS active_stack_count
 FROM tools_with_details twd
-WHERE twd.id = $1;
+WHERE twd.id = sqlc.arg(id);
 
 -- name: GetToolAuthenticated :one
 SELECT
   *,
   -- User status
-  EXISTS(SELECT 1 FROM stack_items si WHERE si.profile_id = $2 AND si.tool_id = twd.id) AS is_in_stack,
-  EXISTS(SELECT 1 FROM watchlist_items wi WHERE wi.profile_id = $2 AND wi.tool_id = twd.id) AS is_in_watchlist,
-  EXISTS(SELECT 1 FROM old_stack_items oi WHERE oi.profile_id = $2 AND oi.tool_id = twd.id) AS is_in_old_stack,
-  EXISTS(SELECT 1 FROM tool_follows tf WHERE tf.profile_id = $2 AND tf.tool_id = twd.id) AS is_followed,
+  EXISTS(SELECT 1 FROM stack_items si WHERE si.profile_id = sqlc.arg(profile_id) AND si.tool_id = twd.id) AS is_in_stack,
+  EXISTS(SELECT 1 FROM watchlist_items wi WHERE wi.profile_id = sqlc.arg(profile_id) AND wi.tool_id = twd.id) AS is_in_watchlist,
+  EXISTS(SELECT 1 FROM old_stack_items oi WHERE oi.profile_id = sqlc.arg(profile_id) AND oi.tool_id = twd.id) AS is_in_old_stack,
+  EXISTS(SELECT 1 FROM tool_follows tf WHERE tf.profile_id = sqlc.arg(profile_id) AND tf.tool_id = twd.id) AS is_followed,
   -- Page ownership: is_owner unlocks the inline editors, is_claimed hides the
   -- "Claim this page" call to action once somebody has taken the page over.
-  EXISTS(SELECT 1 FROM tool_owners tow WHERE tow.profile_id = $2 AND tow.tool_id = twd.id) AS is_owner,
+  EXISTS(SELECT 1 FROM tool_owners tow WHERE tow.profile_id = sqlc.arg(profile_id) AND tow.tool_id = twd.id) AS is_owner,
   EXISTS(SELECT 1 FROM tool_owners tow2 WHERE tow2.tool_id = twd.id) AS is_claimed,
-  EXISTS(SELECT 1 FROM tools th WHERE th.id = twd.id AND th.hidden_at IS NOT NULL) AS is_hidden
+  EXISTS(SELECT 1 FROM tools th WHERE th.id = twd.id AND th.hidden_at IS NOT NULL) AS is_hidden,
+  (
+    SELECT COUNT(*) FROM stack_items sc
+    JOIN profiles scp ON scp.id = sc.profile_id
+    WHERE sc.tool_id = twd.id AND scp.username <> ALL(sqlc.arg(excluded)::text[])
+  )::int AS active_stack_count,
+  -- The viewer already asked for an affiliate link for this tool.
+  EXISTS(SELECT 1 FROM affiliate_link_requests ar WHERE ar.profile_id = sqlc.arg(profile_id) AND ar.tool_id = twd.id) AS is_affiliate_requested
 FROM tools_with_details twd
-WHERE twd.id = $1;
+WHERE twd.id = sqlc.arg(id);
+
+-- name: ListToolStacks :many
+-- People with the tool in their ACTIVE stack, for the "Stacks with {tool}"
+-- block on the tool page, without the excluded accounts. People who published a
+-- post using the tool come first, then the biggest stacks. `tools` is the start
+-- of the person's active stack (visible tools only, plus this tool even if
+-- hidden), this tool first; tool_count is how many there are in all.
+WITH people AS (
+  SELECT
+    p.id, p.username, p.display_name, p.bio, p.avatar_url,
+    EXISTS(
+      SELECT 1 FROM posts po
+      JOIN post_tools pt ON pt.post_id = po.id
+      WHERE po.author_id = p.id AND po.is_published AND pt.tool_id = sqlc.arg(tool_id)::uuid
+        AND NOT EXISTS (
+          SELECT 1 FROM tool_tickets tt
+          WHERE tt.post_id = po.id AND tt.status IN ('pending', 'rejected')
+        )
+    ) AS has_post,
+    (
+      SELECT COUNT(*) FROM stack_items s3
+      JOIN tools t3 ON t3.id = s3.tool_id
+      WHERE s3.profile_id = p.id AND (t3.hidden_at IS NULL OR t3.id = sqlc.arg(tool_id)::uuid)
+    )::int AS tool_count,
+    COUNT(*) OVER() AS total_count
+  FROM stack_items si
+  JOIN profiles p ON p.id = si.profile_id
+  WHERE si.tool_id = sqlc.arg(tool_id)::uuid
+    AND p.username <> ALL(sqlc.arg(excluded)::text[])
+  ORDER BY has_post DESC, tool_count DESC, p.username
+  LIMIT sqlc.arg(row_limit)
+)
+SELECT
+  pe.id, pe.username, pe.display_name, pe.bio, pe.avatar_url, pe.tool_count,
+  COALESCE((
+    SELECT jsonb_agg(
+      jsonb_build_object('id', x.id, 'name', x.name, 'logo_url', x.logo_url)
+      ORDER BY (x.id = sqlc.arg(tool_id)::uuid) DESC, x.name
+    )
+    FROM (
+      SELECT t.id, t.name, t.logo_url
+      FROM stack_items si2
+      JOIN tools t ON t.id = si2.tool_id
+      WHERE si2.profile_id = pe.id
+        AND (t.hidden_at IS NULL OR t.id = sqlc.arg(tool_id)::uuid)
+      ORDER BY (t.id = sqlc.arg(tool_id)::uuid) DESC, t.name
+      LIMIT 6
+    ) x
+  ), '[]'::jsonb)::jsonb AS tools,
+  pe.total_count
+FROM people pe
+ORDER BY pe.has_post DESC, pe.tool_count DESC, pe.username;
+
+-- name: AddAffiliateLinkRequest :exec
+INSERT INTO affiliate_link_requests (profile_id, tool_id)
+VALUES ($1, $2)
+ON CONFLICT (profile_id, tool_id) DO NOTHING;
+
+-- name: RemoveAffiliateLinkRequest :exec
+DELETE FROM affiliate_link_requests
+WHERE profile_id = $1 AND tool_id = $2;
 
 -- name: GetTopPosts :many
 SELECT *
@@ -525,6 +600,8 @@ WHERE pwt.is_published
     SELECT 1 FROM tool_tickets tt
     WHERE tt.post_id = pwt.id AND tt.status IN ('pending', 'rejected')
   )
+  -- Empty unless the caller asks for the showcase (no test accounts).
+  AND pwt.author_username <> ALL(sqlc.arg(excluded)::text[])
 ORDER BY
   CASE WHEN sqlc.arg(sort)::text = 'name' THEN pwt.name END ASC,
   CASE WHEN sqlc.arg(sort)::text = 'created' THEN pwt.created_at END DESC,
@@ -562,10 +639,21 @@ SELECT
   COUNT(*) FILTER (WHERE p.type = 'playbook')::int AS playbook_count,
   COUNT(*) FILTER (WHERE p.type = 'comparison')::int AS comparison_count
 FROM posts p
+JOIN profiles au ON au.id = p.author_id
 WHERE p.is_published
+  AND au.username <> ALL(sqlc.arg(excluded)::text[])
   AND NOT EXISTS (
     SELECT 1 FROM tool_tickets tt
     WHERE tt.post_id = p.id AND tt.status IN ('pending', 'rejected')
+  )
+  -- Same tool filter as ListPublishedPosts, so the chip counts match the list
+  -- on /playbooks?tool= and on a tool page.
+  AND (
+    sqlc.arg(use_tool_filter)::boolean = false
+    OR EXISTS (
+      SELECT 1 FROM post_tools pt
+      WHERE pt.post_id = p.id AND pt.tool_id = sqlc.arg(tool_filter)::uuid
+    )
   );
 
 -- name: GetTopCategories :many
@@ -1619,4 +1707,269 @@ WHERE NOT EXISTS (SELECT 1 FROM tools th WHERE th.id = twd.id AND th.hidden_at I
 GROUP BY twd.id, twd.name, twd.description, twd.logo_url,
          twd.created_at, twd.updated_at, twd.categories, twd.vendor
 ORDER BY recent_mentions DESC, stack_count DESC, twd.name ASC
+LIMIT sqlc.arg(page_limit);
+
+-- Rankings and the logged-out homepage.
+--
+-- Every query below takes `excluded`: the usernames of test accounts
+-- (curation.ExcludedUsernames). They are left out of every count and list, as
+-- author, stack owner, saver and starrer. It must never be NULL: x <> ALL(NULL)
+-- is NULL, which would filter every row out.
+--
+-- "Published" means p.is_published and no tool ticket still pending or rejected,
+-- as in ListPublishedPosts. Only visible tools (hidden_at IS NULL) are ranked.
+
+-- name: GetRankingTools :many
+-- Visible tools with at least one active stack, with the counts the rankings
+-- table shows. Each count has its own CTE so the joins cannot multiply rows.
+-- categories lists the tool's current subcategories, main one first.
+WITH
+  stack_counts AS (
+    SELECT si.tool_id, COUNT(DISTINCT si.profile_id)::int AS stacks
+    FROM stack_items si
+    JOIN profiles p ON p.id = si.profile_id
+    WHERE p.username <> ALL(sqlc.arg(excluded)::text[])
+    GROUP BY si.tool_id
+  ),
+  playbook_counts AS (
+    SELECT pt.tool_id, COUNT(DISTINCT po.id)::int AS playbooks
+    FROM post_tools pt
+    JOIN posts po ON po.id = pt.post_id
+    JOIN profiles p ON p.id = po.author_id
+    WHERE po.is_published
+      AND p.username <> ALL(sqlc.arg(excluded)::text[])
+      AND NOT EXISTS (
+        SELECT 1 FROM tool_tickets tt
+        WHERE tt.post_id = po.id AND tt.status IN ('pending', 'rejected')
+      )
+    GROUP BY pt.tool_id
+  ),
+  saved_counts AS (
+    SELECT wi.tool_id, COUNT(DISTINCT wi.profile_id)::int AS saved
+    FROM watchlist_items wi
+    JOIN profiles p ON p.id = wi.profile_id
+    WHERE p.username <> ALL(sqlc.arg(excluded)::text[])
+    GROUP BY wi.tool_id
+  )
+SELECT
+  t.id,
+  t.name,
+  COALESCE(t.logo_url, '') AS logo_url,
+  sc.stacks,
+  COALESCE(pc.playbooks, 0)::int AS playbooks,
+  COALESCE(wc.saved, 0)::int AS saved,
+  COALESCE((
+    SELECT jsonb_agg(
+      jsonb_build_object('name', c.name, 'slug', c.slug, 'parent_name', par.name, 'parent_slug', par.slug)
+      ORDER BY tc.position, c.id)
+    FROM tool_categories tc
+    JOIN categories c ON c.id = tc.category_id AND c.retired_at IS NULL
+    JOIN categories par ON par.id = c.parent_id
+    WHERE tc.tool_id = t.id
+  ), '[]'::jsonb)::jsonb AS categories
+FROM tools t
+JOIN stack_counts sc ON sc.tool_id = t.id
+LEFT JOIN playbook_counts pc ON pc.tool_id = t.id
+LEFT JOIN saved_counts wc ON wc.tool_id = t.id
+WHERE t.hidden_at IS NULL
+ORDER BY sc.stacks DESC, t.name ASC;
+
+-- name: GetRankingStackCounts :many
+-- How many different people (not excluded) have at least one visible tool of a
+-- scope in their active stack. scope_slug '' is everything; otherwise a parent
+-- category's slug (its subcategories' tools included) or a subcategory's slug.
+-- A UNION takes its column types from the first branch, hence the cast.
+WITH scope_tools AS (
+  SELECT ''::text AS scope_slug, t.id AS tool_id
+  FROM tools t
+  WHERE t.hidden_at IS NULL
+  UNION ALL
+  SELECT c.slug, tc.tool_id
+  FROM tool_categories tc
+  JOIN categories c ON c.id = tc.category_id AND c.retired_at IS NULL AND c.parent_id IS NOT NULL
+  JOIN tools t ON t.id = tc.tool_id AND t.hidden_at IS NULL
+  UNION ALL
+  SELECT par.slug, tc.tool_id
+  FROM tool_categories tc
+  JOIN categories c ON c.id = tc.category_id AND c.retired_at IS NULL
+  JOIN categories par ON par.id = c.parent_id AND par.retired_at IS NULL
+  JOIN tools t ON t.id = tc.tool_id AND t.hidden_at IS NULL
+)
+SELECT
+  st.scope_slug,
+  COUNT(DISTINCT si.profile_id)::int AS stacks
+FROM scope_tools st
+JOIN stack_items si ON si.tool_id = st.tool_id
+JOIN profiles p ON p.id = si.profile_id
+WHERE p.username <> ALL(sqlc.arg(excluded)::text[])
+GROUP BY st.scope_slug;
+
+-- name: GetRankingUsedBy :many
+-- Up to 3 people per tool who have it in their active stack, for the "Used by"
+-- avatars. Order: people the viewer follows, people with a published post using
+-- the tool, claimed accounts, most followers, then username. Only whether an
+-- account was claimed is read from account_claims: its tokens are credentials.
+-- Followers are counted once per person, not once per tool and person.
+WITH follower_counts AS (
+  SELECT f.followee_id, COUNT(*) AS followers
+  FROM user_follows f
+  GROUP BY f.followee_id
+),
+candidates AS (
+  SELECT
+    si.tool_id,
+    p.id AS profile_id,
+    p.username,
+    p.display_name,
+    p.avatar_url,
+    (
+      sqlc.arg(is_authenticated)::boolean
+      AND EXISTS (
+        SELECT 1 FROM user_follows uf
+        WHERE uf.follower_id = sqlc.arg(viewer_id)::uuid AND uf.followee_id = p.id
+      )
+    ) AS followed_by_viewer,
+    EXISTS (
+      SELECT 1
+      FROM post_tools pt
+      JOIN posts po ON po.id = pt.post_id
+      WHERE pt.tool_id = si.tool_id
+        AND po.author_id = p.id
+        AND po.is_published
+        AND NOT EXISTS (
+          SELECT 1 FROM tool_tickets tt
+          WHERE tt.post_id = po.id AND tt.status IN ('pending', 'rejected')
+        )
+    ) AS has_post,
+    EXISTS (
+      SELECT 1 FROM account_claims ac
+      WHERE ac.user_id = p.id AND ac.claimed_at IS NOT NULL
+    ) AS is_claimed,
+    COALESCE(fc.followers, 0) AS follower_count
+  FROM stack_items si
+  JOIN profiles p ON p.id = si.profile_id
+  JOIN tools t ON t.id = si.tool_id AND t.hidden_at IS NULL
+  LEFT JOIN follower_counts fc ON fc.followee_id = p.id
+  WHERE si.tool_id = ANY(sqlc.arg(tool_ids)::uuid[])
+    AND p.username <> ALL(sqlc.arg(excluded)::text[])
+),
+ranked AS (
+  SELECT
+    c.*,
+    row_number() OVER (
+      PARTITION BY c.tool_id
+      ORDER BY c.followed_by_viewer DESC, c.has_post DESC, c.is_claimed DESC, c.follower_count DESC, c.username ASC
+    ) AS rn
+  FROM candidates c
+)
+SELECT r.tool_id, r.username, r.display_name, r.avatar_url
+FROM ranked r
+WHERE r.rn <= 3
+ORDER BY r.tool_id, r.rn;
+
+-- name: GetFeaturedStacks :many
+-- People and company pages with at least min_tools visible tools in their active
+-- stack, for the homepage. Ordered: with a published post first, claimed
+-- accounts, most followers, biggest stack, username. tools is the 6 tools most
+-- other (non-excluded) stacks hold.
+WITH
+  follower_counts AS (
+    SELECT f.followee_id, COUNT(*) AS followers
+    FROM user_follows f
+    GROUP BY f.followee_id
+  ),
+  stack_sizes AS (
+    SELECT si.profile_id, COUNT(*)::int AS tool_count
+    FROM stack_items si
+    JOIN tools t ON t.id = si.tool_id AND t.hidden_at IS NULL
+    GROUP BY si.profile_id
+  ),
+  tool_holders AS (
+    SELECT si.tool_id, COUNT(DISTINCT si.profile_id) AS holders
+    FROM stack_items si
+    JOIN profiles hp ON hp.id = si.profile_id
+    WHERE hp.username <> ALL(sqlc.arg(excluded)::text[])
+    GROUP BY si.tool_id
+  ),
+  base AS (
+    SELECT
+      p.id,
+      p.username,
+      p.display_name,
+      p.bio,
+      p.avatar_url,
+      ss.tool_count,
+      (
+        SELECT COUNT(*)::int FROM posts po
+        WHERE po.author_id = p.id
+          AND po.is_published
+          AND NOT EXISTS (
+            SELECT 1 FROM tool_tickets tt
+            WHERE tt.post_id = po.id AND tt.status IN ('pending', 'rejected')
+          )
+      ) AS post_count,
+      EXISTS (
+        SELECT 1 FROM account_claims ac
+        WHERE ac.user_id = p.id AND ac.claimed_at IS NOT NULL
+      ) AS is_claimed,
+      COALESCE(fc.followers, 0) AS follower_count
+    FROM profiles p
+    JOIN stack_sizes ss ON ss.profile_id = p.id
+    LEFT JOIN follower_counts fc ON fc.followee_id = p.id
+    WHERE p.username <> ALL(sqlc.arg(excluded)::text[])
+      AND ss.tool_count >= sqlc.arg(min_tools)::int
+  )
+SELECT
+  b.id,
+  b.username,
+  b.display_name,
+  b.bio,
+  b.avatar_url,
+  b.tool_count,
+  b.post_count,
+  COALESCE((
+    SELECT jsonb_agg(
+      jsonb_build_object('id', x.id, 'name', x.name, 'logo_url', x.logo_url)
+      ORDER BY x.holders DESC, x.name ASC)
+    FROM (
+      SELECT t.id, t.name, COALESCE(t.logo_url, '') AS logo_url, COALESCE(th.holders, 0) AS holders
+      FROM stack_items si2
+      JOIN tools t ON t.id = si2.tool_id AND t.hidden_at IS NULL
+      LEFT JOIN tool_holders th ON th.tool_id = t.id
+      WHERE si2.profile_id = b.id
+      ORDER BY COALESCE(th.holders, 0) DESC, t.name ASC
+      LIMIT 6
+    ) x
+  ), '[]'::jsonb)::jsonb AS tools
+FROM base b
+ORDER BY (b.post_count > 0) DESC, b.is_claimed DESC, b.follower_count DESC, b.tool_count DESC, b.username ASC
+LIMIT sqlc.arg(page_limit);
+
+-- name: GetTrendingPosts :many
+-- Published playbooks and comparisons with the most stars in the last `days`
+-- days, then the most recently published. Stars from before post_stars.created_at
+-- existed are undated (NULL) and never count. An author's star on their own post
+-- does not count either, or anyone could star themselves onto the homepage.
+-- Excluded authors and excluded starrers are ignored.
+SELECT pwt.*
+FROM posts_with_tools pwt
+JOIN profiles au ON au.id = pwt.author_id
+WHERE pwt.is_published
+  AND au.username <> ALL(sqlc.arg(excluded)::text[])
+  AND NOT EXISTS (
+    SELECT 1 FROM tool_tickets tt
+    WHERE tt.post_id = pwt.id AND tt.status IN ('pending', 'rejected')
+  )
+ORDER BY
+  (
+    SELECT COUNT(*)
+    FROM post_stars ps
+    JOIN profiles lk ON lk.id = ps.liker_id
+    WHERE ps.post_id = pwt.id
+      AND ps.created_at >= now() - make_interval(days => sqlc.arg(days)::int)
+      AND ps.liker_id <> pwt.author_id
+      AND lk.username <> ALL(sqlc.arg(excluded)::text[])
+  ) DESC,
+  pwt.last_publish DESC NULLS LAST,
+  pwt.id ASC
 LIMIT sqlc.arg(page_limit);
