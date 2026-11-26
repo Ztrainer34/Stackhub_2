@@ -41,10 +41,6 @@ export default {
   				foreground: 'hsl(var(--destructive-foreground))'
   			},
   			border: 'hsl(var(--border))',
-  			// Defined by the public look only (.public-theme in globals.css).
-  			brand: 'hsl(var(--brand))',
-  			'ink-2': 'hsl(var(--ink-2))',
-  			'line-soft': 'hsl(var(--line-soft))',
   			input: 'hsl(var(--input))',
   			ring: 'hsl(var(--ring))',
   			chart: {
@@ -64,9 +60,6 @@ export default {
   				border: 'hsl(var(--sidebar-border))',
   				ring: 'hsl(var(--sidebar-ring))'
   			}
-  		},
-  		fontFamily: {
-  			heading: ['var(--font-space-grotesk)', 'var(--font-inter)', 'sans-serif']
   		},
   		borderRadius: {
   			lg: 'var(--radius)',

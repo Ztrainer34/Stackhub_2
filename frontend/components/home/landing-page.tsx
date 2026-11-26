@@ -7,13 +7,12 @@ import { TrendingSection } from "./trending-section";
 /**
  * The logged-out homepage. Server component: everything is in the HTML a crawler
  * gets, and every card is a real <a href>. Renders inside the app layout, so the
- * site header and footer come from there. `public-page` gives the whole page,
- * footer included, the public look (globals.css).
+ * site header and footer come from there.
  */
 export async function LandingPage() {
   const { chips, stacks, posts, topTools } = await getHomeData();
   return (
-    <div className="public-page public-theme bg-background pb-10 text-[15px] leading-normal">
+    <div className="bg-background">
       <HomeHero chips={chips} />
       <StacksSection stacks={stacks} />
       <TrendingSection posts={posts} />

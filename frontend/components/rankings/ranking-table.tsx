@@ -140,7 +140,7 @@ export function RankingTable({ result, params, basePath }: Props) {
 
       {/* ---------- Desktop table ---------- */}
       {/* relative: keeps the sr-only column title inside the scroll box, or it widens the page. */}
-      <div className="relative mt-3 hidden overflow-x-auto rounded-2xl border bg-card lg:block">
+      <div className="relative mt-3 hidden overflow-x-auto rounded-lg border shadow-sm lg:block">
         <table className="w-full min-w-[900px] border-collapse text-[15px]">
           <thead className="bg-muted/50">
             <tr>
@@ -213,7 +213,7 @@ export function RankingTable({ result, params, basePath }: Props) {
       </div>
 
       {/* ---------- Phone list ---------- */}
-      <ol className="mt-3 overflow-hidden rounded-2xl border bg-card lg:hidden">
+      <ol className="mt-3 overflow-hidden rounded-lg border shadow-sm lg:hidden">
         {result.tools.map((t) => {
           const trend = formatTrend(t.trend30d);
           return (

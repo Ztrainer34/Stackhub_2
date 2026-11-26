@@ -17,9 +17,9 @@ import {
 type Props = { toolId: string; toolName: string };
 
 const base =
-  "inline-flex h-11 w-11 items-center justify-center rounded-[10px] border transition-colors disabled:opacity-60";
+  "inline-flex h-11 w-11 items-center justify-center rounded-lg border transition-colors disabled:opacity-60";
 const on = "border-foreground bg-muted text-foreground";
-const off = "border-input bg-card text-muted-foreground hover:text-foreground";
+const off = "border-input bg-background text-muted-foreground hover:text-foreground";
 
 /** The 3 icon buttons: add to stack, save for later, follow. Logged-out visitors are asked to log in. */
 export function RankingToolActions({ toolId, toolName }: Props) {

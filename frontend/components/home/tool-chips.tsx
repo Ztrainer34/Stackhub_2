@@ -5,7 +5,7 @@ import { HOME_ROUTES } from "@/lib/home/config";
 import type { ChipTool } from "@/lib/home/types";
 
 /**
- * The tool chips under the search bar, moving to the right in an endless loop
+ * The tool chips under the hero buttons, moving to the right in an endless loop
  * (.chip-marquee in globals.css). It is the same list twice: when the first copy
  * has slid in, the animation restarts unnoticed. It pauses on hover. People who
  * ask for less motion, or who reach it with the keyboard, get a still list.
@@ -13,7 +13,7 @@ import type { ChipTool } from "@/lib/home/types";
 export function ToolChips({ chips }: { chips: ChipTool[] }) {
   if (chips.length === 0) return null;
   return (
-    <div className="chip-marquee mt-2.5 w-full max-w-[760px]">
+    <div className="chip-marquee mt-4 w-full max-w-3xl">
       <ChipList chips={chips} />
       <ChipList chips={chips} copy />
     </div>
@@ -29,9 +29,9 @@ function ChipList({ chips, copy = false }: { chips: ChipTool[]; copy?: boolean }
           <Link
             href={HOME_ROUTES.tool(c.slug)}
             tabIndex={copy ? -1 : undefined}
-            className="inline-flex min-h-9 items-center gap-2 whitespace-nowrap rounded-full border bg-card pl-1.5 pr-3.5 text-[13px] font-medium transition-colors hover:border-foreground"
+            className="inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-full border bg-card pl-1 pr-3.5 text-sm font-medium transition-colors hover:border-foreground"
           >
-            <ToolLogoTile name={c.name} logoUrl={c.logoUrl} size="chip" />
+            <ToolLogoTile name={c.name} logoUrl={c.logoUrl} size="sm" />
             {c.name}
           </Link>
         </li>

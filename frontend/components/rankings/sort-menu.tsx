@@ -32,7 +32,7 @@ export function SortMenu({ basePath, params, options }: Props) {
           id="ranking-sort"
           value={params.sort}
           onChange={(e) => go({ sort: e.target.value as SortKey, dir: "desc" })}
-          className="h-11 rounded-[10px] border border-input bg-card px-3 text-[15px]"
+          className="h-11 rounded-lg border border-input bg-background px-3 text-[15px]"
         >
           {options.map((o) => (
             <option key={o.key} value={o.key}>
@@ -46,7 +46,7 @@ export function SortMenu({ basePath, params, options }: Props) {
         aria-label={flipLabel}
         title={flipLabel}
         onClick={() => go({ dir: params.dir === "desc" ? "asc" : "desc" })}
-        className="inline-flex h-11 w-11 items-center justify-center rounded-[10px] border border-input bg-card"
+        className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-input bg-background"
       >
         {params.dir === "desc" ? (
           <ArrowDown className="h-[18px] w-[18px]" aria-hidden="true" />

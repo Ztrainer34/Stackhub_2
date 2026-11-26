@@ -1,50 +1,41 @@
-import { Search } from "lucide-react";
+import Link from "next/link";
 
 import { HOME_ROUTES } from "@/lib/home/config";
 import type { ChipTool } from "@/lib/home/types";
 import { ToolChips } from "./tool-chips";
 
 /**
- * Hero: headline and subline, a search form (plain GET to /search, works without
- * JS) and the moving row of tool chips.
+ * Hero: headline and subline, then 2 buttons, one for creators (Add your stack)
+ * and one for GTM visitors (Browse playbooks), and the moving row of tool chips.
+ * Search lives in the header (PublicNav).
  */
 export function HomeHero({ chips }: { chips: ChipTool[] }) {
   return (
-    <section className="px-4 pb-6 pt-10 text-center min-[641px]:pb-10 min-[641px]:pt-[72px] min-[901px]:px-10">
-      <div className="mx-auto flex max-w-[1200px] flex-col items-center gap-5">
+    <section className="px-4 pb-4 pt-10 text-center sm:pb-6 sm:pt-20">
+      <div className="mx-auto flex max-w-3xl flex-col items-center gap-5">
         {/* e2e/login.spec.ts finds this by data-testid, so the headline copy can change freely. Keep the attribute. */}
         <h1
           data-testid="landing-hero"
-          className="max-w-[860px] font-heading text-[40px] font-bold leading-[1.02] tracking-[-0.035em] min-[901px]:text-[64px]"
+          className="text-4xl font-bold leading-[1.05] tracking-tight sm:text-6xl"
         >
-          Find the GTM tools and playbooks you need
+          Discover the best GTM tools and playbooks
         </h1>
-        <p className="text-[19px] text-[#4F535E]">Show and tell for GTMs</p>
+        <p className="text-lg text-muted-foreground">Show and tell for GTMs.</p>
 
-        <form role="search" action={HOME_ROUTES.search} method="get" className="mt-2 w-full max-w-[640px]">
-          <label htmlFor="home-search" className="sr-only">
-            Search StackHub
-          </label>
-          {/* Without t the search page sends the visitor back to the homepage. */}
-          <input type="hidden" name="t" value="post" />
-          <div className="flex items-center gap-2.5 rounded-2xl border-[1.5px] border-foreground bg-card py-1.5 pl-3.5 pr-1.5 shadow-[0_6px_0_hsl(var(--foreground))] focus-within:border-brand min-[641px]:pl-[18px]">
-            <Search className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <input
-              id="home-search"
-              name="q"
-              type="search"
-              autoComplete="off"
-              placeholder="Search tools, users, posts"
-              className="min-w-0 flex-1 bg-transparent py-3 text-[15px] leading-normal outline-none placeholder:text-muted-foreground min-[641px]:text-base"
-            />
-            <button
-              type="submit"
-              className="min-h-11 shrink-0 rounded-xl bg-brand px-3.5 text-[15px] font-semibold text-white transition-opacity hover:opacity-90 min-[641px]:px-5"
-            >
-              Search
-            </button>
-          </div>
-        </form>
+        <div className="mt-2 flex flex-wrap justify-center gap-3">
+          <Link
+            href={HOME_ROUTES.addStack}
+            className="inline-flex h-12 items-center rounded-md bg-primary px-6 font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            Add your stack
+          </Link>
+          <Link
+            href={HOME_ROUTES.playbooks}
+            className="inline-flex h-12 items-center rounded-md border bg-background px-6 font-semibold transition-colors hover:bg-muted"
+          >
+            Browse playbooks
+          </Link>
+        </div>
 
         <ToolChips chips={chips} />
       </div>

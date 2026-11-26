@@ -28,7 +28,7 @@ import { SearchForm } from "./search-form";
 import { MobileNavbar } from "./mobile-navbar";
 import { useNavbarTabs } from "./navbar-tabs-context";
 import NotificationBell from "./notification-bell";
-import { PublicHeader } from "./site/public-header";
+import { PublicNav } from "./site/public-nav";
 
 interface User {
   id: string;
@@ -43,24 +43,20 @@ interface NavBarContentProps {
 export default function NavBarContent({ user }: NavBarContentProps) {
   const { tabsContent } = useNavbarTabs();
 
-  // A visitor gets the public header. A profile's tabs sit below it, not inside,
-  // so only the header itself sticks to the top.
-  if (!user) {
-    return (
-      <>
-        <PublicHeader />
-        {tabsContent && (
-          <div className="border-grid w-full border-b px-4 pt-3">
-            <div className="container">{tabsContent}</div>
+  return (
+    // relative: the logged-out menu and search drop down under the header.
+    <header className="relative border-grid px-4 w-full border-b">
+      <div className="container-wrapper">
+        {!user && (
+          <div className="mx-auto flex h-14 max-w-7xl items-center">
+            <Link className="mr-4 flex items-center gap-2 lg:mr-6" href="/" aria-label="StackHub home">
+              <StackHubLogo className="h-7 w-7" />
+              <span className="hidden font-bold min-[360px]:inline">StackHub</span>
+            </Link>
+            <PublicNav />
           </div>
         )}
-      </>
-    );
-  }
-
-  return (
-    <header className="border-grid px-4 w-full border-b">
-      <div className="container-wrapper">
+        {user && (
         <div className="container flex justify-between h-14 items-center">
           {/* Desktop Logo */}
           <div className="mr-4 hidden md:flex">
@@ -153,6 +149,7 @@ export default function NavBarContent({ user }: NavBarContentProps) {
               </DropdownMenu>
           </div>
         </div>
+        )}
 
         {/* Profile tabs section */}
         {tabsContent && (

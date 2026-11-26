@@ -10,11 +10,6 @@ interface UserAvatarProps {
   user: AvatarUser;
   className?: string;
   size?: "sm" | "md" | "lg" | "xl";
-  /** Shown without a picture. Default: the first letter of the username. */
-  initials?: string;
-  fallbackClassName?: string;
-  /** Background of the initials, e.g. a pastel. */
-  fallbackColor?: string;
 }
 
 // Map size to Gravatar pixel dimensions
@@ -46,24 +41,14 @@ const sizeClasses = {
   xl: "h-32 w-32 text-4xl",
 };
 
-export function UserAvatar({
-  user,
-  className,
-  size = "md",
-  initials,
-  fallbackClassName,
-  fallbackColor,
-}: UserAvatarProps) {
+export function UserAvatar({ user, className, size = "md" }: UserAvatarProps) {
   const avatarUrl = getUserAvatarUrl(user, size);
 
   return (
     <Avatar className={cn(sizeClasses[size], className)}>
       <AvatarImage src={avatarUrl} alt={`${user.username}'s avatar`} />
-      <AvatarFallback
-        className={fallbackClassName}
-        style={fallbackColor ? { backgroundColor: fallbackColor } : undefined}
-      >
-        {initials || user.username[0]?.toUpperCase() || "?"}
+      <AvatarFallback>
+        {user.username[0]?.toUpperCase() || "?"}
       </AvatarFallback>
     </Avatar>
   );
