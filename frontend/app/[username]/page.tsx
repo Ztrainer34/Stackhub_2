@@ -12,6 +12,9 @@ export default async function UserPage({
 }) {
   const { username } = await params;
   const { tab } = await searchParams;
+  // Overview is hidden until there is enough data to fill it: Stack is the
+  // default, and old ?tab=overview links land there too.
+  const activeTab = !tab || tab === "overview" ? "stack" : tab;
 
   return (
     <ProfileLayoutWrapper username={username}>
@@ -19,7 +22,7 @@ export default async function UserPage({
       <Suspense fallback={null}>
         <ClaimAccountDialog username={username} />
       </Suspense>
-      <ProfileContent username={username} activeTab={tab || "overview"} />
+      <ProfileContent username={username} activeTab={activeTab} />
     </ProfileLayoutWrapper>
   );
 }
