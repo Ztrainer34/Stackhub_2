@@ -19,6 +19,7 @@ import {
   SuggestedToolFormData,
 } from "@/components/suggested-tool-form";
 import { suggestTool } from "@/lib/tool";
+import { useAuth } from "@/lib/queries/use-auth";
 import { createClient } from "@/utils/supabase/client";
 
 type View = "form" | "confirmation";
@@ -29,6 +30,20 @@ export function AddToolDialog() {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [submittedName, setSubmittedName] = React.useState("");
   const router = useRouter();
+  const auth = useAuth();
+
+  // Same as the "Add playbook" CTA (/new): a logged-out visitor goes to
+  // /login instead of filling a form the backend would reject.
+  const handleOpenChange = (next: boolean) => {
+    const status = auth.data?.status;
+    if (next && status !== "authenticated") {
+      if (status === "unauthenticated") router.push("/login");
+      else if (status === "needs-onboarding") router.push("/");
+      // Still loading: ignore the click rather than guess.
+      return;
+    }
+    setOpen(next);
+  };
 
   React.useEffect(() => {
     if (!open) {
@@ -63,7 +78,7 @@ export function AddToolDialog() {
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button>
           <Plus className="h-4 w-4 mr-2" />
