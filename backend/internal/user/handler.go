@@ -170,20 +170,37 @@ func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetTopRecommendedUsers(w http.ResponseWriter, r *http.Request) {
 	userID := httpx.UserID(r)
 
+	// ?offset=N pages through the list 12 at a time ("Show more" on
+	// /community). The query has no OFFSET, so fetch offset+12 rows and slice:
+	// it ranks every profile by similarity either way, so the cost is the same.
+	const pageSize = 12
+	const maxOffset = 600
+	offset := 0
+	if s := r.URL.Query().Get("offset"); s != "" {
+		o, err := strconv.Atoi(s)
+		if err != nil || o < 0 || o > maxOffset {
+			http.Error(w, "Invalid offset", http.StatusBadRequest)
+			return
+		}
+		offset = o
+	}
+
 	params := db.GetTopRecommendedUsersParams{
 		ID:    userID,
-		Limit: 12,
+		Limit: int32(offset + pageSize),
 	}
 
 	profiles, err := h.Queries.GetTopRecommendedUsers(r.Context(), params)
-
 	if err != nil {
 		log.Println(err)
-		http.Error(w, "User not found", http.StatusNotFound)
+		http.Error(w, "Failed to get recommended users", http.StatusInternalServerError)
+		return
 	}
 
-	if profiles == nil {
+	if offset >= len(profiles) {
 		profiles = []db.GetTopRecommendedUsersRow{}
+	} else {
+		profiles = profiles[offset:]
 	}
 
 	w.Header().Set("Content-Type", "application/json")
