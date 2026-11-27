@@ -321,7 +321,7 @@ export default function StackContent({
       <ToolSection
         title="Old stack"
         icon={<Archive className="w-5 h-5 text-foreground" />}
-        subtitle="Tools you used before but no longer actively use"
+        subtitle="Tools no longer in active use"
         tools={oldStackQuery.data?.tools || []}
         isLoading={oldStackQuery.isLoading}
         isError={!!oldStackQuery.error}
@@ -331,22 +331,20 @@ export default function StackContent({
         username={username}
       />
 
-      {/* Saved for later is private to the account owner. */}
-      {isOwnProfile && (
-        <ToolSection
-          title="Saved for later"
-          icon={<Bookmark className="w-5 h-5 text-foreground" />}
-          subtitle="Tools you consider adding to your Stack"
-          note="This section is only visible to you, the account user."
-          tools={watchlistQuery.data?.tools || []}
-          isLoading={watchlistQuery.isLoading}
-          isError={!!watchlistQuery.error}
-          emptyMessage="No tools saved for later yet."
-          isOwner={isOwnProfile}
-          listType="watchlist"
-          username={username}
-        />
-      )}
+      {/* Saved for later is public, like the other lists. It was owner-only
+          before; restore an isOwnProfile gate here if users ask for it. */}
+      <ToolSection
+        title="Saved for later"
+        icon={<Bookmark className="w-5 h-5 text-foreground" />}
+        subtitle="Tools on the radar"
+        tools={watchlistQuery.data?.tools || []}
+        isLoading={watchlistQuery.isLoading}
+        isError={!!watchlistQuery.error}
+        emptyMessage="No tools saved for later yet."
+        isOwner={isOwnProfile}
+        listType="watchlist"
+        username={username}
+      />
     </div>
   );
 }
