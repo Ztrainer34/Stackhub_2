@@ -31,7 +31,7 @@ async function LandingPage() {
               data-testid="landing-hero"
               className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight"
             >
-              Find the GTM tools and playbooks you need
+              Find the tools and playbooks you need
             </h1>
 
             <p className="text-[2rem] text-muted-foreground max-w-2xl leading-relaxed">
