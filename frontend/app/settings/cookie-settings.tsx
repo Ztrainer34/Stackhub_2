@@ -56,7 +56,7 @@ const categories = [
     key: "necessary" as const,
     title: "Strictly Necessary",
     description:
-      "Required for the Service to work — login, security, and core functions, plus basic choices like language or display settings. These can't be turned off.",
+      "Required for the Service to work: login, security, and core functions, plus basic choices like language or display settings. These can't be turned off.",
     locked: true,
   },
   {

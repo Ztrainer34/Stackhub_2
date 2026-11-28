@@ -145,3 +145,18 @@
   background: hsl(var(--muted));
   font-weight: 600;
 }
+
+/* Embedded media in post bodies (editor and read-only view). The Tiptap
+   Youtube extension emits a fixed 640x480 iframe; make it fit the column. */
+.ProseMirror iframe,
+div[data-youtube-video] iframe {
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border: 0;
+}
+.ProseMirror img {
+  max-width: 100%;
+  height: auto;
+}

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { X } from "lucide-react";
 import { toast } from "sonner";
@@ -29,7 +30,7 @@ import { useUpdateToolPage } from "@/lib/queries/use-tool-page";
 import { EditButton } from "./edit-button";
 
 /** Matches the server's cap, so the dialog refuses before the request does. */
-const MAX_CATEGORIES = 12;
+const MAX_CATEGORIES = 3;
 
 export function ToolPageCategories({ tool }: { tool: Tool }) {
   const { data } = useTool(tool.id);
@@ -76,7 +77,7 @@ export function ToolPageCategories({ tool }: { tool: Tool }) {
     <Card>
       <CardHeader className="flex flex-row items-start justify-between space-y-0">
         <div className="space-y-1.5">
-          <CardTitle>Tool Categories</CardTitle>
+          <CardTitle>Tool categories</CardTitle>
           <CardDescription>
             This tool belongs to the following categories
           </CardDescription>
@@ -89,19 +90,36 @@ export function ToolPageCategories({ tool }: { tool: Tool }) {
       <CardContent>
         <div className="space-y-2">
           {current.categories?.length ? (
-            current.categories.map((category) => (
-              <Badge
-                key={category.id}
-                variant="outline"
-                className="w-full justify-center py-2"
-              >
-                {category.name}
-              </Badge>
-            ))
+            current.categories.map((category) => {
+              const badge = (
+                <Badge
+                  variant="outline"
+                  className="w-full flex-col justify-center py-2"
+                >
+                  {category.parent && (
+                    <span className="font-normal text-muted-foreground">
+                      {category.parent}
+                    </span>
+                  )}
+                  {category.name}
+                </Badge>
+              );
+              return category.slug ? (
+                <Link
+                  key={category.id}
+                  href={`/category/${category.slug}`}
+                  className="block rounded-md hover:bg-muted"
+                >
+                  {badge}
+                </Link>
+              ) : (
+                <div key={category.id}>{badge}</div>
+              );
+            })
           ) : (
             <p className="text-sm text-muted-foreground">
               {current.is_owner
-                ? "No categories yet — use the pencil to pick some."
+                ? "No categories yet. Use the pencil to pick some."
                 : "Not categorised yet."}
             </p>
           )}
@@ -113,8 +131,8 @@ export function ToolPageCategories({ tool }: { tool: Tool }) {
           <DialogHeader>
             <DialogTitle>Tool categories</DialogTitle>
             <DialogDescription>
-              Pick up to {MAX_CATEGORIES} categories. These decide where the tool
-              shows up when people browse.
+              Pick up to {MAX_CATEGORIES} categories, the main one first. These
+              decide where the tool shows up when people browse.
             </DialogDescription>
           </DialogHeader>
 

@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
+import { cache } from "react";
 import { Tool, getTool } from "@/lib/tool";
 import { createClient } from "@/utils/supabase/server";
 import { HydrationBoundary, QueryClient, dehydrate } from "@tanstack/react-query";
 import { notFound } from "next/navigation";
+import { NOT_FOUND_METADATA } from "@/lib/not-found-metadata";
 import { ToolActions } from "@/components/tool-actions";
 import { ClaimPageCta } from "./claim-page-cta";
 import { ToolPageAbout } from "./tool-page-about";
@@ -10,6 +13,24 @@ import { ToolPageLogo } from "./tool-page-logo";
 import { ToolPageTitle } from "./tool-page-title";
 import { ToolPageVendor } from "./tool-page-vendor";
 
+// One backend call per request, shared by the metadata and the page.
+const loadTool = cache(async (id: string) => getTool(await createClient(), id));
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  try {
+    const tool = await loadTool(id);
+    // A hidden tool keeps its page for old links, but leaves search engines.
+    return tool.is_hidden ? { robots: { index: false, follow: true } } : {};
+  } catch {
+    return NOT_FOUND_METADATA;
+  }
+}
+
 export default async function ToolPage({
   params,
 }: {
@@ -17,7 +38,6 @@ export default async function ToolPage({
 }) {
   const { id } = await params;
 
-  const supabase = await createClient();
   const queryClient = new QueryClient();
 
   let tool: Tool;
@@ -25,7 +45,7 @@ export default async function ToolPage({
     // Prefetch the tool data into React Query cache
     tool = await queryClient.fetchQuery({
       queryKey: ["tool", id],
-      queryFn: () => getTool(supabase, id),
+      queryFn: () => loadTool(id),
     });
   } catch {
     notFound();

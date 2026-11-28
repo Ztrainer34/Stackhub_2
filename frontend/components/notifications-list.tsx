@@ -64,6 +64,8 @@ export default function NotificationsList() {
         return "💬";
       case "tool_approved":
         return "🔧";
+      case "tool_rejected":
+        return "🚫";
       default:
         return "🔔";
     }

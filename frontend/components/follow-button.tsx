@@ -11,6 +11,8 @@ interface FollowButtonProps {
   size?: "sm" | "default" | "lg";
   variant?: "default" | "outline" | "secondary" | "ghost" | "link" | "destructive";
   initialFollowing?: boolean;
+  /** Called with the new state on every (optimistic or reverted) change. */
+  onFollowChange?: (following: boolean) => void;
 }
 
 export function FollowButton({
@@ -18,7 +20,8 @@ export function FollowButton({
   className,
   size = "sm",
   variant = "default",
-  initialFollowing = false
+  initialFollowing = false,
+  onFollowChange,
 }: FollowButtonProps) {
   // Tracked alongside the id it belongs to: moving from one profile to another
   // reuses this component, which would otherwise keep showing the previous
@@ -32,8 +35,10 @@ export function FollowButton({
     setFollowState({ userId, following: initialFollowing });
   }
   const isFollowed = followState.following;
-  const setIsFollowed = (following: boolean) =>
+  const setIsFollowed = (following: boolean) => {
     setFollowState({ userId, following });
+    onFollowChange?.(following);
+  };
 
   const followUserMutation = useFollowUser();
   const unfollowUserMutation = useUnfollowUser();

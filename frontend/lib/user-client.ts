@@ -22,8 +22,14 @@ export async function unfollowUser(supabaseClient: SupabaseClient, userId: strin
   if (!response.ok) throw new Error("Failed to unfollow user");
 }
 
-export async function getTopRecommendedUsers(username: string, supabaseClient: SupabaseClient): Promise<User[]> {
-  const resp = await fetchApiAuthenticated(supabaseClient, "/top-recommended-users");
+export async function getTopRecommendedUsers(
+  username: string,
+  supabaseClient: SupabaseClient,
+  offset = 0
+): Promise<User[]> {
+  const endpoint =
+    offset > 0 ? `/top-recommended-users?offset=${offset}` : "/top-recommended-users";
+  const resp = await fetchApiAuthenticated(supabaseClient, endpoint);
 
   if (!resp.ok) throw new Error("Could not get top recommended users");
 

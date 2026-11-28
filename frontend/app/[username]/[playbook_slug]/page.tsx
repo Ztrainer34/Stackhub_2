@@ -1,5 +1,3 @@
-"use server";
-
 import VisitorActions from "./VisitorActions";
 import Link from "next/link";
 import { getPostWithRedirectInfo, getPostContent, getPostDraftContent } from "@/lib/post";
@@ -14,8 +12,13 @@ import { createClient } from "@/utils/supabase/server";
 import { notFound, permanentRedirect } from "next/navigation";
 import ContentViewer from "./ContentViewer";
 import { to } from "@/lib/error-handling";
+import { DEFAULT_OG_IMAGE } from "@/lib/og";
+import { NOT_FOUND_METADATA } from "@/lib/not-found-metadata";
 import { RenamePostDialog } from "@/components/rename-post-dialog";
 import PostActionsMenu from "@/components/post-actions-menu";
+import { PostTools } from "@/components/post-tools";
+import { Clock } from "lucide-react";
+import { formatUpdatedDate } from "@/lib/format-updated-date";
 import type { Metadata } from "next";
 
 export async function generateMetadata({
@@ -33,10 +36,7 @@ export async function generateMetadata({
   ]));
 
   if (error) {
-    return {
-      title: "Post not found",
-      description: "The requested post could not be found.",
-    };
+    return NOT_FOUND_METADATA;
   }
 
   const [author, postResponse] = results;
@@ -44,8 +44,7 @@ export async function generateMetadata({
 
   const title = `${post.name} by ${author.username} | StackHub`;
   const description = post.description || `A ${post.type.toLowerCase()} by ${author.username} on StackHub`;
-  const url = `https://stackhub.me/${username}/${playbook_slug}`;
-  // const imageUrl = await userAvatarUrl(author);
+  const url = `https://stackhub.me/${username}/${playbook_slug}`;  // const imageUrl = await userAvatarUrl(author);
 
   return {
     title,
@@ -57,11 +56,13 @@ export async function generateMetadata({
       siteName: "StackHub",
       locale: "en_US",
       type: "article",
+      images: [DEFAULT_OG_IMAGE],
     },
     twitter: {
-      card: "summary",
+      card: "summary_large_image",
       title,
       description,
+      images: [DEFAULT_OG_IMAGE.url],
     },
     alternates: {
       canonical: url,
@@ -119,6 +120,8 @@ export default async function PlaybookPage({
     }
   }
 
+  const updatedDate = formatUpdatedDate(post.updated_at);
+
   return (
     <div>
       <div className="flex w-full justify-center">
@@ -160,9 +163,17 @@ export default async function PlaybookPage({
             </div>
           </div>
 
-          <div className="flex">
+          <div className="flex items-center gap-3">
             <Badge variant="outline" className="p-2">{post.type}</Badge>
+            {updatedDate && (
+              <span className="flex items-center gap-1 text-sm text-muted-foreground">
+                <Clock className="h-3.5 w-3.5" />
+                Last updated {updatedDate}
+              </span>
+            )}
           </div>
+
+          <PostTools tools={post.tools} type={post.type} />
 
           <Separator />
 

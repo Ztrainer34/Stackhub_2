@@ -13,33 +13,14 @@ import {
   MessageSquare,
   Star,
   UserPlus,
+  XCircle,
 } from "lucide-react";
 import { useFeed } from "@/lib/queries/use-feed";
-import { FeedItem } from "@/lib/feed";
+import { FeedItem, feedItemKey, hasMoreFeed } from "@/lib/feed";
+import { Button } from "@/components/ui/button";
+import { timeAgo } from "@/lib/time-ago";
 
 /** "3 hours ago" / "2 days ago" — compact relative time for feed entries. */
-function timeAgo(iso: string): string {
-  const seconds = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
-  const units: [number, Intl.RelativeTimeFormatUnit][] = [
-    [60, "second"],
-    [60, "minute"],
-    [24, "hour"],
-    [7, "day"],
-    [4.35, "week"],
-    [12, "month"],
-  ];
-  let value = seconds;
-  let unit: Intl.RelativeTimeFormatUnit = "second";
-  for (const [step, next] of units) {
-    if (Math.abs(value) < step) break;
-    value /= step;
-    unit = next;
-  }
-  return new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(
-    -Math.round(value),
-    unit
-  );
-}
 
 function ActorLink({ username }: { username: string }) {
   return (
@@ -59,6 +40,8 @@ function notificationIcon(reason: FeedItem["reason"]) {
     return <MessageSquare className="h-4 w-4 text-primary" />;
   if (reason === "tool_approved")
     return <CheckCircle2 className="h-4 w-4 text-emerald-600" />;
+  if (reason === "tool_rejected")
+    return <XCircle className="h-4 w-4 text-red-600" />;
   return <UserPlus className="h-4 w-4 text-primary" />;
 }
 
@@ -68,6 +51,8 @@ function notificationIcon(reason: FeedItem["reason"]) {
  * reassembled from parts here.
  */
 function NotificationRow({ item }: { item: FeedItem }) {
+  // A notification with no actor (tool approved) comes from StackHub itself.
+  const actorName = item.actor_username ?? "StackHub";
   const body = (
     <div className="flex items-center gap-x-1.5 text-sm">
       {notificationIcon(item.reason)}
@@ -84,11 +69,11 @@ function NotificationRow({ item }: { item: FeedItem }) {
     <div className="flex gap-3 py-4">
       <Avatar className="h-8 w-8 shrink-0">
         <AvatarFallback className="text-xs">
-          {item.actor_username.charAt(0).toUpperCase()}
+          {actorName.charAt(0).toUpperCase()}
         </AvatarFallback>
       </Avatar>
       <div className="min-w-0 flex-1">
-        {item.post_slug ? (
+        {item.post_slug && item.actor_username ? (
           <Link
             href={`/${item.actor_username}/${item.post_slug}`}
             className="hover:underline"
@@ -103,8 +88,11 @@ function NotificationRow({ item }: { item: FeedItem }) {
   );
 }
 
-function FeedRow({ item }: { item: FeedItem }) {
+export function FeedRow({ item }: { item: FeedItem }) {
   if (item.kind === "notification") return <NotificationRow item={item} />;
+
+  // Post rows always have an author; a row without one has nothing to show.
+  if (!item.actor_username) return null;
 
   return (
     <div className="flex gap-3 py-4">
@@ -127,9 +115,14 @@ function FeedRow({ item }: { item: FeedItem }) {
             · {timeAgo(item.occurred_at)}
           </span>
 
-          {item.reason === "following_tool" && (
+          {item.reason === "stack_tool" && (
             <Badge variant="outline" className="text-[10px] font-normal">
-              tool you follow
+              in your stack
+            </Badge>
+          )}
+          {item.reason === "watchlist_tool" && (
+            <Badge variant="outline" className="text-[10px] font-normal">
+              saved for later
             </Badge>
           )}
           {item.reason === "latest" && (
@@ -172,19 +165,33 @@ function FeedRow({ item }: { item: FeedItem }) {
   );
 }
 
-export default function ActivityFeed({ limit = 20 }: { limit?: number }) {
+export function FeedEmptyState() {
+  return (
+    <div className="rounded-lg border border-dashed py-10 text-center">
+      <p className="text-muted-foreground mb-1">Your feed is empty.</p>
+      <p className="text-sm text-muted-foreground">
+        Follow{" "}
+        <Link href="/tools" className="text-primary hover:underline">
+          tools
+        </Link>{" "}
+        and people to see their latest playbooks here.
+      </p>
+    </div>
+  );
+}
+
+export default function ActivityFeed({ limit = 5 }: { limit?: number }) {
   const { data, isLoading, error } = useFeed(limit);
   const items = data?.items ?? [];
 
   return (
     <section className="mb-10">
-      <div className="flex items-center gap-2 mb-2">
+      {/* No subtitle: the rows explain themselves, and a line of prose under
+          every heading pushed the actual feed below the fold. */}
+      <div className="flex items-center gap-2 mb-4">
         <Activity className="h-5 w-5 text-primary" />
         <h2 className="text-2xl font-semibold">Your feed</h2>
       </div>
-      <p className="text-muted-foreground mb-4">
-        What happened to you, then playbooks from the people and tools you follow
-      </p>
 
       {isLoading ? (
         <div className="space-y-4">
@@ -197,25 +204,22 @@ export default function ActivityFeed({ limit = 20 }: { limit?: number }) {
           <p className="text-muted-foreground">Failed to load your feed.</p>
         </div>
       ) : items.length === 0 ? (
-        <div className="rounded-lg border border-dashed py-10 text-center">
-          <p className="text-muted-foreground mb-1">Your feed is empty.</p>
-          <p className="text-sm text-muted-foreground">
-            Follow{" "}
-            <Link href="/tools" className="text-primary hover:underline">
-              tools
-            </Link>{" "}
-            and people to see their latest playbooks here.
-          </p>
-        </div>
+        <FeedEmptyState />
       ) : (
-        <div className="divide-y rounded-lg border px-4">
-          {items.map((item, i) => (
-            <FeedRow
-              key={`${item.kind}-${item.reason}-${item.post_id ?? item.tool_id}-${item.actor_id}-${i}`}
-              item={item}
-            />
-          ))}
-        </div>
+        <>
+          <div className="divide-y rounded-lg border px-4">
+            {items.map((item) => (
+              <FeedRow key={feedItemKey(item)} item={item} />
+            ))}
+          </div>
+          {data && hasMoreFeed(data) && (
+            <div className="mt-4 flex justify-center">
+              <Link href="/home/feed">
+                <Button size="sm">See more</Button>
+              </Link>
+            </div>
+          )}
+        </>
       )}
     </section>
   );

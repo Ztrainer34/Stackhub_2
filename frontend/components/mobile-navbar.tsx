@@ -13,12 +13,12 @@ import {
   LogOut,
   Layers,
   BookOpen,
-  Blocks,
   GitCompare,
   Star,
   Wrench,
 } from "lucide-react";
 import { SearchForm } from "./search-form";
+import { StackHubLogo } from "./stackhub-logo";
 import { User } from "@/lib/user";
 
 interface MobileNavbarProps {
@@ -40,7 +40,8 @@ export function MobileNavbar({ user }: MobileNavbarProps) {
           <div className="flex flex-col h-full">
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b">
-              <Link href="/" onClick={() => setIsOpen(false)}>
+              <Link href="/" onClick={() => setIsOpen(false)} className="flex items-center gap-2">
+                <StackHubLogo className="h-7 w-7" />
                 <span className="font-bold text-lg">StackHub</span>
               </Link>
             </div>
@@ -59,7 +60,7 @@ export function MobileNavbar({ user }: MobileNavbarProps) {
                   onClick={() => setIsOpen(false)}
                 >
                   <Plus className="h-4 w-4" />
-                  <span>Create Post</span>
+                  <span>Create post</span>
                 </Link>
               </div>
               
@@ -98,14 +99,6 @@ export function MobileNavbar({ user }: MobileNavbarProps) {
                   >
                     <BookOpen className="h-4 w-4" />
                     <span>Playbooks</span>
-                  </Link>
-                  <Link
-                    href={`/${user.username}?tab=combos`}
-                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent transition-colors"
-                    onClick={() => setIsOpen(false)}
-                  >
-                    <Blocks className="h-4 w-4" />
-                    <span>Combos</span>
                   </Link>
                   <Link
                     href={`/${user.username}?tab=comparisons`}
@@ -155,7 +148,7 @@ export function MobileNavbar({ user }: MobileNavbarProps) {
                     className="flex items-center justify-center p-3 rounded-lg border border-input hover:bg-accent transition-colors"
                     onClick={() => setIsOpen(false)}
                   >
-                    <span>Log In</span>
+                    <span>Login</span>
                   </Link>
                 </div>
               )}

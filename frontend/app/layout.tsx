@@ -7,6 +7,7 @@ import { OnboardingModal } from "@/components/onboarding-modal";
 import { getServerAuthState } from "@/lib/auth-server";
 import { Toaster } from "@/components/ui/sonner";
 import { SiteFooter } from "@/components/site-footer";
+import { DEFAULT_OG_IMAGE } from "@/lib/og";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,9 +19,22 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Favicons come from the file conventions in this folder: favicon.ico,
+// icon.svg (switches colours with the browser's dark mode) and apple-icon.png.
 export const metadata: Metadata = {
-  title: "Stackhub",
+  metadataBase: new URL("https://stackhub.me"),
+  title: "StackHub",
   description: "Show and Tell for Marketeers",
+  openGraph: {
+    siteName: "StackHub",
+    title: "StackHub",
+    description: "Show and Tell for Marketeers",
+    images: [DEFAULT_OG_IMAGE],
+  },
+  twitter: {
+    card: "summary_large_image",
+    images: [DEFAULT_OG_IMAGE.url],
+  },
 };
 
 export default async function RootLayout({

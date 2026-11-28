@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 interface ProfileTabsProps {
@@ -9,27 +9,17 @@ interface ProfileTabsProps {
 }
 
 export default function ProfileTabs({ username }: ProfileTabsProps) {
-  const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // Determine active tab based on pathname and search params
-  const getActiveTab = () => {
-    const tab = searchParams.get("tab");
-    if (tab) return tab;
-
-    // Default to overview for main profile page
-    if (pathname === `/${username}`) return "overview";
-
-    return "overview";
-  };
-
-  const activeTab = getActiveTab();
+  // Overview is hidden until there is enough data to fill it, so Stack is
+  // the default tab (must match the default in page.tsx). To bring it back,
+  // restore its entry below and make "overview" the default again.
+  const tab = searchParams.get("tab");
+  const activeTab = !tab || tab === "overview" ? "stack" : tab;
 
   const tabs = [
-    { key: "overview", label: "Overview", href: `/${username}` },
-    { key: "stack", label: "Stack", href: `/${username}?tab=stack` },
+    { key: "stack", label: "Stack", href: `/${username}` },
     { key: "playbooks", label: "Playbooks", href: `/${username}?tab=playbooks` },
-    { key: "combos", label: "Combos", href: `/${username}?tab=combos` },
     { key: "comparisons", label: "Comparisons", href: `/${username}?tab=comparisons` },
     { key: "starred", label: "Starred", href: `/${username}?tab=starred` },
   ];

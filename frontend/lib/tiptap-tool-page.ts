@@ -8,6 +8,7 @@ import TextAlign from "@tiptap/extension-text-align";
 import Typography from "@tiptap/extension-typography";
 import { Selection } from "@tiptap/extensions";
 import StarterKit from "@tiptap/starter-kit";
+import { tableExtensions } from "@/lib/tiptap-table";
 
 /**
  * Extensions for tool page descriptions — the same editor playbooks use, minus
@@ -35,6 +36,7 @@ export const toolPageExtensions = [
   Superscript,
   Subscript,
   Selection,
+  ...tableExtensions,
 ];
 
 /**

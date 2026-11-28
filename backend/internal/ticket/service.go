@@ -1,0 +1,443 @@
+package ticket
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"strings"
+	"unicode/utf8"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	"stackhub.com/stackhub/internal/apperr"
+	"stackhub.com/stackhub/internal/pg"
+	"stackhub.com/stackhub/internal/validate"
+	"stackhub.com/stackhub/pkg/db"
+)
+
+// ticketService holds the rules for resolving and rejecting tool tickets. The
+// handlers in tickets.go only read the request and write the response.
+//
+// /admin requires the admin role (admins table, RequireAdmin in routes.go).
+// Admins are still not trusted blindly: nothing here may grant more than a
+// ticket resolution.
+type ticketService struct {
+	db pg.TxBeginner
+	q  *db.Queries
+}
+
+// Caps on a suggested or newly created tool, in characters.
+const (
+	maxToolNameLen        = 200
+	maxToolDescriptionLen = 1000
+)
+
+// Suggestion is a tool someone suggests: from the standalone "Add tool" flow,
+// or while creating a post. Either way it becomes a tool ticket.
+type Suggestion struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Website     string `json:"website"`
+	Categories  []int  `json:"categories"`
+}
+
+// ticketResolvedMsg is the answer to any change to a resolved ticket.
+// Resolved is final: resolving again changed nothing useful but re-sent the
+// "tool approved" email every time.
+const ticketResolvedMsg = "This ticket has already been resolved"
+
+// toolApproval is the "your tool was approved" email to send once a resolution
+// has committed.
+type toolApproval struct {
+	requesterID uuid.UUID
+	toolName    string
+}
+
+// CleanSuggestedTool checks a tool suggestion and returns its name and website
+// trimmed and normalised. Shared by the standalone "Add tool" flow and the
+// suggestions made while creating a post, which both end up as tool tickets.
+//
+// The website is rendered as a link in the admin ticket list — which any
+// signed-in user can open — so only http(s) gets through.
+func CleanSuggestedTool(name, description, website string) (string, string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", "", errors.New("Tool name is required")
+	}
+	if validate.TooLong(name, maxToolNameLen) {
+		return "", "", fmt.Errorf("Tool name must be at most %d characters", maxToolNameLen)
+	}
+	if validate.TooLong(description, maxToolDescriptionLen) {
+		return "", "", fmt.Errorf("Tool description must be at most %d characters", maxToolDescriptionLen)
+	}
+	website, ok := validate.WebURL(website)
+	if !ok {
+		return "", "", errors.New("Tool website must be an http or https address")
+	}
+	return name, website, nil
+}
+
+// CreatePostTickets files a tool ticket for each tool suggested while creating
+// a post, inside the post's transaction. The suggestions must already have
+// been through CleanSuggestedTool. It returns the new tickets' ids so the caller
+// can alert admins once its transaction commits.
+func CreatePostTickets(ctx context.Context, q *db.Queries, postID, requester uuid.UUID, suggestions []Suggestion) ([]uuid.UUID, error) {
+	ticketIDs := make([]uuid.UUID, 0, len(suggestions))
+	for _, s := range suggestions {
+		ticketID, err := q.CreateToolTicket(ctx, db.CreateToolTicketParams{
+			// Nullable since tickets can be filed without a post (the
+			// standalone-ticket migration); here a post always exists.
+			PostID:          pgtype.UUID{Bytes: postID, Valid: true},
+			RequestedBy:     requester,
+			ToolName:        s.Name,
+			ToolDescription: pgtype.Text{String: s.Description, Valid: true},
+			ToolWebsite:     pgtype.Text{String: s.Website, Valid: true},
+		})
+		if err != nil {
+			return nil, apperr.InvalidFrom("Failed to create suggested tool", err)
+		}
+		ticketIDs = append(ticketIDs, ticketID)
+
+		if len(s.Categories) == 0 {
+			continue
+		}
+		links := make([]db.AddToolTicketCategoriesParams, 0, len(s.Categories))
+		for _, categoryID := range s.Categories {
+			links = append(links, db.AddToolTicketCategoriesParams{TicketID: ticketID, CategoryID: int32(categoryID)})
+		}
+		if _, err := q.AddToolTicketCategories(ctx, links); err != nil {
+			return nil, apperr.InvalidFrom("Failed to add suggested tool categories", err)
+		}
+	}
+	return ticketIDs, nil
+}
+
+// notifyToolApproved creates an in-app notification telling the ticket
+// requester their suggested tool was approved. Returns whether a new
+// notification was created (so the caller can also send an email). No-op when
+// the admin resolved their own ticket.
+//
+// The notification has no actor: the resolver is deliberately not named, so an
+// admin's username never reaches the requester. The clients show "StackHub".
+// (A NULL actor is part of the one-hour dedupe key, which compares it with IS
+// NOT DISTINCT FROM, and the feed keeps such a row; see GetUserFeed.)
+//
+// The entity is the approved tool. It used to be the ticket's post (NULL for a
+// standalone suggestion), and since notifications are deduplicated per
+// (recipient, actor, type, entity) for an hour, approving a second tool from
+// the same post — or any second standalone suggestion — notified nobody.
+// Keyed on the tool, each approved tool notifies once.
+func notifyToolApproved(ctx context.Context, q *db.Queries, ticket db.GetToolTicketRow, resolverID, toolID uuid.UUID) bool {
+	if ticket.RequestedBy == resolverID {
+		return false
+	}
+
+	entityType := "tool"
+	rows, err := q.CreateNotification(ctx, db.CreateNotificationParams{
+		RecipientID: ticket.RequestedBy,
+		ActorID:     pgtype.UUID{}, // NULL: StackHub, not the resolver
+		Type:        "tool_approved",
+		EntityID:    pg.UUID(toolID),
+		EntityType:  pg.Text(&entityType),
+		Title:       "Tool approved",
+		Message:     fmt.Sprintf("Your suggested tool “%s” was approved and added to StackHub.", ticket.ToolName),
+	})
+	if err != nil {
+		log.Println(err)
+		return false
+	}
+	return rows > 0
+}
+
+// resolve runs the steps both resolutions share, in one transaction: load the
+// ticket and refuse a resolved one, let settle pick the tool and mark the
+// ticket resolved, add that tool to the ticket's post, and notify the
+// requester. It returns the approval email to send, or nil.
+func (s ticketService) resolve(ctx context.Context, ticketID, resolverID uuid.UUID, settle func(q *db.Queries) (uuid.UUID, error)) (*toolApproval, error) {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, apperr.Internal("Could not start transaction", err)
+	}
+	defer tx.Rollback(ctx)
+	q := db.New(tx)
+
+	ticket, err := q.GetToolTicket(ctx, ticketID)
+	if err != nil {
+		return nil, apperr.NotFoundFrom("Tool ticket not found", err)
+	}
+	if ticket.Status == "resolved" {
+		return nil, apperr.Conflict(ticketResolvedMsg)
+	}
+
+	toolID, err := settle(q)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add the tool to the post (if not already there). Standalone suggestions
+	// have no post, so this step is skipped for them.
+	if ticket.PostID.Valid {
+		err := q.AddPostToolSafe(ctx, db.AddPostToolSafeParams{
+			PostID: uuid.UUID(ticket.PostID.Bytes),
+			ToolID: toolID,
+		})
+		if err != nil {
+			return nil, apperr.Internal("Could add tool to post", err)
+		}
+	}
+
+	notified := notifyToolApproved(ctx, q, ticket, resolverID, toolID)
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, apperr.Internal("Could not commit transaction", err)
+	}
+	if !notified {
+		return nil, nil
+	}
+	return &toolApproval{requesterID: ticket.RequestedBy, toolName: ticket.ToolName}, nil
+}
+
+// settled turns the row count of a resolve UPDATE into the resolve outcome.
+// The UPDATE refuses to touch a resolved ticket, so 0 rows means it was
+// resolved by a concurrent request since resolve read it.
+func settled(updated int64, err error) error {
+	if err != nil {
+		return apperr.Internal("Could not resolve ticket", err)
+	}
+	if updated == 0 {
+		return apperr.Conflict(ticketResolvedMsg)
+	}
+	return nil
+}
+
+// resolveWithExisting resolves a ticket with a tool already in the catalog.
+func (s ticketService) resolveWithExisting(ctx context.Context, ticketID, resolverID, toolID uuid.UUID) (*toolApproval, error) {
+	return s.resolve(ctx, ticketID, resolverID, func(q *db.Queries) (uuid.UUID, error) {
+		// resolved_tool_id has no foreign key, and a standalone ticket has no
+		// post link to fail on, so a made-up id used to resolve the ticket
+		// pointing at nothing.
+		exists, err := q.ToolExists(ctx, toolID)
+		if err != nil {
+			return uuid.Nil, apperr.Internal("Could not resolve ticket", err)
+		}
+		if !exists {
+			return uuid.Nil, apperr.NotFound("Tool not found")
+		}
+
+		err = settled(q.ResolveToolTicketWithExisting(ctx, db.ResolveToolTicketWithExistingParams{
+			ID:             ticketID,
+			ResolvedToolID: pg.UUID(toolID),
+			ResolvedBy:     pg.UUID(resolverID),
+		}))
+		// A hidden tool stays hidden: un-hiding is a curation decision made only
+		// with scripts/hide-tools.mjs, never by a ticket approval.
+		return toolID, err
+	})
+}
+
+// validateNewTool checks the tool a ticket is about to be resolved with and
+// returns it trimmed. It becomes a public tool page, and a resolver is not
+// trusted: the same name and description limits as a suggestion, and an
+// http(s) logo.
+func validateNewTool(req ResolveTicketWithNewRequest) (ResolveTicketWithNewRequest, error) {
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		return req, apperr.Invalid("Tool name is required")
+	}
+	if validate.TooLong(req.Name, maxToolNameLen) {
+		return req, apperr.Invalid(fmt.Sprintf("Tool name must be at most %d characters", maxToolNameLen))
+	}
+	if validate.TooLong(req.Description, maxToolDescriptionLen) {
+		return req, apperr.Invalid(fmt.Sprintf("Tool description must be at most %d characters", maxToolDescriptionLen))
+	}
+
+	logoURL, ok := validate.WebURL(req.LogoURL)
+	if !ok {
+		return req, apperr.Invalid("Logo URL must be an http or https address")
+	}
+	req.LogoURL = logoURL
+	return req, nil
+}
+
+// resolveWithNew creates the tool (with its categories) and resolves the
+// ticket with it. The tool is created inside the resolve transaction, so a
+// refused or failed resolution leaves no tool behind.
+func (s ticketService) resolveWithNew(ctx context.Context, ticketID, resolverID uuid.UUID, req ResolveTicketWithNewRequest) (db.CreateToolRow, *toolApproval, error) {
+	req, err := validateNewTool(req)
+	if err != nil {
+		return db.CreateToolRow{}, nil, err
+	}
+
+	var tool db.CreateToolRow
+	approval, err := s.resolve(ctx, ticketID, resolverID, func(q *db.Queries) (uuid.UUID, error) {
+		// Tool URLs are built from the name, so a second tool with the same
+		// one would share (or take over) the first one's page — including a
+		// hidden tool's. Link the existing tool instead.
+		taken, err := q.ToolSlugTaken(ctx, req.Name)
+		if err != nil {
+			return uuid.Nil, apperr.Internal("Could not create tool", err)
+		}
+		if taken {
+			return uuid.Nil, apperr.Conflict("A tool with this name already exists. Resolve the suggestion with the existing tool instead.")
+		}
+
+		tool, err = q.CreateTool(ctx, db.CreateToolParams{
+			Name:        req.Name,
+			Description: pg.Text(&req.Description),
+			LogoUrl:     pg.Text(&req.LogoURL),
+		})
+		if err != nil {
+			return uuid.Nil, apperr.Internal("Could not create tool", err)
+		}
+
+		for _, categoryID := range req.Categories {
+			err := q.AssignCategoryToTool(ctx, db.AssignCategoryToToolParams{ToolID: tool.ID, CategoryID: int32(categoryID)})
+			if err != nil {
+				return uuid.Nil, apperr.Internal("Could not assign categories to tool", err)
+			}
+		}
+
+		return tool.ID, settled(q.ResolveToolTicketWithNew(ctx, db.ResolveToolTicketWithNewParams{
+			ID:             ticketID,
+			ResolvedToolID: pgtype.UUID{Bytes: tool.ID, Valid: true},
+			ResolvedBy:     pgtype.UUID{Bytes: resolverID, Valid: true},
+		}))
+	})
+	if err != nil {
+		return db.CreateToolRow{}, nil, err
+	}
+	return tool, approval, nil
+}
+
+// Bounds on a rejection reason, in characters, counted after cleaning. The
+// frontend (lib/reject-reason.ts) enforces the same numbers.
+const (
+	minRejectReasonLen = 10
+	maxRejectReasonLen = 500
+)
+
+// validateRejectReason checks the reason an admin gives for rejecting a tool
+// suggestion and returns it cleaned: control, format and separator characters
+// (line breaks, bidi overrides, zero-width characters) become single spaces and
+// the ends are trimmed. The result is plain, UNESCAPED text: each place that
+// shows it escapes it for that place. A reason that is too long is refused,
+// never truncated.
+func validateRejectReason(raw string) (string, error) {
+	// Over HTTP, encoding/json has already replaced invalid UTF-8 and lone
+	// surrogates with U+FFFD, so ValidString alone never fires there. Refusing
+	// U+FFFD as well makes "invalid text is a 400" true on both paths.
+	if !utf8.ValidString(raw) || strings.ContainsRune(raw, utf8.RuneError) {
+		return "", apperr.Invalid("Reason must be valid text")
+	}
+	reason := validate.CleanText(raw)
+	switch n := utf8.RuneCountInString(reason); {
+	case n == 0:
+		return "", apperr.Invalid("A reason is required")
+	case n < minRejectReasonLen:
+		return "", apperr.Invalid(fmt.Sprintf("Reason must be at least %d characters", minRejectReasonLen))
+	case n > maxRejectReasonLen:
+		return "", apperr.Invalid(fmt.Sprintf("Reason must be at most %d characters", maxRejectReasonLen))
+	}
+	return reason, nil
+}
+
+// toolRejection is the "your tool was not approved" email to send once a
+// rejection has committed.
+type toolRejection struct {
+	requesterID uuid.UUID
+	toolName    string
+	reason      string
+}
+
+// notifyToolRejected creates, inside the rejecting transaction, the in-app
+// notification telling the requester their suggested tool was not approved,
+// with the reviewer's reason. It returns whether a new notification was
+// created (so the caller also sends the email).
+//
+// Like tool_approved it has no actor: the admin is deliberately not named. Its
+// entity is the ticket, with entity type "tool_ticket" (never "post": clients
+// link a post entity to the post). An error is returned, not swallowed: a failed
+// statement aborts the transaction, so the rejection must not commit without it.
+func notifyToolRejected(ctx context.Context, q *db.Queries, ticketID, requesterID uuid.UUID, toolName, reason string) (bool, error) {
+	entityType := "tool_ticket"
+	rows, err := q.CreateNotification(ctx, db.CreateNotificationParams{
+		RecipientID: requesterID,
+		ActorID:     pgtype.UUID{}, // NULL: StackHub, not the reviewer
+		Type:        "tool_rejected",
+		EntityID:    pg.UUID(ticketID),
+		EntityType:  pg.Text(&entityType),
+		Title:       "Tool not approved",
+		Message:     fmt.Sprintf("Your suggested tool “%s” was not approved. Reason: %s", validate.CleanText(toolName), reason),
+	})
+	if err != nil {
+		return false, err
+	}
+	return rows > 0, nil
+}
+
+// reject marks a ticket rejected, with the reviewer's reason. A rejected ticket
+// can still be resolved later (a reviewer may change their mind) and can be
+// rejected again to change the reason; a resolved one cannot be rejected.
+//
+// The requester is told once, on the move from pending to rejected, and not
+// when the reviewer is the requester. Rejecting again only updates the reason:
+// no second notification and no second email. The ticket row is locked first, so
+// two concurrent rejections take turns and only one sees "pending". The reason
+// is validated before anything else, so a bad one touches nothing.
+//
+// It returns the email to send, or nil.
+func (s ticketService) reject(ctx context.Context, ticketID, resolverID uuid.UUID, rawReason string) (*toolRejection, error) {
+	reason, err := validateRejectReason(rawReason)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, apperr.Internal("Could not start transaction", err)
+	}
+	defer tx.Rollback(ctx)
+	q := db.New(tx)
+
+	ticket, err := q.LockToolTicketStatus(ctx, ticketID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, apperr.NotFoundFrom("Tool ticket not found", err)
+	}
+	if err != nil {
+		return nil, apperr.Internal("Could not reject ticket", err)
+	}
+	if ticket.Status == "resolved" {
+		return nil, apperr.Conflict(ticketResolvedMsg)
+	}
+
+	updated, err := q.RejectToolTicket(ctx, db.RejectToolTicketParams{
+		ID:         ticketID,
+		ResolvedBy: pg.UUID(resolverID),
+		Reason:     pg.Text(&reason),
+	})
+	if err != nil {
+		return nil, apperr.Internal("Could not reject ticket", err)
+	}
+	if updated == 0 {
+		return nil, apperr.Conflict(ticketResolvedMsg)
+	}
+
+	notified := false
+	if ticket.Status == "pending" && ticket.RequestedBy != resolverID && ticket.RequesterExists {
+		notified, err = notifyToolRejected(ctx, q, ticketID, ticket.RequestedBy, ticket.ToolName, reason)
+		if err != nil {
+			log.Println(err)
+			return nil, apperr.Internal("Could not notify the requester", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, apperr.Internal("Could not commit transaction", err)
+	}
+	if !notified {
+		return nil, nil
+	}
+	return &toolRejection{requesterID: ticket.RequestedBy, toolName: ticket.ToolName, reason: reason}, nil
+}
